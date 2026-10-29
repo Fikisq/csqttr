@@ -129,6 +129,7 @@ android {
 
     packaging {
         jniLibs {
+            excludes += "**/x86/**"
             useLegacyPackaging = true
             keepDebugSymbols += "**/libclient.so"
             keepDebugSymbols += "**/libandroidx.graphics.path.so"

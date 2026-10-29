@@ -75,7 +75,7 @@ fun V2SettingRow(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .heightIn(min = 40.dp),
+                .heightIn(min = LocalV2AdaptiveMetrics.current.rowHeight),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {

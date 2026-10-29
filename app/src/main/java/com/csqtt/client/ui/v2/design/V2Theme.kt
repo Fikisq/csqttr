@@ -90,13 +90,13 @@ fun CsqttV2Theme(
     content: @Composable () -> Unit,
 ) {
     val colors = if (darkTheme) v2DarkColorsForPalette(themePalette) else V2LightColors
-    val colorScheme = remember(darkTheme) { v2ColorScheme(colors, darkTheme) }
+    val colorScheme = remember(darkTheme, colors) { v2ColorScheme(colors, darkTheme) }
     val view = LocalView.current
     val activity = view.context.findActivity()
     val lifecycleOwner = LocalLifecycleOwner.current
 
     if (!view.isInEditMode && activity != null) {
-        DisposableEffect(lifecycleOwner, activity, darkTheme) {
+        DisposableEffect(lifecycleOwner, activity, darkTheme, colors) {
             val window = activity.window
             val applyBars = {
                 @Suppress("DEPRECATION")
@@ -137,8 +137,8 @@ fun CsqttV2Theme(
  */
 @Composable
 fun CsqttV2Colors(darkTheme: Boolean, content: @Composable () -> Unit) {
-    val colors = if (darkTheme) v2DarkColorsForPalette("nordic_slate") else V2LightColors
-    val colorScheme = remember(darkTheme) { v2ColorScheme(colors, darkTheme) }
+    val colors = if (darkTheme) V2ClassicOriginalColors else V2LightColors
+    val colorScheme = remember(darkTheme, colors) { v2ColorScheme(colors, darkTheme) }
     CompositionLocalProvider(LocalV2Colors provides colors) {
         MaterialTheme(
             colorScheme = colorScheme,

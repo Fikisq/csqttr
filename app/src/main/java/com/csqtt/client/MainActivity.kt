@@ -74,6 +74,7 @@ import com.csqtt.client.ui.legacy.LogsTab
 import com.csqtt.client.ui.legacy.SettingsTab
 import com.csqtt.client.CsqttConstants
 import com.csqtt.client.ui.legacy.DeployTab
+import com.csqtt.client.ui.legacy.LegacyDeployCheckState
 import com.csqtt.client.ui.legacy.InfoTab
 import com.csqtt.client.ui.legacy.components.LocalCsqttHeaderActions
 import com.csqtt.client.ui.legacy.design.CsqttMotion
@@ -152,11 +153,11 @@ class MainActivity : ComponentActivity() {
             val chosenTheme by appSettingsStore.themeMode.collectAsStateWithLifecycle("system")
             val dark = when (chosenTheme) { "dark" -> true; "light" -> false; else -> androidx.compose.foundation.isSystemInDarkTheme() }
             if (renderUi) {
-                uiStateHolder.SaveableStateProvider("main_ui_${design ?: "loading"}") {
+                uiStateHolder.SaveableStateProvider("main_ui_${if (design == null) "loading" else if (design == "classic") "classic" else "v2"}") {
             val settingsStore = remember { appSettingsStore }
             if (design == null) {
                 // Wait for the stored choice instead of briefly drawing the other design.
-            } else if (design == "v2") {
+            } else if (design != "classic") {
                 CsqttV2Root(
                     settingsStore = settingsStore,
                     onVkAuthRequested = { showVkAuthDialog = true },
@@ -362,6 +363,7 @@ fun MainScreen(
     val deploySettings by deployStore.deploySettingsSnapshot.collectAsStateWithLifecycle(
         initialValue = DeploySettingsSnapshot()
     )
+    val deployCheckState = remember(deploySettings.profile) { LegacyDeployCheckState() }
     val tunnelAuthSettings by settingsStore.tunnelAuthSnapshot.collectAsStateWithLifecycle(
         initialValue = TunnelAuthSnapshot()
     )
@@ -591,7 +593,7 @@ fun MainScreen(
                                     Spacer(modifier = Modifier.fillMaxSize())
                                 }
                                 2 -> if (!csqttLinkMode) {
-                                    DeployTab(deployStore, deploySettings)
+                                    DeployTab(deployStore, deploySettings, checkState = deployCheckState)
                                 } else {
                                     Spacer(modifier = Modifier.fillMaxSize())
                                 }

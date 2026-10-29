@@ -36,11 +36,15 @@ import kotlin.math.roundToInt
 private val draftWrites = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
 @Composable
-fun HappTunnelScreen(settingsStore: SettingsStore, version: String, onSettings: () -> Unit, onVkAuthRequested: () -> Unit) {
+internal fun HappTunnelScreen(settingsStore: SettingsStore, version: String, onSettings: () -> Unit, onVkAuthRequested: () -> Unit, snapshot: TunnelScreenSnapshot?, draftCache: TunnelDraftCache) {
+    if (snapshot == null) {
+        Column(Modifier.fillMaxSize().padding(horizontal = 16.dp)) { V2TopBar(version = version, title = "Туннель", onSettings = onSettings) }
+        return
+    }
     val c = V2Theme.colors
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
-    val profile by settingsStore.activeProfile.collectAsStateWithLifecycle(0)
+    val profile = snapshot.profile
     val editingProfile = profile
     val names by settingsStore.profileNames.collectAsStateWithLifecycle(emptyMap())
     val occupied by settingsStore.occupiedProfiles.collectAsStateWithLifecycle(emptySet())
@@ -49,29 +53,29 @@ fun HappTunnelScreen(settingsStore: SettingsStore, version: String, onSettings: 
     val starting by TunnelManager.starting.collectAsStateWithLifecycle()
     val stopping by TunnelManager.stopping.collectAsStateWithLifecycle()
     val busy = running || starting || stopping
-    val participant by settingsStore.csqttLinkMode.collectAsStateWithLifecycle(false)
-    val rawLink by settingsStore.csqttLink.collectAsStateWithLifecycle("")
+    val participant = snapshot.connection.csqttLinkMode
+    val rawLink = snapshot.connection.csqttLink
     val link = remember(rawLink) { com.csqtt.client.ui.legacy.utils.parseCsqttLink(rawLink) }
     val ownerHashes = if (participant) link?.hashes.orEmpty() else emptyList()
-    val removedOwner by settingsStore.linkHashesRemoved.collectAsStateWithLifecycle(emptySet())
+    val removedOwner = snapshot.removedOwnerHashes
     val linkTokenActive = participant && !link?.vkAccessToken.isNullOrBlank()
-    val hashes by settingsStore.vkHashes.collectAsStateWithLifecycle("")
-    val hashMode by settingsStore.vkHashMode.collectAsStateWithLifecycle("manual")
-    val authMode by settingsStore.vkAuthMode.collectAsStateWithLifecycle("vkcalls")
-    val token by settingsStore.vkAccessToken.collectAsStateWithLifecycle("")
-    val srtp by settingsStore.srtpMode.collectAsStateWithLifecycle("auto")
-    val transport by settingsStore.turnTransport.collectAsStateWithLifecycle("udp")
-    val subnet by settingsStore.selectedTurnSubnet.collectAsStateWithLifecycle("")
-    val ipLimit by settingsStore.turnSubnetIpLimit.collectAsStateWithLifecycle("ALL")
-    val results by settingsStore.vkHashCheckResults.collectAsStateWithLifecycle("{}")
-    val extraWorkers by settingsStore.extraWorkers.collectAsStateWithLifecycle(false)
+    val hashes = snapshot.hashes
+    val hashMode = snapshot.hashMode
+    val authMode = snapshot.authMode
+    val token = snapshot.token
+    val srtp = snapshot.srtp
+    val transport = snapshot.transport
+    val subnet = snapshot.subnet
+    val ipLimit = snapshot.ipLimit
+    val results = snapshot.hashResults
+    val extraWorkers = snapshot.connection.extraWorkers
     val workerMaximum = WorkerCountPolicy.defaultMaximum(extraWorkers && authMode != "auto_js")
-    var loaded by remember(profile) { mutableStateOf(false) }
-    var host by remember(profile) { mutableStateOf("") }
-    var port by remember(profile) { mutableStateOf("46000") }
-    var password by remember(profile) { mutableStateOf("") }
-    var workers by remember(profile) { mutableIntStateOf(10) }
-    var revision by remember(profile) { mutableLongStateOf(0L) }
+    val draft = remember(profile, snapshot.connection.revision) { draftCache.obtain(snapshot) }
+    var host by draft.host
+    var port by draft.port
+    var password by draft.password
+    var workers by draft.workers
+    val revision = draft.revision
     var picker by remember { mutableStateOf(false) }
     var editing by remember { mutableStateOf<Int?>(null) }
     var showHashes by remember { mutableStateOf(false) }
@@ -80,14 +84,14 @@ fun HappTunnelScreen(settingsStore: SettingsStore, version: String, onSettings: 
     var showVkSession by remember(profile) { mutableStateOf(false) }
     var pendingAutoJs by remember(profile) { mutableStateOf<(() -> Unit)?>(null) }
     var pendingTcp by remember(profile) { mutableStateOf<(() -> Unit)?>(null) }
-    val autoJsAcknowledged by settingsStore.autoJsRiskAcknowledged.collectAsStateWithLifecycle(false)
-    val tcpAcknowledged by settingsStore.tcpTransportRiskAcknowledged.collectAsStateWithLifecycle(false)
+    val autoJsAcknowledged = snapshot.autoJsAcknowledged
+    val tcpAcknowledged = snapshot.tcpAcknowledged
     val effectiveWorkers = WorkerCountPolicy.normalize(workers, workerMaximum)
-    val draftTracker = remember(profile) { mutableStateOf<ProfileConnectionSnapshot?>(null) }
+    val draftTracker = remember(profile, revision) { mutableStateOf<ProfileConnectionSnapshot?>(null) }
     SideEffect {
-        draftTracker.value = if (loaded && !busy) ProfileConnectionSnapshot(revision = revision, peer = host, serverPeerPort = port.toIntOrNull() ?: 0, connectionPassword = password, workersPerHash = effectiveWorkers) else null
+        draftTracker.value = if (!busy) ProfileConnectionSnapshot(revision = revision, peer = host, serverPeerPort = port.toIntOrNull() ?: 0, connectionPassword = password, workersPerHash = effectiveWorkers) else null
     }
-    DisposableEffect(profile) {
+    DisposableEffect(profile, revision) {
         val slot = profile
         onDispose {
             val draft = draftTracker.value
@@ -96,13 +100,8 @@ fun HappTunnelScreen(settingsStore: SettingsStore, version: String, onSettings: 
             }
         }
     }
-    LaunchedEffect(profile) {
-        val saved = settingsStore.readProfileConnectionSettings(profile)
-        host = saved.peer; port = saved.serverPeerPort.toString(); password = saved.connectionPassword
-        workers = saved.workersPerHash; revision = saved.revision; loaded = true
-    }
-    LaunchedEffect(profile, loaded, revision, host, port, password, effectiveWorkers) {
-        if (!loaded || busy) return@LaunchedEffect
+    LaunchedEffect(profile, revision, host, port, password, effectiveWorkers) {
+        if (busy) return@LaunchedEffect
         delay(350)
         val validPort = port.toIntOrNull()?.takeIf { it in 1..65535 } ?: return@LaunchedEffect
         settingsStore.saveProfileConnectionSettings(profile, host, validPort, password, effectiveWorkers, expectedRevision = revision)
@@ -123,23 +122,25 @@ fun HappTunnelScreen(settingsStore: SettingsStore, version: String, onSettings: 
     val parts = hashes.split(Regex("[,\\s]+" )).filter(String::isNotBlank)
     val green = c.success
     val orange = c.warning
-    Column(Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
+    V2AdaptiveScreen(Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
+        val layout = LocalV2AdaptiveMetrics.current
         V2TopBar(version = version, title = "Туннель", onSettings = onSettings)
-        Column(Modifier.weight(1f).fillMaxWidth().testTag("tunnel-settings").verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Column(Modifier.weight(1f).fillMaxWidth().testTag("tunnel-settings").verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(layout.gap)) {
             V2Card(onClick = { picker = true }, contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp), borderColor = c.outline) {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) { Text(names[profile] ?: defaultProfileName(profile), fontSize = 14.sp); Text("$host:$port", color = c.textSecondary, fontSize = 11.sp) }
+                    Column(Modifier.weight(1f)) { Text(snapshot.name, fontSize = 14.sp); Text("$host:$port", color = c.textSecondary, fontSize = 11.sp) }
                     TextButton(onClick = { editing = profile }) { Text("Изменить", fontSize = 12.sp) }
                 }
             }
-            V2Card(contentPadding = PaddingValues(8.dp), borderColor = c.outline) {
+            V2Card(contentPadding = PaddingValues(layout.cardPadding), borderColor = c.outline,
+                contentModifier = Modifier.heightIn(min = (layout.height - 128.dp - layout.gap).coerceAtLeast(0.dp)),
+                verticalArrangement = Arrangement.SpaceBetween) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    HappField("Адрес сервера", host, { host = it }, Modifier.weight(1.65f), enabled = loaded && !busy, compact = true)
-                    HappField("Порт PEER", port, { port = it.filter(Char::isDigit).take(5) }, Modifier.weight(1f), number = true, enabled = loaded && !busy, compact = true)
+                    HappField("Адрес сервера", host, { host = it }, Modifier.weight(1.65f), enabled = !busy, compact = true)
+                    HappField("Порт PEER", port, { port = it.filter(Char::isDigit).take(5) }, Modifier.weight(1f), number = true, enabled = !busy, compact = true)
                 }
-                Spacer(Modifier.height(4.dp))
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Bottom) {
-                HappField("Пароль туннеля", password, { password = it }, Modifier.weight(1.3f), password = true, enabled = loaded && !busy, compact = true)
+                HappField("Пароль туннеля", password, { password = it }, Modifier.weight(1.3f), password = true, visibilityKey = profile, enabled = !busy, compact = true)
                 Box(Modifier.weight(1f)) {
                 if (!linkTokenActive && ownerHashes.isEmpty() && authMode != "auto_js" && hashMode == "manual" || ownerHashes.isNotEmpty()) {
                     OutlinedButton(onClick = { showHashes = true }, modifier = Modifier.fillMaxWidth().height(40.dp), contentPadding = PaddingValues(horizontal = 4.dp), enabled = !busy) { Text("Настроить хеши", fontSize = 14.sp, maxLines = 1) }
@@ -184,7 +185,7 @@ fun HappTunnelScreen(settingsStore: SettingsStore, version: String, onSettings: 
         }
     }
     if (picker) Dialog(onDismissRequest = { picker = false }) { V2ProfilePickerMenu(settingsStore, profile, names, occupied, subscriptions, busy, { picker = false }, { editing = it }) }
-    editing?.let { slot -> Dialog(onDismissRequest = { editing = null }) { V2EditProfileModal(settingsStore, slot, names[slot] ?: defaultProfileName(slot), isNew = false, onSaved = { loaded = false; scope.launch { val saved = settingsStore.readProfileConnectionSettings(profile); host = saved.peer; port = saved.serverPeerPort.toString(); password = saved.connectionPassword; workers = saved.workersPerHash; revision = saved.revision; loaded = true } }, onDismiss = { editing = null }) } }
+    editing?.let { slot -> Dialog(onDismissRequest = { editing = null }) { V2EditProfileModal(settingsStore, slot, names[slot] ?: defaultProfileName(slot), isNew = false, onSaved = {}, onDismiss = { editing = null }) } }
     if (showHashes) V2HashesDialog(parts.getOrElse(0){""}, parts.getOrElse(1){""}, parts.getOrElse(2){""}, parts.getOrElse(3){""}, parts.getOrElse(4){""}, parts.getOrElse(5){""},
         VkHashValidationCodec.decode(results), { scope.launch { settingsStore.saveVkHashCheckResults(VkHashValidationCodec.encode(it)) } },
         { list -> VkHashValidator.check(context, list, settingsStore.selectedFingerprint.first(), settingsStore.activeClientIds.first()) },

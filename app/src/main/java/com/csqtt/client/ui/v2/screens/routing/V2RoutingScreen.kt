@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
@@ -43,6 +44,8 @@ import com.csqtt.client.ui.legacy.AppItem
 import com.csqtt.client.ui.v2.components.V2Card
 import com.csqtt.client.ui.v2.components.V2Chevron
 import com.csqtt.client.ui.v2.components.V2TopBar
+import com.csqtt.client.ui.v2.components.V2AdaptiveScreen
+import com.csqtt.client.ui.v2.components.LocalV2AdaptiveMetrics
 import com.csqtt.client.ui.v2.design.V2Shapes
 import com.csqtt.client.ui.v2.design.V2Sizes
 import com.csqtt.client.ui.v2.design.V2Spacing
@@ -182,11 +185,12 @@ fun V2RoutingScreen(
         }
     }
 
-    Column(
+    V2AdaptiveScreen(
         modifier = modifier
             .fillMaxSize()
             .padding(horizontal = V2Sizes.ScreenPadding),
     ) {
+        val layout = LocalV2AdaptiveMetrics.current
         V2TopBar(
             version = version,
             title = "Роутинг",
@@ -197,8 +201,8 @@ fun V2RoutingScreen(
             modifier = Modifier
                 .weight(1f)
                 .verticalScroll(rememberScrollState())
-                .padding(bottom = V2Spacing.Xxl),
-            verticalArrangement = Arrangement.spacedBy(V2Spacing.Sm),
+                .padding(bottom = layout.gap),
+            verticalArrangement = Arrangement.spacedBy(layout.gap),
         ) {
             if (isServerRouting) {
                 V2Card {
@@ -251,7 +255,7 @@ fun V2RoutingScreen(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(V2Sizes.RowHeight - 16.dp),
+                            .heightIn(min = ((layout.height - 56.dp - layout.gap * 4) / 4 - V2Spacing.Md * 2).coerceIn(48.dp, 180.dp)),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
@@ -387,9 +391,12 @@ private fun V2RoutingCard(
     onClick: () -> Unit,
 ) {
     val colors = V2Theme.colors
+    val layout = LocalV2AdaptiveMetrics.current
     V2Card(
         onClick = onClick,
         contentPadding = PaddingValues(V2Spacing.Md),
+        contentModifier = Modifier.heightIn(min = ((layout.height - 56.dp - layout.gap * 4) / 4).coerceIn(96.dp, 208.dp)),
+        verticalArrangement = Arrangement.Center,
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -412,9 +419,9 @@ private fun V2RoutingCard(
             }
             Text(
                 text = title,
-                style = MaterialTheme.typography.titleLarge,
+                style = MaterialTheme.typography.titleMedium,
                 color = colors.textPrimary,
-                maxLines = 1,
+                maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f),
             )

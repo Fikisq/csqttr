@@ -20,7 +20,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
@@ -62,28 +64,24 @@ fun V2PillButton(
         V2PillStyle.Contrast -> if (enabled) colors.contrast else colors.field
         V2PillStyle.Outline -> if (enabled) colors.surfaceElevated else colors.field
         V2PillStyle.Accent -> if (enabled) colors.accent else colors.accentSoft
-        V2PillStyle.Danger -> if (enabled) colors.error else colors.error.copy(alpha = 0.4f)
+        V2PillStyle.Danger -> if (enabled) colors.error.copy(alpha = 0.12f).compositeOver(colors.surface) else colors.field
     }
     val contentColor = when (style) {
         V2PillStyle.Contrast -> if (enabled) colors.onContrast else colors.textMuted
         V2PillStyle.Outline -> if (enabled) colors.textPrimary else colors.textMuted
         V2PillStyle.Accent -> if (enabled) colors.onAccent else colors.textMuted
-        V2PillStyle.Danger -> if (enabled) Color.White else Color.White.copy(alpha = 0.5f)
+        V2PillStyle.Danger -> if (enabled) colors.error else colors.textMuted
     }
 
     Surface(
         modifier = modifier
             .height(height)
-            .then(
-                if (enabled) {
-                    Modifier.clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null,
-                        onClick = onClick,
-                    )
-                } else {
-                    Modifier
-                },
+            .clickable(
+                enabled = enabled,
+                role = Role.Button,
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onClick,
             ),
         shape = V2Shapes.Button, // 14.dp: bigger, squarer
         color = background,

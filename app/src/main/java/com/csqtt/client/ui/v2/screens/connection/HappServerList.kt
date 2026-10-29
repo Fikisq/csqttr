@@ -24,6 +24,7 @@ import com.csqtt.client.ProfileTunnelProbe
 import com.csqtt.client.ProfilePingResult
 import com.csqtt.client.PingResultsCache
 import com.csqtt.client.ui.v2.components.HappHelp
+import com.csqtt.client.ui.v2.components.LocalV2AdaptiveMetrics
 import com.csqtt.client.ui.v2.design.V2Theme
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
@@ -32,6 +33,7 @@ import kotlinx.coroutines.launch
 @Composable
 internal fun HappServerList(store: SettingsStore, active: Int, busy: Boolean, onEdit: (Int) -> Unit, modifier: Modifier = Modifier) {
     val c = V2Theme.colors
+    val layout = LocalV2AdaptiveMetrics.current
     val scope = rememberCoroutineScope()
     val context = LocalContext.current.applicationContext
     val occupied by store.occupiedProfiles.collectAsStateWithLifecycle(emptySet())
@@ -65,7 +67,7 @@ internal fun HappServerList(store: SettingsStore, active: Int, busy: Boolean, on
             TextButton(onClick = { ping(occupied.sorted()) },
                 enabled = occupied.isNotEmpty() && !busy && checkJob?.isActive != true) { Text("Пинг") }
         }
-        Column(Modifier.fillMaxWidth().weight(1f).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+        Column(Modifier.fillMaxWidth().weight(1f).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(layout.gap)) {
             if(occupied.isEmpty()) Box(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 40.dp), contentAlignment = Alignment.Center) {
                 Text("Серверы пока не добавлены.\nНажмите +, чтобы добавить сервер.", color = c.textSecondary, fontSize = 13.sp,
                     textAlign = androidx.compose.ui.text.style.TextAlign.Center)
@@ -74,7 +76,7 @@ internal fun HappServerList(store: SettingsStore, active: Int, busy: Boolean, on
                 val core = servers.firstOrNull { it.profile == id }?.installedVersion?.takeIf(String::isNotBlank)?.let { "CSQTT $it" } ?: "CSQTT"
                 Surface(color = if(active == id) c.accentSoft else c.surface, shape = RoundedCornerShape(18.dp), border = BorderStroke(1.dp,c.outline),
                     modifier = Modifier.fillMaxWidth().combinedClickable(onClick = { if(!busy && checkJob?.isActive != true) scope.launch { store.saveActiveProfile(id) } }, onLongClick = { if(checkJob?.isActive != true) onEdit(id) })) {
-                    Row(Modifier.padding(start = 14.dp, top = 10.dp, bottom = 10.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Row(Modifier.padding(start = 14.dp, top = layout.cardPadding, bottom = layout.cardPadding, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
                             Text(names[id] ?: defaultProfileName(id), color = c.textPrimary, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                             Text((latency[id] as? ProfilePingResult.Failure)?.reason ?: "Ядро: $core", color = if(latency[id] is ProfilePingResult.Failure) c.warning else c.textSecondary, fontSize = 11.sp)

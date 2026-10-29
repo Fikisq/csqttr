@@ -329,10 +329,7 @@ fun FloatingToolbar(
                     CompactDropdownSetting(
                         title = "Дизайн",
                         selectedKey = uiDesign,
-                        options = listOf(
-                            CsqttConstants.Theme.DESIGN_CLASSIC to "Классический",
-                            CsqttConstants.Theme.DESIGN_V2 to "Новый",
-                        ),
+                        options = com.csqtt.client.UiDesignPresets.options,
                         enabled = true,
                         onSelected = { design -> scope.launch { settingsStore.saveUiDesign(design) } },
                     )

@@ -425,8 +425,8 @@ private val DEPLOY_LAST_INSPECTION_PANEL = booleanPreferencesKey("deploy_last_in
         else -> appContext.dataStore
     }
     val uiOwnerMode: Flow<Boolean> = appContext.dataStore.data.map { it[UI_OWNER_MODE] ?: false }
-    val uiDesign: Flow<String> = appContext.dataStore.data.map { if (it[UI_DESIGN] == "classic") "classic" else "v2" }
-    suspend fun saveUiDesign(design: String) { require(design in listOf("classic", "v2")); appContext.dataStore.edit { it[UI_DESIGN] = design } }
+    val uiDesign: Flow<String> = appContext.dataStore.data.map { UiDesignPresets.normalize(it[UI_DESIGN]) }
+    suspend fun saveUiDesign(design: String) { require(UiDesignPresets.options.any { it.first == design }); appContext.dataStore.edit { it[UI_DESIGN] = design } }
     val batterySaverMode: Flow<String> = appContext.dataStore.data.map { prefs -> prefs[BATTERY_SAVER_MODE]?.takeIf { mode -> BatterySaver.MODES.any { it.first == mode } } ?: BatterySaver.DEFAULT_MODE }
     val batterySaverPercent: Flow<Int> = appContext.dataStore.data.map { (it[BATTERY_SAVER_PERCENT] ?: BatterySaver.DEFAULT_PERCENT).coerceIn(5, 95) }
     suspend fun saveBatterySaverMode(mode: String) { require(BatterySaver.MODES.any { it.first == mode }); appContext.dataStore.edit { it[BATTERY_SAVER_MODE] = mode } }
@@ -842,9 +842,11 @@ private val DEPLOY_LAST_INSPECTION_PANEL = booleanPreferencesKey("deploy_last_in
     }
 
     internal suspend fun readProfileConnectionSettings(profile: Int): ProfileConnectionSnapshot =
-        dataStore.data.map { prefs ->
+        profileConnectionSettings(dataStore.data.first(), profile)
+
+    private fun profileConnectionSettings(prefs: Preferences, profile: Int): ProfileConnectionSnapshot {
             val secret = readConnectionPasswordState(prefs, profile)
-            ProfileConnectionSnapshot(
+            return ProfileConnectionSnapshot(
                 revision = prefs[getProfileKey(PROFILE_REVISION, profile)] ?: 0L,
                 peer = prefs[getProfileKey(PEER, profile)] ?: "",
                 serverPeerPort = prefs[getProfileKey(SERVER_PEER_PORT, profile)]
@@ -861,7 +863,43 @@ private val DEPLOY_LAST_INSPECTION_PANEL = booleanPreferencesKey("deploy_last_in
                 subscriptionTitle = prefs[getProfileKey(SUBSCRIPTION_TITLE, profile)] ?: "",
                 subscriptionPower = prefs[getProfileKey(SUBSCRIPTION_POWER, profile)] ?: 0,
             )
-        }.first()
+    }
+
+    internal val tunnelScreenSnapshot: Flow<TunnelScreenSnapshot> = dataStore.data.map { prefs ->
+        val profile = prefs[ACTIVE_PROFILE] ?: 0
+        TunnelScreenSnapshot(
+            profile = profile,
+            name = prefs[getProfileKey(PROFILE_NAME, profile)] ?: defaultProfileName(profile),
+            connection = profileConnectionSettings(prefs, profile),
+            hashes = prefs[getProfileKey(VK_HASHES, profile)].orEmpty(),
+            hashMode = when (prefs[getProfileKey(VK_HASH_MODE, profile)]) {
+                "auto", CsqttConstants.VkAutoHash.MODE_AUTO_API -> CsqttConstants.VkAutoHash.MODE_AUTO_API
+                CsqttConstants.VkAutoHash.MODE_AUTO_JS -> CsqttConstants.VkAutoHash.MODE_AUTO_JS
+                else -> CsqttConstants.VkAutoHash.MODE_MANUAL
+            },
+            authMode = when (prefs[getProfileKey(VK_AUTH_MODE, profile)]) {
+                CsqttConstants.VkAuth.MODE_CAPTCHA -> CsqttConstants.VkAuth.MODE_CAPTCHA
+                CsqttConstants.VkAuth.MODE_AUTO_JS -> CsqttConstants.VkAuth.MODE_AUTO_JS
+                else -> CsqttConstants.VkAuth.MODE_CALLS
+            },
+            token = effectiveVkToken(prefs, profile),
+            srtp = when (prefs[getProfileKey(SRTP_MODE, profile)]) {
+                CsqttConstants.SrtpMode.WRAP -> CsqttConstants.SrtpMode.WRAP
+                CsqttConstants.SrtpMode.DTLS -> CsqttConstants.SrtpMode.DTLS
+                else -> CsqttConstants.SrtpMode.DEFAULT
+            },
+            transport = when (prefs[getProfileKey(TURN_TRANSPORT, profile)]) {
+                CsqttConstants.Tunnel.TURN_TRANSPORT_TCP_TLS -> CsqttConstants.Tunnel.TURN_TRANSPORT_TCP_TLS
+                else -> CsqttConstants.Tunnel.DEFAULT_TURN_TRANSPORT
+            },
+            subnet = prefs[getProfileKey(SELECTED_TURN_SUBNET, profile)].orEmpty(),
+            ipLimit = prefs[getProfileKey(TURN_SUBNET_IP_LIMIT, profile)] ?: "ALL",
+            hashResults = prefs[getProfileKey(VK_HASH_CHECK_RESULTS, profile)] ?: "{}",
+            removedOwnerHashes = prefs[getProfileKey(LINK_HASHES_REMOVED, profile)].orEmpty().split(',').filter(String::isNotBlank).toSet(),
+            autoJsAcknowledged = prefs[AUTO_JS_RISK_ACKNOWLEDGED] ?: false,
+            tcpAcknowledged = prefs[TCP_TRANSPORT_RISK_ACKNOWLEDGED] ?: false,
+        )
+    }.onIo()
 
     suspend fun saveProfileConnectionSettings(
         profile: Int,
@@ -2749,7 +2787,7 @@ private val DEPLOY_LAST_INSPECTION_PANEL = booleanPreferencesKey("deploy_last_in
                 if (includeSettings && root.has("settings")) {
                     val s = root.getJSONObject("settings")
                     if (s.has("theme_mode")) mutable[THEME_MODE] = s.getString("theme_mode")
-                    s.optString("ui_design").takeIf { it in listOf("classic", "v2") }?.let { mutable[UI_DESIGN] = it }
+                    s.optString("ui_design").takeIf { value -> UiDesignPresets.options.any { it.first == value } }?.let { mutable[UI_DESIGN] = it }
                     s.optString("battery_saver_mode").takeIf { mode -> BatterySaver.MODES.any { it.first == mode } }?.let { mutable[BATTERY_SAVER_MODE] = it }
                     if (s.has("battery_saver_percent")) mutable[BATTERY_SAVER_PERCENT] = s.getInt("battery_saver_percent").coerceIn(5, 95)
                     if (s.has("is_dynamic_color")) mutable[IS_DYNAMIC_COLOR] = s.getBoolean("is_dynamic_color")

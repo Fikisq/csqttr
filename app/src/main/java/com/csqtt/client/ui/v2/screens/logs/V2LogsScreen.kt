@@ -55,6 +55,8 @@ import com.csqtt.client.TunnelManager
 import com.csqtt.client.showRaisedToast
 import com.csqtt.client.ui.v2.components.V2Card
 import com.csqtt.client.ui.v2.components.V2TopBar
+import com.csqtt.client.ui.v2.components.V2AdaptiveScreen
+import com.csqtt.client.ui.v2.components.LocalV2AdaptiveMetrics
 import com.csqtt.client.ui.v2.components.V2TransparentIconButton
 import com.csqtt.client.ui.v2.design.V2MonoFamily
 import com.csqtt.client.ui.v2.design.V2Palette
@@ -75,7 +77,7 @@ fun V2LogsScreen(
     var level by rememberSaveable { mutableStateOf("Все уровни") }
     var source by rememberSaveable { mutableStateOf("Все события") }
 
-    Column(
+    V2AdaptiveScreen(
         modifier = modifier
             .fillMaxSize()
             .padding(horizontal = V2Sizes.ScreenPadding),
@@ -86,7 +88,7 @@ fun V2LogsScreen(
             onSettings = onSettings,
             onVersionClick = onVersionClick,
         )
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(Modifier.fillMaxWidth().padding(vertical = LocalV2AdaptiveMetrics.current.gap / 2), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             LogFilterMenu(level, logLevels, { level = it }, Modifier.weight(1f))
             LogFilterMenu(source, logSources, { source = it }, Modifier.weight(1f))
         }

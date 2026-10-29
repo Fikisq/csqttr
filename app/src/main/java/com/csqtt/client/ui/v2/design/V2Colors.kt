@@ -5,6 +5,9 @@ import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
+import com.csqtt.client.BrandDarkColorScheme
+import com.csqtt.client.CSQTTColors
+import com.csqtt.client.ui.legacy.design.CsqttDarkExtendedColors
 
 @Immutable
 data class V2Colors(
@@ -152,7 +155,58 @@ internal val V2SteelBlueColors = V2Colors(
     version = Color(0xFF85929F),
 )
 
+// The original palette shares the actual classic tokens instead of approximating their RGB values.
+internal val V2ClassicOriginalColors = V2NordicSlateColors.copy(
+    background = BrandDarkColorScheme.background,
+    surface = BrandDarkColorScheme.surface,
+    surfaceElevated = BrandDarkColorScheme.surfaceVariant,
+    field = BrandDarkColorScheme.surface,
+    outline = BrandDarkColorScheme.outlineVariant,
+    textPrimary = BrandDarkColorScheme.onSurface,
+    textSecondary = BrandDarkColorScheme.onSurfaceVariant,
+    textMuted = BrandDarkColorScheme.outline,
+    accent = BrandDarkColorScheme.primary,
+    onAccent = BrandDarkColorScheme.onPrimary,
+    accentSoft = BrandDarkColorScheme.primaryContainer,
+    flower = BrandDarkColorScheme.primary,
+    contrast = BrandDarkColorScheme.primary,
+    onContrast = BrandDarkColorScheme.onPrimary,
+    hero = BrandDarkColorScheme.primaryContainer,
+    onHero = BrandDarkColorScheme.onPrimaryContainer,
+    heroRow = BrandDarkColorScheme.secondaryContainer,
+    navSelected = BrandDarkColorScheme.background,
+    bottomSurface = BrandDarkColorScheme.surface,
+    terminal = CsqttDarkExtendedColors.terminalBackground,
+    terminalText = CsqttDarkExtendedColors.terminalText,
+    terminalMuted = CsqttDarkExtendedColors.terminalMuted,
+    success = CSQTTColors.connected,
+    warning = CSQTTColors.warning,
+    error = BrandDarkColorScheme.error,
+    version = BrandDarkColorScheme.onSurfaceVariant,
+)
+
+internal val V2ClassicSoftColors = V2ClassicOriginalColors.copy(
+    background = Color(0xFF101011),
+    surface = Color(0xFF19191B),
+    surfaceElevated = Color(0xFF27272B),
+    field = Color(0xFF19191B),
+    navSelected = Color(0xFF101011),
+    bottomSurface = Color(0xFF19191B),
+    terminal = Color(0xFF17191D),
+)
+
+object V2DarkPalette {
+    const val ORIGINAL = "classic_original"
+    const val SOFT = "classic_soft"
+    const val ORIGINAL_LABEL = "Оригинальная"
+    const val SOFT_LABEL = "Мягкая"
+
+    fun normalize(value: String?): String = if (value == SOFT) SOFT else ORIGINAL
+}
+
 fun v2DarkColorsForPalette(palette: String?): V2Colors = when (palette) {
+    V2DarkPalette.ORIGINAL -> V2ClassicOriginalColors
+    V2DarkPalette.SOFT -> V2ClassicSoftColors
     "muted_denim" -> V2MutedDenimColors
     "steel_blue" -> V2SteelBlueColors
     "default", "pure_black" -> V2DarkColors

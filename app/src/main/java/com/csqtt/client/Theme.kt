@@ -208,7 +208,7 @@ private val BrandLightColorScheme = lightColorScheme(
     surfaceTint = Color.Transparent,
 )
 
-private val BrandDarkColorScheme = darkColorScheme(
+internal val BrandDarkColorScheme = darkColorScheme(
     primary = Color(0xFF1565D8),
     onPrimary = Color(0xFFFFFFFF),
     primaryContainer = Color(0xFF173B72),

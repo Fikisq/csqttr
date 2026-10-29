@@ -11,6 +11,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.unit.sp
 import com.csqtt.client.ui.v2.design.V2Theme
+import com.csqtt.client.UiDesignPresets
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.csqtt.client.SettingsStore
 import com.csqtt.client.BatterySaver
@@ -39,9 +40,10 @@ fun HappSettingsScreen(
     val batteryPercent by settingsStore.batterySaverPercent.collectAsStateWithLifecycle(BatterySaver.DEFAULT_PERCENT)
     var transfer by remember { mutableStateOf(false) }
     var logsHelp by remember { mutableStateOf(false) }
-    Column(Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
+    V2AdaptiveScreen(Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
+        val layout = LocalV2AdaptiveMetrics.current
         V2TopBar(title = "Настройки", onBack = onBack)
-        Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(bottom = layout.gap), verticalArrangement = Arrangement.spacedBy(layout.gap)) {
             V2Card {
                 Text("CSQTTR", style = MaterialTheme.typography.titleLarge)
                 Text(version, style = MaterialTheme.typography.bodySmall)
@@ -72,9 +74,9 @@ fun HappSettingsScreen(
                 }, onInfoClick = { logsHelp = true })
             }
             V2Card(contentPadding = PaddingValues(12.dp)) {
-                HappChoice("Дизайн", if (design == "classic") "Классический" else "Новый", listOf("Новый", "Классический"), {
-                    scope.launch { settingsStore.saveUiDesign(if (it == "Классический") "classic" else "v2") }
-                })
+                HappChoice("Дизайн", UiDesignPresets.label(design), UiDesignPresets.options.map { it.second }, { label ->
+                    scope.launch { settingsStore.saveUiDesign(UiDesignPresets.options.first { it.second == label }.first) }
+                }, valueMaxLines = 2)
                 HappChoice("Оформление", when(theme) { "light" -> "Светлое"; "dark" -> "Тёмное"; else -> "Системное" }, listOf("Тёмное", "Светлое", "Системное"), { scope.launch { settingsStore.saveThemeMode(when(it) { "Тёмное" -> "dark"; "Светлое" -> "light"; else -> "system" }) } })
                 HappChoice("Отпечаток TLS", fingerprint, listOf("chrome", "firefox", "safari", "edge", "opera"), { scope.launch { settingsStore.saveFingerprint(it, forProfile = profile) } })
                 HappActionRow("Импорт / экспорт", onClick = { transfer = true })

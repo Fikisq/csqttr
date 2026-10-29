@@ -10,7 +10,6 @@ import androidx.compose.material.icons.automirrored.outlined.HelpOutline
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material.icons.outlined.VisibilityOff
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -34,12 +33,13 @@ import com.csqtt.client.ui.v2.design.V2Theme
 @Composable
 internal fun HappField(label: String, value: String, onChange: (String) -> Unit, modifier: Modifier = Modifier,
     password: Boolean = false, number: Boolean = false, enabled: Boolean = true,
-    placeholder: String = fieldFormatHint(label), compact: Boolean = false) {
+    placeholder: String = fieldFormatHint(label), compact: Boolean = false, visibilityKey: Any? = null) {
     val c = V2Theme.colors
-    var showPassword by rememberSaveable(label) { mutableStateOf(false) }
+    val layout = LocalV2AdaptiveMetrics.current
+    var showPassword by remember(label, visibilityKey) { mutableStateOf(false) }
     Column(modifier, verticalArrangement = Arrangement.spacedBy(3.dp)) {
-        Text(label, color = c.textSecondary, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        BasicTextField(value, onChange, modifier = Modifier.fillMaxWidth().height(if (compact) 38.dp else 44.dp).semantics { contentDescription = label },
+        Text(label, color = c.textSecondary, fontSize = 12.sp, lineHeight = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        BasicTextField(value, onChange, modifier = Modifier.fillMaxWidth().height(layout.fieldHeight + if (compact) 0.dp else 6.dp).semantics { contentDescription = label },
             singleLine = true, enabled = enabled,
             textStyle = MaterialTheme.typography.bodyMedium.copy(fontSize = 14.sp, color = c.textPrimary),
             visualTransformation = if (password && !showPassword) PasswordVisualTransformation() else VisualTransformation.None,
@@ -96,10 +96,11 @@ internal fun HappHelp(title: String, text: String) {
 
 @Composable
 internal fun HappChoice(label: String, value: String, options: List<String>, onSelect: (String) -> Unit,
-    modifier: Modifier = Modifier, tone: Color? = null, help: String? = null, enabled: Boolean = true, compact: Boolean = false) {
+    modifier: Modifier = Modifier, tone: Color? = null, help: String? = null, enabled: Boolean = true, compact: Boolean = false,
+    valueMaxLines: Int = 1) {
     val c = V2Theme.colors
     var expanded by remember { mutableStateOf(false) }
-    Row(modifier.fillMaxWidth().heightIn(min = if (compact) 40.dp else 48.dp), verticalAlignment = Alignment.CenterVertically) {
+    Row(modifier.fillMaxWidth().heightIn(min = LocalV2AdaptiveMetrics.current.rowHeight + if (compact) 0.dp else 8.dp), verticalAlignment = Alignment.CenterVertically) {
         Text(label, modifier = Modifier.weight(1f), color = c.textPrimary, fontSize = 13.sp)
         if (help != null) HappHelp(label, help)
         Box(Modifier.widthIn(min = 128.dp, max = 158.dp)) {
@@ -107,7 +108,7 @@ internal fun HappChoice(label: String, value: String, options: List<String>, onS
                 color = c.field, border = BorderStroke(1.dp, c.outline)) {
                 Column(Modifier.padding(horizontal = 12.dp, vertical = 7.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(value, modifier = Modifier.weight(1f), fontSize = 13.sp, maxLines = 1, color = c.textPrimary)
+                        Text(value, modifier = Modifier.weight(1f), fontSize = 13.sp, maxLines = valueMaxLines, color = c.textPrimary)
                         Icon(Icons.Default.KeyboardArrowDown, null, tint = c.textSecondary, modifier = Modifier.size(18.dp))
                     }
                     if (tone != null) Box(Modifier.padding(top = 4.dp).fillMaxWidth().height(3.dp).background(tone, RoundedCornerShape(2.dp)))
@@ -123,7 +124,7 @@ internal fun HappChoice(label: String, value: String, options: List<String>, onS
 @Composable
 internal fun HappActionRow(title: String, detail: String = "", onClick: () -> Unit, modifier: Modifier = Modifier, compact: Boolean = false) {
     val c = V2Theme.colors
-    Row(modifier.fillMaxWidth().heightIn(min = if (compact) 40.dp else 48.dp).clickable(onClick = onClick), verticalAlignment = Alignment.CenterVertically) {
+    Row(modifier.fillMaxWidth().heightIn(min = LocalV2AdaptiveMetrics.current.rowHeight + if (compact) 0.dp else 8.dp).clickable(onClick = onClick), verticalAlignment = Alignment.CenterVertically) {
         Text(title, modifier = Modifier.weight(1f), fontSize = 13.sp, color = c.textPrimary)
         Text(detail, color = c.textSecondary, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.widthIn(max = 150.dp))
         Text(" ›", color = c.textSecondary, fontSize = 22.sp)
