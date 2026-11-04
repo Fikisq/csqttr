@@ -99,6 +99,8 @@ impl LuaProcessor {
             local find = string.find
             string.find = function(s, needle, init, plain)
                 assert(plain == true, "Gooby Lua string.find requires plain=true")
+                -- LuaJIT uses a byte-by-byte search with a comparison at each match.
+                assert(#s * #needle <= 4 * 1024 * 1024, "Gooby Lua literal search exceeds work limit")
                 return find(s, needle, init, true)
             end
             string.match = nil
@@ -213,6 +215,13 @@ mod sandbox_tests {
             "test", "test", 443,
         ).unwrap();
         assert!(LuaProcessor::new("string.find('aaa', 'a*')", "test", "test", 443).is_err());
+        assert!(LuaProcessor::new(
+            "string.find(string.rep('a', 8192), string.rep('a', 1024)..'b', 1, true)",
+            "test",
+            "test",
+            443,
+        )
+        .is_err());
     }
 
     #[test]
