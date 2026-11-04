@@ -226,6 +226,7 @@ struct OutboundQueue {
     space: Notify,
     shared: Arc<DriverShared>,
     socket: Arc<UdpSocket>,
+    core: Arc<NativeCore>,
 }
 
 async fn outbound_writer_loop(queue: Arc<OutboundQueue>) {
@@ -289,6 +290,9 @@ async fn outbound_writer_loop(queue: Arc<OutboundQueue>) {
                 traffic_add(if queue.shared.closing.load(Ordering::Acquire) { TM::UdpClosingDrops } else { TM::UdpSendDrops }, 1);
             }
             drop(packet);
+            if delivered {
+                queue.core.record_udp_data_sent();
+            }
         }
         if queue.shared.closing.load(Ordering::Acquire) {
             return;
@@ -423,6 +427,7 @@ impl TurnAllocation {
                     space: Notify::new(),
                     shared: shared.clone(),
                     socket: socket.clone(),
+                    core: core.clone(),
                 });
                 let writer_task = tokio::spawn(outbound_writer_loop(queue.clone()));
                 (Some(queue), Some(writer_task))
