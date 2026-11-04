@@ -96,11 +96,12 @@ impl LuaProcessor {
         // Keep literal search available through the ordinary string API.
         lua.load(
             r#"
-            local find = string.find
+            local find, check, kind = string.find, assert, type
             string.find = function(s, needle, init, plain)
-                assert(plain == true, "Gooby Lua string.find requires plain=true")
+                check(plain == true, "Gooby Lua string.find requires plain=true")
                 -- LuaJIT uses a byte-by-byte search with a comparison at each match.
-                assert(#s * #needle <= 4 * 1024 * 1024, "Gooby Lua literal search exceeds work limit")
+                check(kind(s) == "string" and kind(needle) == "string", "Gooby Lua string.find requires strings")
+                check(#s * #needle <= 4 * 1024 * 1024, "Gooby Lua literal search exceeds work limit")
                 return find(s, needle, init, true)
             end
             string.match = nil
@@ -216,7 +217,7 @@ mod sandbox_tests {
         ).unwrap();
         assert!(LuaProcessor::new("string.find('aaa', 'a*')", "test", "test", 443).is_err());
         assert!(LuaProcessor::new(
-            "string.find(string.rep('a', 8192), string.rep('a', 1024)..'b', 1, true)",
+            "assert = function() end; string.find(string.rep('a', 8192), string.rep('a', 1024)..'b', 1, true)",
             "test",
             "test",
             443,
