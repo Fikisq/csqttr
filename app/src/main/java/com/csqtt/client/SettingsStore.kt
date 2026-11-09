@@ -172,7 +172,7 @@ private fun encodeSubscriptionMeta(meta: Map<String, SubscriptionMeta>): String 
     return json.toString()
 }
 
-class SettingsStore(context: Context, deployScope: Boolean = false, readOnlyProfile: Int? = null) {
+class SettingsStore(context: Context, deployScope: Boolean = false, readOnlyProfile: Int? = null, operationProfile: Int? = null) {
     private val appContext = context.applicationContext
     companion object {
         private val Context.dataStore by preferencesDataStore("settings")
@@ -432,6 +432,7 @@ private val DEPLOY_LAST_INSPECTION_PANEL = booleanPreferencesKey("deploy_last_in
 
     private val dataStore = when {
         readOnlyProfile != null -> ReadOnlyProfileDataStore(appContext.dataStore, readOnlyProfile)
+        operationProfile != null -> OperationProfileDataStore(appContext.dataStore, operationProfile)
         deployScope -> DeployScopedDataStore(appContext.dataStore)
         else -> appContext.dataStore
     }
@@ -1421,7 +1422,7 @@ private val DEPLOY_LAST_INSPECTION_PANEL = booleanPreferencesKey("deploy_last_in
     // other threads at once. Above the flows they read, a collector could run before its flow was assigned and call
     // collect on null, which crashed the app at launch on slower phones (Redmi).
     init {
-        if (readOnlyProfile == null && migrationsStarted.compareAndSet(false, true)) {
+        if (readOnlyProfile == null && operationProfile == null && migrationsStarted.compareAndSet(false, true)) {
             CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
                 migrateDefaultRole()
                 migrateConnectionPasswordsToLocalStorage()
@@ -1431,7 +1432,7 @@ private val DEPLOY_LAST_INSPECTION_PANEL = booleanPreferencesKey("deploy_last_in
                 migrateDeployServerNames()
             }
         }
-        if (readOnlyProfile == null && uiCacheStarted.compareAndSet(false, true)) {
+        if (readOnlyProfile == null && operationProfile == null && uiCacheStarted.compareAndSet(false, true)) {
             CoroutineScope(SupervisorJob() + Dispatchers.Default).launch {
                 launch { vkHashMode.collect { cachedVkHashMode = it } }
                 launch { vkAccessToken.collect { cachedVkAccessToken = it } }

@@ -945,8 +945,7 @@ object TunnelManager {
     }
 
     private fun applyPendingLog(pending: PendingLog) {
-        val identity = pending.identity
-        if (identity != null && !isCurrent(identity)) return
+        // Admission already rejected stale processes. Accepted evidence survives process exit.
         val index = logs.indexOfFirst { it.key == pending.key }
         if (pending.isError && index == -1) {
             unreadErrorCount.value++
@@ -1032,7 +1031,7 @@ object TunnelManager {
                 val epoch = if (isSwitching) {
                     lifecycleState.requestRestart() ?: return@withLock
                 } else {
-                    clearLogs()
+                    // Keep the previous attempt and concurrent deploy evidence until explicit clear.
                     config.value = null
                     stats.value = "Ожидание данных..."
                     trafficTracker.reset()

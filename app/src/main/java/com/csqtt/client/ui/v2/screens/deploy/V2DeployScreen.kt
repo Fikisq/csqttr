@@ -625,10 +625,11 @@ internal fun V2DeployScreen(
             DeployActionMode.Reinstall -> "Переустановка"
         }
 
+        val operationStore = SettingsStore(context, operationProfile = deployProfile)
         DeployManager.startDeploy()
         DeployManager.scope.launch {
             try {
-                settingsStore.saveDeployProfileDraft(deploymentDraft, restoreConnection = true)
+                operationStore.saveDeployProfileDraft(deploymentDraft, restoreConnection = true)
                 context.startForegroundService(
                     Intent(context, TunnelService::class.java).apply { action = "DEPLOY_START" },
                 )
@@ -662,7 +663,7 @@ internal fun V2DeployScreen(
                         else -> dockerInstall
                     }
                     if (deployDockerMode != dockerInstall) {
-                        settingsStore.saveDockerInstall(deployDockerMode)
+                        operationStore.saveDockerInstall(deployDockerMode)
                     }
                     val bundledVersion = bundledServerVersion(context)
                     if (bundledVersion.isBlank()) {
@@ -703,14 +704,14 @@ internal fun V2DeployScreen(
                     mode = mode,
                     instance = chosen.instance,
                     onServerPassword = { password ->
-                        settingsStore.saveDeployedServer(deployProfile, deployHost, chosen.peerPort, chosen.webPort, password)
+                        operationStore.saveDeployedServer(deployProfile, deployHost, chosen.peerPort, chosen.webPort, password)
                     },
                 )
                 if (success) {
-                    settingsStore.saveServerConfigured(true)
+                    operationStore.saveServerConfigured(true)
                     val deployedVersion = comparableServerVersion(bundledServerVersion(context))
                     if (deployedVersion.isNotBlank()) {
-                        settingsStore.saveDeployInspection(
+                        operationStore.saveDeployInspection(
                             checkedAtMs = System.currentTimeMillis(),
                             arch = inspectionResult?.arch
                                 ?.takeIf { it.isNotBlank() && it != "unknown" }
@@ -728,10 +729,10 @@ internal fun V2DeployScreen(
                     // the profile that started the deploy, even if another is active by now; it connects to the server
                     // just deployed, on its ports (46100 next to 2.1)
                     if (mode != DeployActionMode.Update) {
-                        settingsStore.saveConnectionPassword(deployMainPassword, forProfile = settingsStore.linkedConnectionProfile(deployProfile))
+                        operationStore.saveConnectionPassword(deployMainPassword, forProfile = operationStore.linkedConnectionProfile(deployProfile))
                         TunnelManager.addDeployInfoLog("Пароль подключения синхронизирован с паролем сервера")
                     }
-                    settingsStore.saveDeployedServer(deployProfile, deployHost, chosen.peerPort, chosen.webPort)
+                    operationStore.saveDeployedServer(deployProfile, deployHost, chosen.peerPort, chosen.webPort)
                     showDeployToast("$actionLabel успешно завершена")
                 } else if (!offerNewHostKey(host, ports.ssh) { launchDeploy(requested, chosen) }) {
                     showDeployToast(DeployManager.lastResult.value.ifBlank { "Ошибка: $actionLabel" })
@@ -879,6 +880,7 @@ internal fun V2DeployScreen(
         val uninstallCertificate = if (sshKeysMode) savedSshCertificate else ""
         val uninstallPassword = if (sshKeysMode) "" else sshPassword
 
+        val operationStore = SettingsStore(context, operationProfile = savedSettings.profile)
         DeployManager.startDeploy()
         DeployManager.scope.launch {
             try {
@@ -901,8 +903,8 @@ internal fun V2DeployScreen(
                 if (success) {
                     // the card shows the standard place; removing the second server (csqtt25) leaves it as it is
                     if (server.place != ServerPlace.SIDE) {
-                        settingsStore.saveServerConfigured(false)
-                        settingsStore.clearDeployInspection()
+                        operationStore.saveServerConfigured(false)
+                        operationStore.clearDeployInspection()
                         ServerMaintenanceState.inspectionResult.value = null
                     }
                     showDeployToast("CSQTT успешно удален с сервера")

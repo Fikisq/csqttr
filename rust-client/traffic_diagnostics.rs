@@ -195,13 +195,25 @@ mod tests {
         reporter.emit(Duration::from_secs(5), 10000, 20000, 70);
         assert_eq!(reporter.previous_up, 10000);
         assert_eq!(reporter.sequence, 0);
+        reporter.emit(Duration::from_secs(5), 11000, 22000, 70);
+        assert_eq!(reporter.sequence, 1);
+        // A second press during an active measurement must also reset the baseline,
+        // while keeping sequence IDs unique for the existing log history.
+        start_measurement();
+        reporter.emit(Duration::from_secs(5), 20000, 30000, 70);
+        assert_eq!(reporter.previous_up, 20000);
+        assert_eq!(reporter.sequence, 1);
+        let next = reporter.sample(reporter.previous, Duration::from_secs(5), 21000, 32000, 70);
+        assert_eq!(next["app_up_bytes"], 1000);
+        assert_eq!(next["app_down_bytes"], 2000);
+        assert_eq!(reporter.sequence, 2);
         *UNTIL.lock().unwrap() = Some(Instant::now() - Duration::from_secs(1));
         expire_measurement();
         assert!(!ENABLED.load(Ordering::Relaxed));
         start_measurement();
         reporter.emit(Duration::from_secs(5), 30000, 40000, 70);
         assert_eq!(reporter.previous_up, 30000);
-        assert_eq!(reporter.sequence, 0);
+        assert_eq!(reporter.sequence, 2);
         *UNTIL.lock().unwrap() = Some(Instant::now());
         expire_measurement();
     }
