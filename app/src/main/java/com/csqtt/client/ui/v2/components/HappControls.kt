@@ -15,6 +15,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.foundation.text.KeyboardOptions
@@ -53,6 +54,7 @@ internal fun HappField(label: String, value: String, onChange: (String) -> Unit,
         Box(Modifier.padding(top = if (floatingLabel) labelInset else 0.dp)) {
         BasicTextField(value, onChange, modifier = Modifier.fillMaxWidth().height(fieldHeight + if (compact) 0.dp else 6.dp).semantics { contentDescription = label },
             singleLine = true, enabled = enabled,
+            cursorBrush = SolidColor(c.accent),
             textStyle = MaterialTheme.typography.bodyMedium.copy(fontSize = V2TextSizes.Body, color = c.textPrimary),
             visualTransformation = if (password && !showPassword) PasswordVisualTransformation() else VisualTransformation.None,
             keyboardOptions = KeyboardOptions(keyboardType = when { password -> KeyboardType.Password; number -> KeyboardType.Number; else -> KeyboardType.Text }),

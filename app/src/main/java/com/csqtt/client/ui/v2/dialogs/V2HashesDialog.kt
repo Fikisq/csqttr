@@ -287,6 +287,7 @@ fun V2HashesDialog(
                                     }
                                 }
                                 BasicTextField(
+                                    cursorBrush = androidx.compose.ui.graphics.SolidColor(colors.accent),
                                     value = value, onValueChange = { updateHash(index, it) },
                                     enabled = !isChecking, singleLine = true, modifier = Modifier.weight(1f).focusRequester(fieldFocus[index]),
                                     textStyle = MaterialTheme.typography.bodyMedium.copy(color = colors.textPrimary, fontSize = 13.sp, fontFamily = FontFamily.Monospace),
