@@ -426,6 +426,9 @@ internal fun DeployTab(
                     installInDocker = dockerInstall,
                     secretPath = savedSecretPathUuid.ifBlank { "" },
                     instance = instance,
+                    onServerPassword = { password ->
+                        settingsStore.saveDeployedServer(deployProfile, host, effectivePeerPort, effectiveWebPort, password)
+                    },
                 )
                 if (success) {
                     passwordToSynchronizeAfterDeploy(success, effectiveMainPass)?.let { mainPassword ->
@@ -751,11 +754,11 @@ internal fun DeployTab(
             title = "Удаление: $name",
             text = if (server.place == ServerPlace.SIDE) {
                 "Будет удалён второй сервер csqtt25: его бинарник, сервис или контейнер и только его правила firewall/NAT. " +
-                    "Остальное на этом VPS не затрагивается. База пользователей остаётся в /etc/csqtt25.\n\nЭто действие необратимо."
+                    "Остальное на этом VPS не затрагивается. Клиенты, конфигурация и сертификаты этого экземпляра будут удалены. Профиль на телефоне сохранится.\n\nЭто действие необратимо."
             } else {
                 "Будут удалены: бинарник, systemd-сервис или контейнер, конфигурация CSQTT и только помеченные правила " +
-                    "firewall/NAT для CSQTT. Второй сервер (csqtt25), если он есть, не затрагивается. База пользователей " +
-                    "остаётся в /etc/csqtt.\n\nЭто действие необратимо."
+                    "firewall/NAT для CSQTT. Второй сервер (csqtt25), если он есть, не затрагивается. Клиенты, конфигурация " +
+                    "и сертификаты этого экземпляра будут удалены. Профиль на телефоне сохранится.\n\nЭто действие необратимо."
             },
             onDismiss = { pendingRemove = null },
             onConfirm = {

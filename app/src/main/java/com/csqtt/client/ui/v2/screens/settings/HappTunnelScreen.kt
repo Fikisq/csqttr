@@ -131,7 +131,7 @@ internal fun HappTunnelScreen(settingsStore: SettingsStore, version: String, onS
         val layout = LocalV2AdaptiveMetrics.current
         val pill = RoundedCornerShape(50)
         V2TopBar(version = version, title = "Туннель", onSettings = onSettings)
-        Column(Modifier.weight(1f).fillMaxWidth().testTag("tunnel-settings").verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(layout.gap)) {
+        Column(Modifier.weight(1f).fillMaxWidth().testTag("tunnel-settings").imePadding().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(layout.gap)) {
             ProfileSwipeActions(
                 expanded = actionsExpanded, enabled = !busy,
                 onExpandedChange = { actionsExpanded = it },

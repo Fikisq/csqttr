@@ -31,6 +31,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.heightIn
 import com.csqtt.client.ui.v2.components.V2AdaptiveScreen
 import com.csqtt.client.ui.v2.components.V2AdaptiveForm
@@ -120,8 +121,7 @@ import com.csqtt.client.ui.legacy.describeServer
 import com.csqtt.client.ui.legacy.peerPortOrDefault
 import com.csqtt.client.ui.legacy.performServerCheck
 import com.csqtt.client.ui.legacy.planDeploy
-import com.csqtt.client.ui.legacy.removableServers
-import com.csqtt.client.ui.legacy.removalNotes
+import com.csqtt.client.ui.legacy.removalTargetForProfile
 import com.csqtt.client.ui.legacy.bundledServerVersion
 import com.csqtt.client.ui.legacy.comparableServerVersion
 import com.csqtt.client.ui.legacy.friendlyDeployError
@@ -294,10 +294,7 @@ internal fun V2DeployScreen(
     // replacement awaiting its confirmation, and the removal list
     var checkPlan by checkState.plan
     var pendingReplace by checkState.replacement
-    var removable by remember(savedSettings.profile) { mutableStateOf<List<FoundServer>?>(null) }
-    var removeNotes by remember(savedSettings.profile) { mutableStateOf<List<String>>(emptyList()) }
     var pendingRemove by remember(savedSettings.profile) { mutableStateOf<FoundServer?>(null) }
-    var showRemovalRequest by remember(savedSettings.profile) { mutableStateOf(false) }
     var showRemovalProgress by remember(savedSettings.profile) { mutableStateOf(false) }
     var removalError by remember(savedSettings.profile) { mutableStateOf<String?>(null) }
     var removalJob by remember(savedSettings.profile) { mutableStateOf<kotlinx.coroutines.Job?>(null) }
@@ -710,6 +707,9 @@ internal fun V2DeployScreen(
                     secretPath = if (mode == DeployActionMode.Update) "" else savedSecretPathUuid.ifBlank { "" },
                     mode = mode,
                     instance = chosen.instance,
+                    onServerPassword = { password ->
+                        settingsStore.saveDeployedServer(deployProfile, deployHost, chosen.peerPort, chosen.webPort, password)
+                    },
                 )
                 if (success) {
                     settingsStore.saveServerConfigured(true)
@@ -850,7 +850,7 @@ internal fun V2DeployScreen(
         showDeployOptions = true
     }
 
-    /** «Удалить CSQTT с сервера»: the check lists the servers this app installed, the user picks one. */
+    /** Check the selected VPS profile, then go directly to its final confirmation. */
     fun requestUninstall() {
         if (DeployManager.isDeploying.value || isInspecting || isChangingSecretPath) return
         if (host.isBlank() || !sshAuthReady) {
@@ -863,9 +863,14 @@ internal fun V2DeployScreen(
         showRemovalProgress = true
         removalJob = runServerCheck(onFailure = { if (showRemovalProgress) removalError = it }) {
             if (showRemovalProgress) {
-                showRemovalProgress = false
-                removable = removableServers(it)
-                removeNotes = removalNotes(it)
+                val ports = resolveServerPorts(manualPorts, sshPort, peerPort, webPort)
+                val target = removalTargetForProfile(it, ports.peer, ports.web)
+                if (target == null) {
+                    removalError = "Не найден однозначно соответствующий профилю сервер CSQTT (PEER ${ports.peer}, WEB ${ports.web}). Другие экземпляры не удалены."
+                } else {
+                    showRemovalProgress = false
+                    pendingRemove = target
+                }
             }
         }
     }
@@ -1033,7 +1038,7 @@ internal fun V2DeployScreen(
         BoxWithConstraints(Modifier.fillMaxSize()) {
         val progressSpace = if (isDeploying) 60.dp else if (actionsBusy) 44.dp else 0.dp
         val cardMinimum = (maxHeight - form.profileHeight - 12.dp - progressSpace).coerceAtLeast(0.dp)
-        Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).testTag("deploy-settings"), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Column(Modifier.fillMaxWidth().imePadding().verticalScroll(rememberScrollState()).testTag("deploy-settings"), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             V2Card(contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp), shape = RoundedCornerShape(22.dp), color = colors.surface) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     androidx.compose.material3.TextButton(onClick = { showServerMenu = true }, enabled = !actionsBusy,
@@ -1127,8 +1132,8 @@ internal fun V2DeployScreen(
         }
         }
         Row(Modifier.fillMaxWidth().testTag("deploy-actions").padding(top = 6.dp, bottom = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            V2PillButton("Удалить", { showRemovalRequest = true }, modifier = Modifier.weight(1f), enabled = !actionsBusy, style = V2PillStyle.Danger, height = layout.buttonHeight, fontSize = V2TextSizes.Action, shape = RoundedCornerShape(50))
-            V2PillButton(if(serverDeployed) "Обновить" else "Установить", { scope.launch { persistServerDraft(); startDeploy(if(serverDeployed) DeployActionMode.Update else DeployActionMode.Install) } }, modifier = Modifier.weight(1f), enabled = !actionsBusy, height = layout.buttonHeight, fontSize = V2TextSizes.Action, shape = RoundedCornerShape(50))
+            V2PillButton("Удалить", { requestUninstall() }, modifier = Modifier.weight(1f), enabled = !actionsBusy, style = V2PillStyle.Danger, height = layout.buttonHeight, fontSize = V2TextSizes.Action, shape = RoundedCornerShape(50))
+            V2PillButton("Установить", { scope.launch { persistServerDraft(); startDeploy(if(serverDeployed) DeployActionMode.Update else DeployActionMode.Install) } }, modifier = Modifier.weight(1f), enabled = !actionsBusy, height = layout.buttonHeight, fontSize = V2TextSizes.Action, shape = RoundedCornerShape(50), maxLines = 2)
         }
     }
     if (showRenameDialog) {
@@ -1211,7 +1216,7 @@ internal fun V2DeployScreen(
                 HappActionRow("Проверить сервер", onClick = { showDeployOptions = false; scope.launch { persistServerDraft(); inspectServer() } })
                 HappActionRow("Переустановить", onClick = { showDeployOptions = false; showReinstallDialog = true })
             } },
-            confirmButton = { androidx.compose.material3.TextButton(onClick = { showDeployOptions = false; scope.launch { persistServerDraft(); checkThenDeploy(mode) } }) { Text(if (mode == DeployActionMode.Update) "Обновить" else "Установить") } },
+            confirmButton = { androidx.compose.material3.TextButton(onClick = { showDeployOptions = false; scope.launch { persistServerDraft(); checkThenDeploy(mode) } }) { Text("Установить") } },
             dismissButton = { androidx.compose.material3.TextButton(onClick = { showDeployOptions = false }) { Text("Отмена") } })
     }
 
@@ -1287,18 +1292,18 @@ internal fun V2DeployScreen(
             emptyText = "csqtt не найден — сервер чистый",
             notes = plan.notes,
             choices = plan.actions.mapIndexed { index, action ->
-                // the one action a reinstall wipes (launchDeploy keeps Reinstall only for it): say so, not "settings stay"
-                val wipes = mode == DeployActionMode.Reinstall && action.kind == PlanKind.UPDATE &&
+                // Reinstall replaces the runtime while retaining the persistent store.
+                val reinstalls = mode == DeployActionMode.Reinstall && action.kind == PlanKind.UPDATE &&
                     action.instance == DeployInstance.MAIN
                 CheckChoice(
-                    if (wipes) "Переустановить начисто" else action.title,
-                    if (wipes) {
-                        "Удаляются CSQTT, база клиентов, конфигурация и сертификаты, затем чистая установка. Клиенты и пароли не сохранятся"
+                    if (reinstalls) "Переустановить с сохранением данных" else action.title,
+                    if (reinstalls) {
+                        "Серверная часть устанавливается заново. Клиенты, пароли, настройки и сертификаты сохраняются"
                     } else {
                         action.detail
                     },
                     when {
-                        action.destructive || wipes -> CheckChoiceStyle.DESTRUCTIVE
+                        action.destructive -> CheckChoiceStyle.DESTRUCTIVE
                         index == 0 -> CheckChoiceStyle.RECOMMENDED
                         else -> CheckChoiceStyle.OTHER
                     },
@@ -1352,12 +1357,6 @@ internal fun V2DeployScreen(
         }
     }
 
-    if (showRemovalRequest) com.csqtt.client.ui.legacy.ServerRemovalRequestDialog(
-        name = serverTitle, host = host, sshPort = sshPort, sshReady = sshAuthReady,
-        onDismiss = { showRemovalRequest = false },
-        onContinue = { showRemovalRequest = false; requestUninstall() },
-        onConfigure = { showRemovalRequest = false; showConfigSheet = true },
-    )
     if (showRemovalProgress) com.csqtt.client.ui.legacy.ServerRemovalProgressDialog(
         name = serverTitle, host = host, sshPort = sshPort,
         busy = removalError == null && (isDeploying || removalJob?.isActive == true), error = removalError,
@@ -1367,24 +1366,6 @@ internal fun V2DeployScreen(
             showRemovalProgress = false
         },
     )
-    removable?.let { servers ->
-        ServerCheckDialog(
-            title = "Удаление с сервера",
-            servers = emptyList(),
-            emptyText = if (servers.isEmpty() && removeNotes.isEmpty()) "Серверов, установленных этим приложением, здесь нет" else "",
-            notes = removeNotes,
-            choices = servers.map { server ->
-                val (name, detail) = describeServer(server, profilePeer)
-                CheckChoice("Удалить: $name", detail, CheckChoiceStyle.DESTRUCTIVE)
-            },
-            onChoose = { index ->
-                pendingRemove = servers[index]
-                removable = null
-            },
-            onDismiss = { removable = null },
-        )
-    }
-
     pendingRemove?.let { server ->
         val (name, _) = describeServer(server, profilePeer)
         V2UninstallConfirmDialog(
@@ -1393,19 +1374,19 @@ internal fun V2DeployScreen(
                 pendingRemove = null
                 startUninstall(server)
             },
-            title = "Удаление: $name",
+            title = "Удаление: $serverTitle",
             description = if (server.place == ServerPlace.SIDE) {
-                "Будет удалён второй сервер csqtt25: его бинарник, сервис или контейнер и только его правила firewall/NAT. " +
-                    "Остальное на этом VPS не затрагивается. База пользователей остаётся в /etc/csqtt25.\n\nЭто действие необратимо."
+                "VPS: $host · PEER: ${server.peerPort} · WEB: ${server.webPort}\n\nБудет удалён второй сервер csqtt25: его бинарник, сервис или контейнер и только его правила firewall/NAT. " +
+                    "Остальное на этом VPS не затрагивается. Клиенты, конфигурация и сертификаты этого экземпляра будут удалены. Профиль на телефоне сохранится.\n\nЭто действие необратимо."
             } else {
-                "Будут удалены: бинарник, systemd-сервис или контейнер, конфигурация CSQTT и только помеченные правила " +
-                    "firewall/NAT для CSQTT. Второй сервер (csqtt25), если он есть, не затрагивается. База пользователей " +
-                    "остаётся в /etc/csqtt.\n\nЭто действие необратимо."
+                "VPS: $host · PEER: ${server.peerPort} · WEB: ${server.webPort}\n\nБудут удалены: бинарник, systemd-сервис или контейнер и только помеченные правила " +
+                    "firewall/NAT для CSQTT. Второй сервер (csqtt25), если он есть, не затрагивается. Клиенты, конфигурация " +
+                    "и сертификаты этого экземпляра будут удалены. Профиль на телефоне сохранится.\n\nЭто действие необратимо."
             },
         )
     }
 
-    // Диалог подтверждения переустановки: очищает базу и конфигурацию на сервере
+    // Reinstall preserves the server database and configuration.
     if (showReinstallDialog) {
         V2UninstallConfirmDialog(
             onDismiss = { showReinstallDialog = false },
@@ -1414,9 +1395,7 @@ internal fun V2DeployScreen(
                 startDeploy(DeployActionMode.Reinstall)
             },
             title = "Переустановка сервера",
-            description = "На сервере будут удалены CSQTT, SQLite-база, конфигурация и сертификаты, " +
-                "после чего выполнится чистая установка. Все данные сервера будут потеряны.\n\n" +
-                "Это действие необратимо.",
+            description = "Серверная часть будет установлена заново. Клиенты, пароли, конфигурация и сертификаты сохранятся. На время установки подключения прервутся.",
             confirmLabel = "Переустановить",
         )
     }

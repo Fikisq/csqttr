@@ -1738,13 +1738,21 @@ private val DEPLOY_LAST_INSPECTION_PANEL = booleanPreferencesKey("deploy_last_in
     // they are (a profile that last deployed a second server on 46100 and now updates the one on 46000 must dial 46000),
     // ports other than 46000/46002 turn "Ручные порты" on — the connection dials serverPeerPort only then — and an empty
     // server address becomes the host. Nothing changes before a deploy succeeds.
-    suspend fun saveDeployedServer(profile: Int, host: String, peerPort: Int, webPort: Int) {
+    suspend fun saveDeployedServer(profile: Int, host: String, peerPort: Int, webPort: Int, password: String? = null) {
         dataStore.edit { prefs ->
             val connectionProfile = prefs[getProfileKey(DEPLOY_CONNECTION_PROFILE, profile)] ?: profile
             // the profile that started the deploy, even if another is active by the time it finished
-            if (prefs[getProfileKey(PROFILE_REMOVED, connectionProfile)] != true && (prefs[getProfileKey(PEER, connectionProfile)] ?: "").isBlank() && host.isNotBlank()) {
+            if (prefs[getProfileKey(PROFILE_REMOVED, connectionProfile)] != true && host.isNotBlank()) {
                 prefs[getProfileKey(PEER, connectionProfile)] = host
             }
+            if (!password.isNullOrBlank()) {
+                prefs.putSecret(DEPLOY_MAIN_PASSWORD_ENCRYPTED, DEPLOY_MAIN_PASSWORD, password, profile)
+                prefs[getProfileKey(CONNECTION_PASSWORD_LOCAL, connectionProfile)] = password
+                prefs.remove(getProfileKey(CONNECTION_PASSWORD, connectionProfile))
+                prefs.remove(getProfileKey(CONNECTION_PASSWORD_ENCRYPTED, connectionProfile))
+            }
+            prefs[getProfileKey(PROFILE_REVISION, connectionProfile)] = (prefs[getProfileKey(PROFILE_REVISION, connectionProfile)] ?: 0L) + 1L
+            PingResultsCache.removeProfile(connectionProfile)
             prefs[getProfileKey(SERVER_PEER_PORT, connectionProfile)] = peerPort
             prefs[getProfileKey(MANUAL_PORTS_ENABLED, connectionProfile)] = true
             prefs[getProfileKey(SERVER_PEER_PORT, profile)] = peerPort
@@ -1904,6 +1912,8 @@ private val DEPLOY_LAST_INSPECTION_PANEL = booleanPreferencesKey("deploy_last_in
                 val isNew = peer.isBlank()
                 val oldPassword = readConnectionPasswordState(prefs, target).value
                 val updatePassword = isNew || oldPassword.isBlank() ||
+                    mainPassword != readSecret(prefs, DEPLOY_MAIN_PASSWORD_ENCRYPTED, DEPLOY_MAIN_PASSWORD, profile) ||
+                    previousHost != draft.ip.trim() ||
                     (target == profile && prefs[getProfileKey(DEPLOY_SERVER_CONFIGURED, profile)] != true)
                 if (peer != draft.ip.trim() ||
                     (prefs[getProfileKey(SERVER_PEER_PORT, target)] ?: CsqttConstants.Network.DEFAULT_SERVER_PEER_PORT) != draft.serverPeerPort ||

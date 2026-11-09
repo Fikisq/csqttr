@@ -168,8 +168,13 @@ android {
     }
 
     androidResources {
-        // Keep sources locally for verification, but fetch pinned server cores during deploy.
-        ignoreAssetsPattern = "csqtt-linux-*"
+        // Bundle selected VPS architectures; others retain verified download/cache support.
+        val bundled = providers.gradleProperty("csqtt.bundleServerCores").orNull.orEmpty()
+        val architectures = if (bundled == "true") listOf("amd64", "arm64", "armv7")
+            else bundled.split(',').filter { it.isNotBlank() }
+        require(architectures.all { it in listOf("amd64", "arm64", "armv7") })
+        ignoreAssetsPattern = listOf("amd64", "arm64", "armv7")
+            .filter { it !in architectures }.joinToString(":") { "csqtt-linux-$it" }
     }
 
     sourceSets {

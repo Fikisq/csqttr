@@ -265,8 +265,12 @@ class MainActivity : ComponentActivity() {
                 }
             }
             val pendingLink = pendingDeepLink
-            if (pendingLink != null && design == "v2") {
-                com.csqtt.client.ui.v2.design.CsqttV2Theme(darkTheme = dark) {
+            val importDesign = design
+            if (pendingLink != null && importDesign != null && importDesign != UiDesignPresets.CLASSIC) {
+                com.csqtt.client.ui.v2.design.CsqttV2Theme(
+                    darkTheme = dark,
+                    themePalette = UiDesignPresets.darkPalette(importDesign),
+                ) {
                 com.csqtt.client.ui.v2.dialogs.V2BrowserImportDialog(
                     rawLink = pendingLink,
                     settingsStore = remember { appSettingsStore },

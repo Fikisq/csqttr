@@ -30,7 +30,7 @@ bash gradlew :app:testDebugUnitTest :app:assembleDebug \
   -Pcsqtt.compactApk=true \
   -Pcsqtt.debugApplicationIdSuffix=.forktest \
   -Pcsqtt.debugAppLabel=CSQTTR \
-  -Pcsqtt.debugVersionNameSuffix=-debug.47
+  -Pcsqtt.debugVersionNameSuffix=-debug.57
 ```
 
 Результат — три APK по ABI и universal в `app/build/outputs/apk/debug/`.
@@ -49,7 +49,7 @@ Debug APK подписывается локальным debug-ключом. Чт
 
 ## Серверные ядра и собственный репозиторий релизов
 
-Серверные исполняемые файлы исключены из APK. При деплое приложение определяет
+По умолчанию серверные исполняемые файлы исключены из APK. При деплое приложение определяет
 архитектуру VPS, загружает ядро по HTTPS, проверяет размер и SHA-256, затем
 сохраняет его в приватный кэш. Кэш повторно проверяется перед использованием.
 Ошибка загрузки или проверки останавливает операцию до изменения сервера.
@@ -72,3 +72,19 @@ Debug APK подписывается локальным debug-ключом. Чт
 Изменение релиза или файла манифеста в GitHub не меняет адреса в уже выпущенном APK:
 для перехода на другой источник необходима новая сборка приложения.
 Версия ядра сервера не должна обновляться без проверки совместимости с клиентом.
+
+## Встроенное ядро для amd64 VPS
+
+Предварительный APK debug.57 для arm64-v8a содержит новое серверное ядро amd64.
+Для других архитектур VPS остаются закреплённые загрузки из `server-downloads.json`.
+Чтобы собрать такой же вариант, сначала соберите сервер для x86_64-unknown-linux-musl,
+поместите бинарник в `app/src/main/assets/csqtt-linux-amd64` и создайте манифест:
+
+```powershell
+./scripts/server_asset_provenance.ps1 -Mode Write -Assets csqtt-linux-amd64
+./scripts/server_asset_provenance.ps1 -Mode Verify -Assets csqtt-linux-amd64
+```
+
+Добавьте к сборке Gradle `-Pcsqtt.bundleServerCores=amd64`.
+Встроенное ядро проверяется по размеру и SHA-256 из `csqtt.server-provenance.json`;
+скачиваемое — по `server-downloads.json`. Не переносите контрольные суммы между сборками.

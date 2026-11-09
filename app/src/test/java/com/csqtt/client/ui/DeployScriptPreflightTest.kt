@@ -6,6 +6,16 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class DeployScriptPreflightTest {
+    @Test
+    fun `reinstall uses preservation path and never purges the database`() {
+        org.junit.Assert.assertEquals("update", DeployActionMode.Reinstall.scriptAction)
+        val operations = deployOperations()
+        val install = operations.substringAfter("val environmentFile =").substringBefore("internal suspend fun performUninstall")
+        assertFalse(install.contains("bash /tmp/deploy.sh purge"))
+        assertTrue(install.contains("if (mode != DeployActionMode.Install) null else"))
+        assertTrue(install.contains("if (mode == DeployActionMode.Install) mainPass else"))
+    }
+
     private fun script(): String {
         val candidates = listOf(
             File("app/src/main/assets/deploy.sh"),
@@ -124,16 +134,15 @@ class DeployScriptPreflightTest {
     }
 
     @Test
-    fun `docker image build retries DNS with Yandex resolvers`() {
+    fun `docker build uses mirrors without writing protected resolver and streams output`() {
         val deploy = script()
-        assertTrue(deploy.contains("DOCKER_BUILD_TIMEOUT_SECONDS"))
-        assertTrue(deploy.contains("docker build --network host"))
-        assertTrue(deploy.contains("CSQTT_BUILD_DNS_PRIMARY:-"))
-        assertTrue(deploy.contains("FROM alpine:3.21"))
-        assertTrue(deploy.contains("apk add --no-cache --no-progress ca-certificates iproute2 iptables"))
-        assertTrue(deploy.contains("CSQTT_BUILD_DNS_PRIMARY=77.88.8.8"))
-        assertTrue(deploy.contains("CSQTT_BUILD_DNS_SECONDARY=77.88.8.1"))
-        assertTrue(deploy.contains("Temporary failure resolving|Could not resolve|Name or service not known"))
+        val build = deploy.substringAfter("docker_build_candidate_image() {").substringBefore("prepare_docker_candidate()")
+        assertTrue(build.contains("--network host"))
+        assertTrue(build.contains("--add-host"))
+        assertTrue(build.contains("https://mirror.yandex.ru/mirrors/alpine"))
+        assertTrue(build.contains("| tee"))
+        assertFalse(deploy.contains("CSQTT_BUILD_DNS_PRIMARY"))
+        assertTrue(deploy.contains("timeout -k 5s 60s apk add"))
     }
 
     @Test

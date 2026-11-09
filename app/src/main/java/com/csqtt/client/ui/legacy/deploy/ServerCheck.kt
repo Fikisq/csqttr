@@ -270,3 +270,7 @@ internal fun FoundServer.deployInstance(): DeployInstance =
 internal fun FoundServer.peerPortOrDefault(): Int =
     peerPort ?: if (place == ServerPlace.SIDE) CsqttConstants.Network.DEFAULT_SIDE_SERVER_PEER_PORT
     else CsqttConstants.Network.DEFAULT_SERVER_PEER_PORT
+
+/** Only an unambiguous installed instance matching the selected VPS profile is removable. */
+internal fun removalTargetForProfile(inventory: ServerInventory, peerPort: Int, webPort: Int): FoundServer? =
+    removableServers(inventory).filter { it.peerPort == peerPort && it.webPort == webPort }.singleOrNull()

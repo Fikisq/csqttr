@@ -274,7 +274,10 @@ fun CsqttV2Root(
                     )
 
                     else -> Column(modifier = Modifier.fillMaxSize()) {
-                        Box(modifier = Modifier.weight(1f).imePadding()) {
+                        // Adaptive forms handle IME inside their scroll viewport so keyboard frames
+                        // do not resize every field and recompose the entire form.
+                        val formHandlesIme = selectedTab == V2Tab.Tunnel || selectedTab == V2Tab.Deploy
+                        Box(modifier = Modifier.weight(1f).then(if (formHandlesIme) Modifier else Modifier.imePadding())) {
                             key(selectedTab) {
                                 val tab = selectedTab
                                 tabStateHolder.SaveableStateProvider(key = tab.name) {

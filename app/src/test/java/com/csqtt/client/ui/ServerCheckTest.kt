@@ -142,4 +142,17 @@ class ServerCheckTest {
         assertTrue(plan(inv(std250)).actions[0].detail.contains("«Авторизации» этого профиля"))
         assertTrue(plan(inv(std21)).actions[1].detail.contains("«Авторизации» этого профиля"))
     }
+
+    @Test fun removalTargetsOnlySelectedProfilePorts() {
+        val inventory = inv(std250, side252)
+        assertEquals(ServerPlace.STANDARD, removalTargetForProfile(inventory, 46000, 46002)?.place)
+        assertEquals(ServerPlace.SIDE, removalTargetForProfile(inventory, 46100, 46102)?.place)
+        assertNull(removalTargetForProfile(inventory, 47000, 47002))
+        assertNull(removalTargetForProfile(inventory, 46000, 46102))
+    }
+    @Test fun removalRejectsMissingAmbiguousAndUnsafeTargets() {
+        assertNull(removalTargetForProfile(inv(storeOnly), 46000, 46002))
+        assertNull(removalTargetForProfile(inv(std250, std250), 46000, 46002))
+        assertNull(removalTargetForProfile(inv(std250, server("other", "2.5.3", 47000, 47002)), 46000, 46002))
+    }
 }
