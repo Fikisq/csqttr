@@ -551,7 +551,7 @@ internal fun createSSHClient(
     }
 }
 
-private fun shellQuote(value: String): String {
+internal fun shellQuote(value: String): String {
     return "'" + value.replace("'", "'\"'\"'") + "'"
 }
 
@@ -749,9 +749,8 @@ internal suspend fun performDeploy(
 
         val scriptFile = File(workingDir, "deploy.sh").also { writeDeployScript(context, it) }
         val serverFile = extractAsset(serverArchitecture.assetName)
-        // Update must keep the existing credentials/config: deploy.sh "update" reuses
-        // /etc/csqtt/csqtt.env and deploy-overrides.json on the server.
-        val environmentFile = if (mode != DeployActionMode.Install) null else {
+        // Panel access comes from this deployment profile; update preserves the client database.
+        val environmentFile = run {
             File(workingDir, "csqtt.env").apply {
                 writeText(
                     buildString {
@@ -779,10 +778,10 @@ internal suspend fun performDeploy(
         onProgress(0.06f, "Подготовка сервера...")
         sshClient.upload(scriptFile, "/tmp/deploy.sh")
 
-        val secretEnv = if (mode == DeployActionMode.Install && secretPath.isNotBlank()) "CSQTT_WEB_SECRET_PATH=${deployEnvironmentValue(secretPath.trim(), false)} " else ""
+        val secretEnv = if (secretPath.isNotBlank()) "CSQTT_WEB_SECRET_PATH=${deployEnvironmentValue(secretPath.trim(), false)} " else ""
         val deployEnvironment =
             "env ${secretEnv}CSQTT_PEER_PORT=$peerPort CSQTT_SSH_PORT=$port CSQTT_WEB_PORT=$webPort CSQTT_PUBLIC_IP=${host.trim()} " +
-                "CSQTT_DEPLOY_MODE=${deployMode(installInDocker)} CSQTT_INSTANCE=${instance.wire}"
+                "CSQTT_DEPLOY_MODE=${deployMode(installInDocker)} CSQTT_INSTANCE=${instance.wire} CSQTT_APPLY_PANEL=1"
         onProgress(0.10f, "Загрузка нового сервера...")
         val digest = java.security.MessageDigest.getInstance("SHA-256")
         serverFile.inputStream().use { input ->

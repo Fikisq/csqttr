@@ -991,12 +991,16 @@ validate_candidate_environment() {
 prepare_uploaded_release() {
     DEPLOY_PHASE="preflight"
     if [ "$PRESERVE_CONFIG" = "1" ]; then
-        # An update uploads neither file (the app keeps the server's own), so one already in /tmp is a leftover — maybe
-        # the other instance's, from a deploy cut off after its upload: this instance's own config always wins.
-        rm -f -- "$UPLOAD_ENV_FILE" "$UPLOAD_OVERRIDES_FILE"
-        [ -s "$CSQTT_ENV_FILE" ] || \
-            die "Не найдена существующая WEB-конфигурация ${CSQTT_ENV_FILE}; выполните первый деплой" "$EXIT_PREFLIGHT_FAILED"
-        install -m 0600 "$CSQTT_ENV_FILE" "$UPLOAD_ENV_FILE" || die "Не удалось прочитать существующую WEB-конфигурацию" "$EXIT_PREFLIGHT_FAILED"
+        # Explicit panel update uses the freshly uploaded profile configuration.
+        # Old clients/CLI updates still preserve the server environment by default.
+        rm -f -- "$UPLOAD_OVERRIDES_FILE"
+        if [ "${CSQTT_APPLY_PANEL:-0}" = "1" ]; then
+            [ -s "$UPLOAD_ENV_FILE" ] || die "WEB-конфигурация профиля не загружена" "$EXIT_PREFLIGHT_FAILED"
+        else
+            rm -f -- "$UPLOAD_ENV_FILE"
+            [ -s "$CSQTT_ENV_FILE" ] || die "Не найдена WEB-конфигурация сервера" "$EXIT_PREFLIGHT_FAILED"
+            install -m 0600 "$CSQTT_ENV_FILE" "$UPLOAD_ENV_FILE" || die "Не удалось прочитать WEB-конфигурацию" "$EXIT_PREFLIGHT_FAILED"
+        fi
         if [ -s "$CSQTT_DEPLOY_OVERRIDES_FILE" ]; then
             install -m 0600 "$CSQTT_DEPLOY_OVERRIDES_FILE" "$UPLOAD_OVERRIDES_FILE" || die "Не удалось прочитать существующую deploy-конфигурацию" "$EXIT_PREFLIGHT_FAILED"
         else
@@ -1008,7 +1012,7 @@ prepare_uploaded_release() {
             ( umask 077; printf '{"main_password":""}\n' > "$UPLOAD_OVERRIDES_FILE" ) || \
                 die "Не удалось подготовить deploy-конфигурацию обновления" "$EXIT_PREFLIGHT_FAILED"
         fi
-        log_info "Режим обновления: логин, пароли и путь панели сохраняются"
+        log_info "Режим обновления: база клиентов и их настройки сохраняются"
     fi
     [ -f "$UPLOAD_BINARY" ] && [ -s "$UPLOAD_BINARY" ] || \
         die "Новый бинарник не загружен или пуст" "$EXIT_PREFLIGHT_FAILED"
@@ -3123,7 +3127,7 @@ main() {
             run_timed "NAT/firewall" setup_nat_and_firewall
             install_network_helper
             if [ "$PRESERVE_CONFIG" = "1" ]; then
-                log_info "Режим обновления: логин, пароли и путь панели сохраняются без изменений"
+                log_info "Режим обновления: база клиентов и их настройки сохраняются"
             fi
             setup_csqtt_environment
             run_timed "Let’s Encrypt" setup_letsencrypt_ip_tls

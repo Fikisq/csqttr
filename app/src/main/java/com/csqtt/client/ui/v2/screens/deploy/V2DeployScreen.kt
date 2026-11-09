@@ -577,7 +577,7 @@ internal fun V2DeployScreen(
         // reinstall never wipes a 2.1 server's database, an update never looks for a config the side server lacks
         val mode = if (chosen.kind == PlanKind.UPDATE && chosen.instance == DeployInstance.MAIN) requested else DeployActionMode.Install
         val deployProfile = savedSettings.profile
-        val requiresCredentials = mode != DeployActionMode.Update
+        val requiresCredentials = true
         when {
             host.isBlank() -> {
                 showDeployToast("Укажите IP-адрес сервера")
@@ -671,11 +671,6 @@ internal fun V2DeployScreen(
                         return@launch
                     }
                     val installedVersion = comparableServerVersion(inspection.installedVersion)
-                    if (installedVersion.isNotBlank() && !isNewerVersion(installedVersion, bundledVersion)) {
-                        DeployManager.stopDeploy("Уже актуальная версия")
-                        showDeployToast("На сервере уже актуальная версия v$bundledVersion")
-                        return@launch
-                    }
                     if (installedVersion.isBlank()) {
                         TunnelManager.addDeployWarningLog(
                             "Версия на сервере не определена — будет загружена сборка v$bundledVersion",
@@ -704,7 +699,7 @@ internal fun V2DeployScreen(
                     keyPassphrase = deployKeyPassphrase,
                     certificate = deployCertificate,
                     installInDocker = deployDockerMode,
-                    secretPath = if (mode == DeployActionMode.Update) "" else savedSecretPathUuid.ifBlank { "" },
+                    secretPath = savedSecretPathUuid,
                     mode = mode,
                     instance = chosen.instance,
                     onServerPassword = { password ->
