@@ -50,6 +50,7 @@ impl Stats {
                         traffic.emit(elapsed, up, down, active);
                         traffic_at = std::time::Instant::now();
                     }
+                    crate::traffic_diagnostics::expire_measurement();
                     if should_emit(last_emitted, now, ticks_since_emit) {
                         events.stats(active, up, down);
                         last_emitted = Some(now);

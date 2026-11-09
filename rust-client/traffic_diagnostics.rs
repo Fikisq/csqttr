@@ -6,6 +6,23 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 pub const PREFIX: &str = "__CSQTT_TRAFFIC__|";
 pub const PERIOD: Duration = Duration::from_secs(5);
 static ENABLED: AtomicBool = AtomicBool::new(false);
+static EPOCH: AtomicU64 = AtomicU64::new(0);
+static UNTIL: std::sync::Mutex<Option<Instant>> = std::sync::Mutex::new(None);
+
+pub fn start_measurement() {
+    *UNTIL.lock().unwrap_or_else(|e| e.into_inner()) = Some(Instant::now() + Duration::from_secs(120));
+    EPOCH.fetch_add(1, Ordering::Release);
+    ENABLED.store(true, Ordering::Relaxed);
+}
+
+pub fn expire_measurement() {
+    let mut until = UNTIL.lock().unwrap_or_else(|e| e.into_inner());
+    if until.is_some_and(|deadline| Instant::now() >= deadline) {
+        ENABLED.store(false, Ordering::Relaxed);
+        *until = None;
+        crate::log_error!("[ДИАГНОСТИКА] Замер передачи завершён (120 с)");
+    }
+}
 
 #[derive(Clone, Copy)]
 #[repr(usize)]
@@ -109,6 +126,7 @@ pub struct Reporter {
     previous_up: i64,
     previous_down: i64,
     sequence: u64,
+    epoch: u64,
 }
 impl Reporter {
     pub fn emit(&mut self, elapsed: Duration, up: i64, down: i64, active: i32) {
@@ -116,6 +134,14 @@ impl Reporter {
             return;
         }
         let current = std::array::from_fn(|i| COUNTERS[i].load(Ordering::Relaxed));
+        let epoch = EPOCH.load(Ordering::Acquire);
+        if self.epoch != epoch {
+            self.epoch = epoch;
+            self.previous = current;
+            self.previous_up = up;
+            self.previous_down = down;
+            return; // Establish a fresh baseline; do not count traffic before the measurement.
+        }
         if current == self.previous && up == self.previous_up && down == self.previous_down {
             return;
         }
@@ -161,6 +187,25 @@ impl Reporter {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn measurement_expires_and_restarts_with_fresh_baseline() {
+        start_measurement();
+        assert!(ENABLED.load(Ordering::Relaxed));
+        let mut reporter = Reporter::default();
+        reporter.emit(Duration::from_secs(5), 10000, 20000, 70);
+        assert_eq!(reporter.previous_up, 10000);
+        assert_eq!(reporter.sequence, 0);
+        *UNTIL.lock().unwrap() = Some(Instant::now() - Duration::from_secs(1));
+        expire_measurement();
+        assert!(!ENABLED.load(Ordering::Relaxed));
+        start_measurement();
+        reporter.emit(Duration::from_secs(5), 30000, 40000, 70);
+        assert_eq!(reporter.previous_up, 30000);
+        assert_eq!(reporter.sequence, 0);
+        *UNTIL.lock().unwrap() = Some(Instant::now());
+        expire_measurement();
+    }
+
     #[test]
     fn windows_use_deltas_real_elapsed_and_do_not_call_backpressure_loss() {
         let mut r = Reporter::default();
