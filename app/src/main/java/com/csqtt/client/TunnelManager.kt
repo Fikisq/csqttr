@@ -11,7 +11,6 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -210,23 +209,6 @@ object TunnelManager {
     val lastTunnelDiagnostic = MutableStateFlow("")
     val uptimeSeconds = MutableStateFlow<Long?>(null)
     private var uptimeJob: Job? = null
-    private val uiVisible = MutableStateFlow(false)
-
-    fun setUiVisible(visible: Boolean) {
-        uiVisible.value = visible
-        if (visible) scope.launch(Dispatchers.Main) { flushPendingLogs() }
-    }
-
-    fun expireTrafficSnapshot() {
-        trafficTracker.expire(SystemClock.elapsedRealtime())
-    }
-
-    fun startTrafficMeasurement() {
-        val identity = processIdentity ?: return
-        activeScope.launch(Dispatchers.IO) {
-            writeProcessCommand(identity, "TRAFFIC_DIAGNOSTICS", "traffic_measurement_error")
-        }
-    }
     
     private val pausedForNoNetwork = NetworkPauseGate()
 
@@ -238,9 +220,7 @@ object TunnelManager {
         uptimeSeconds.value = 0L
         uptimeJob?.cancel()
         uptimeJob = scope.launch(Dispatchers.Default) {
-            uiVisible.collectLatest { visible ->
-              if (!visible) return@collectLatest
-              while (isActive) {
+            while (isActive) {
                 val start = processStartedAtMs
                 val isProcessActive = running.value || process != null
                 if (start > 0L && isProcessActive) {
@@ -250,7 +230,6 @@ object TunnelManager {
                     break
                 }
                 delay(1000L)
-              }
             }
         }
     }
@@ -929,7 +908,7 @@ object TunnelManager {
     private fun scheduleLogFlushLocked() {
         if (!pendingLogFlushScheduled.compareAndSet(false, true)) return
         scope.launch(Dispatchers.Main) {
-            delay(if (uiVisible.value) LOG_UI_FLUSH_MS else 3_000L)
+            delay(LOG_UI_FLUSH_MS)
             flushPendingLogs()
         }
     }
@@ -1211,7 +1190,7 @@ object TunnelManager {
         pb.environment()["TMPDIR"] = context.cacheDir.absolutePath
         pb.environment()[CsqttConstants.Tunnel.PROCESS_ENV_EVENTS] = "1"
         pb.environment()["RAYON_NUM_THREADS"] = "2"
-        pb.environment()["CSQTT_TRAFFIC_DIAGNOSTICS"] = "0" // Explicit, time-limited measurement only.
+        pb.environment()["CSQTT_TRAFFIC_DIAGNOSTICS"] = if (isLoggingEnabled) "1" else "0"
         if (params.connectionPassword.isNotEmpty()) {
             pb.environment()["CSQTT_PASSWORD"] = params.connectionPassword
         }

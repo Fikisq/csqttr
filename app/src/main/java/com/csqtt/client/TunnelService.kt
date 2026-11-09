@@ -1460,7 +1460,6 @@ class TunnelService : Service() {
     private fun buildTunnelNotificationText(): String {
         if (autoPausedForWifi) return WifiCopy.paused(currentPauseSsid())
         if (TunnelManager.running.value) {
-            TunnelManager.expireTrafficSnapshot()
             return TunnelTrafficText.notification(TunnelManager.traffic.value, TunnelManager.activeWorkers.value)
         }
         val statsText = TunnelManager.stats.value.trim()

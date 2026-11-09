@@ -96,13 +96,6 @@ fun V2LogsScreen(
             LogFilterMenu(level, logLevels, { level = it }, Modifier.weight(1f))
             LogFilterMenu(source, logSources, { source = it }, Modifier.weight(1f))
         }
-        val tunnelRunning by TunnelManager.running.collectAsStateWithLifecycle()
-        TextButton(onClick = {
-            level = "Подробные"
-            source = "Все события"
-            TunnelManager.startTrafficMeasurement()
-            context.showRaisedToast("Диагностика передачи: 2 минуты")
-        }, enabled = tunnelRunning) { Text("Замер передачи · 2 мин", fontSize = V2TextSizes.Action) }
         V2Card(
             modifier = Modifier
                 .weight(1f)
