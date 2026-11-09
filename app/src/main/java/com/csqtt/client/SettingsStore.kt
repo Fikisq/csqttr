@@ -416,6 +416,23 @@ private val DEPLOY_LAST_INSPECTION_PANEL = booleanPreferencesKey("deploy_last_in
         private val uiCacheStarted = java.util.concurrent.atomic.AtomicBoolean(false)
         private val migrationsStarted = java.util.concurrent.atomic.AtomicBoolean(false)
 
+        // Called inside the same DataStore transaction as the deployment result.
+        internal fun updateDeployedConnection(
+            prefs: MutablePreferences, profile: Int, host: String, peerPort: Int, password: String?,
+        ): Boolean {
+            if (prefs[getProfileKey(PROFILE_REMOVED, profile)] == true) return false
+            if (host.isNotBlank()) prefs[getProfileKey(PEER, profile)] = host
+            if (!password.isNullOrBlank()) {
+                prefs[getProfileKey(CONNECTION_PASSWORD_LOCAL, profile)] = password
+                prefs.remove(getProfileKey(CONNECTION_PASSWORD, profile))
+                prefs.remove(getProfileKey(CONNECTION_PASSWORD_ENCRYPTED, profile))
+            }
+            prefs[getProfileKey(PROFILE_REVISION, profile)] = (prefs[getProfileKey(PROFILE_REVISION, profile)] ?: 0L) + 1L
+            prefs[getProfileKey(SERVER_PEER_PORT, profile)] = peerPort
+            prefs[getProfileKey(MANUAL_PORTS_ENABLED, profile)] = true
+            return true
+        }
+
         private fun <T> getProfileKey(baseKey: Preferences.Key<T>, profile: Int): Preferences.Key<T> {
             if (profile == 0) return baseKey
             val newName = "${baseKey.name}_$profile"
@@ -1742,20 +1759,14 @@ private val DEPLOY_LAST_INSPECTION_PANEL = booleanPreferencesKey("deploy_last_in
     suspend fun saveDeployedServer(profile: Int, host: String, peerPort: Int, webPort: Int, password: String? = null) {
         dataStore.edit { prefs ->
             val connectionProfile = prefs[getProfileKey(DEPLOY_CONNECTION_PROFILE, profile)] ?: profile
-            // the profile that started the deploy, even if another is active by the time it finished
-            if (prefs[getProfileKey(PROFILE_REMOVED, connectionProfile)] != true && host.isNotBlank()) {
-                prefs[getProfileKey(PEER, connectionProfile)] = host
-            }
+            // Older profiles share the VPS/VPN slot. Do not write shared ports back into a deleted slot.
+            if (connectionProfile == profile && prefs[getProfileKey(PROFILE_REMOVED, profile)] == true) return@edit
             if (!password.isNullOrBlank()) {
                 prefs.putSecret(DEPLOY_MAIN_PASSWORD_ENCRYPTED, DEPLOY_MAIN_PASSWORD, password, profile)
-                prefs[getProfileKey(CONNECTION_PASSWORD_LOCAL, connectionProfile)] = password
-                prefs.remove(getProfileKey(CONNECTION_PASSWORD, connectionProfile))
-                prefs.remove(getProfileKey(CONNECTION_PASSWORD_ENCRYPTED, connectionProfile))
             }
-            prefs[getProfileKey(PROFILE_REVISION, connectionProfile)] = (prefs[getProfileKey(PROFILE_REVISION, connectionProfile)] ?: 0L) + 1L
-            PingResultsCache.removeProfile(connectionProfile)
-            prefs[getProfileKey(SERVER_PEER_PORT, connectionProfile)] = peerPort
-            prefs[getProfileKey(MANUAL_PORTS_ENABLED, connectionProfile)] = true
+            if (updateDeployedConnection(prefs, connectionProfile, host, peerPort, password)) {
+                PingResultsCache.removeProfile(connectionProfile)
+            }
             prefs[getProfileKey(SERVER_PEER_PORT, profile)] = peerPort
             prefs[getProfileKey(SERVER_WEB_PORT, profile)] = webPort
             if (peerPort != CsqttConstants.Network.DEFAULT_SERVER_PEER_PORT || webPort != CsqttConstants.Network.DEFAULT_SERVER_WEB_PORT) {

@@ -44,7 +44,11 @@ data class LogEntry(
     val priority: Int = 99, 
     val isError: Boolean = false,
     val level: LogLevel? = null,
-)
+    val sessionId: Long = 0L,
+) {
+    val listKey: String get() = "$sessionId:$key"
+    val exportMessage: String get() = if (sessionId == 0L) message else "[Подключение #$sessionId] $message"
+}
 
 private val LOG_STICKERS = Regex("[\\p{So}\\p{Sk}\\uFE0F\\u200D]")
 private val EMPTY_LOG_TAG = Regex("\\[\\s*]")
@@ -925,7 +929,8 @@ object TunnelManager {
 
     private fun applyPendingLog(pending: PendingLog) {
         // Admission already rejected stale processes. Accepted evidence survives process exit.
-        val index = logs.indexOfFirst { it.key == pending.key }
+        val sessionId = pending.identity?.generation ?: 0L
+        val index = logs.indexOfFirst { it.key == pending.key && it.sessionId == sessionId }
         if (pending.isError && index == -1) {
             unreadErrorCount.value++
         }
@@ -948,6 +953,7 @@ object TunnelManager {
                         pending.priority,
                         pending.isError,
                         pending.level,
+                        sessionId,
                     )
                 )
             }
@@ -960,6 +966,7 @@ object TunnelManager {
                     pending.priority,
                     pending.isError,
                     pending.level,
+                    sessionId,
                 )
             )
         }
@@ -978,7 +985,7 @@ object TunnelManager {
             lifecycleState.accepts(identity.ticket)
 
     private fun insertSorted(entry: LogEntry) {
-        val comparator = compareBy<LogEntry>({ it.priority }, { if (it.isError) 1 else 0 }, { it.key })
+        val comparator = compareBy<LogEntry>({ it.sessionId }, { it.priority }, { if (it.isError) 1 else 0 }, { it.key })
         var inserted = false
         for (i in logs.indices) {
             if (comparator.compare(entry, logs[i]) < 0) {
