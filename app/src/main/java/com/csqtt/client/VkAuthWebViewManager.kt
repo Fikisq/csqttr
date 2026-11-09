@@ -230,7 +230,7 @@ internal class VkAuthSession(
                 // Authorization stays in this WebView, including when VK offers an app deep link.
                 if (request.url.scheme !in listOf("https", "http")) return true
                 val url = request.url.toString()
-                if (url.contains("access_token=")) {
+                if (request.isForMainFrame && VkOAuthUrlPolicy.isCallback(url) && url.contains("access_token=")) {
                     handleUrl(url)
                     return true
                 }
@@ -242,8 +242,7 @@ internal class VkAuthSession(
                 return false
             }
             override fun shouldInterceptRequest(v: WebView, request: WebResourceRequest): WebResourceResponse? {
-                val uri = request.url
-                if (uri.lastPathSegment == "blank.html") {
+                if (request.isForMainFrame && VkOAuthUrlPolicy.isCallback(request.url.toString())) {
                     return WebResourceResponse(
                         "text/html",
                         "utf-8",
@@ -450,6 +449,7 @@ internal class VkAuthSession(
 
     private fun handleUrl(url: String) {
         if (finished || preparingAccountChoice) return
+        if (!VkOAuthUrlPolicy.isCallback(url)) return
         val uri = runCatching { url.toUri() }.getOrNull()
         val raw = uri?.fragment ?: url.substringAfter("#", "").ifEmpty { url.substringAfter("?", "") }
         val fragment = raw.substringAfter("#").substringAfter("?")

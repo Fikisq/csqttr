@@ -2207,9 +2207,15 @@ ensure_docker() {
             pkg_install docker || die "Не удалось установить Docker Engine"
         else
             pkg_install ca-certificates curl || die "Не удалось установить curl и ca-certificates для Docker"
-            local installer
-            installer="$(mktemp)"
-            curl -fsSL https://get.docker.com -o "$installer" || die "Не удалось загрузить официальный установщик Docker"
+            local installer http_status
+            installer="$(mktemp)" || die "Не удалось создать временный файл для установщика Docker"
+            # Execute only a direct HTTPS response from the official endpoint.
+            if ! http_status="$(curl -q -fsS --proto '=https' --connect-timeout 15 --max-time 120 \
+                -o "$installer" -w '%{http_code}' https://get.docker.com)" ||
+                [ "$http_status" != 200 ] || [ ! -s "$installer" ]; then
+                rm -f -- "$installer"
+                die "Не удалось загрузить официальный установщик Docker"
+            fi
             sh "$installer" >>"$LOG_FILE" 2>&1 || {
                 rm -f "$installer"
                 die "Не удалось установить Docker Engine"

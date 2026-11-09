@@ -175,4 +175,4 @@ Gooby is a TCP SOCKS5 proxy, so the word “packet” in the Lua API means an ap
 The low-TTL disorder technique is inherently network/OS dependent. Use `--no-disorder` if a route or platform does not tolerate it; TLS record fragmentation still remains active.
 
 
-Treat configuration archives as trusted input: `custom` rules execute Lua code inside the Gooby process. `Lua::new()` uses mlua's safe standalone library set, but a script can still intentionally consume CPU or memory.
+Use trusted configuration archives. Custom rules run inside the Gooby process with an 8 MiB Lua heap limit and an instruction hook that checks instruction count and elapsed time during Lua execution. The JIT, module loading, filesystem and process access, and native Lua patterns are disabled. For literal searches, use `string.find(data, needle, start, true)`.
