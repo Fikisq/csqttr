@@ -822,7 +822,7 @@ internal fun V2DeployScreen(
         }
     }
 
-    fun startDeploy(mode: DeployActionMode) {
+    fun startDeploy(mode: DeployActionMode, confirmed: Boolean = false) {
         if (DeployManager.isDeploying.value || isInspecting || isChangingSecretPath) return
         when {
             host.isBlank() -> {
@@ -842,8 +842,13 @@ internal fun V2DeployScreen(
                 return
             }
         }
-        deployOptionsModeKey = mode.name
-        showDeployOptions = true
+        if (confirmed) {
+            showDeployOptions = false
+            scope.launch { persistServerDraft(); checkThenDeploy(mode) }
+        } else {
+            deployOptionsModeKey = mode.name
+            showDeployOptions = true
+        }
     }
 
     /** Check the selected VPS profile, then go directly to its final confirmation. */
@@ -1389,7 +1394,7 @@ internal fun V2DeployScreen(
             onDismiss = { showReinstallDialog = false },
             onConfirm = {
                 showReinstallDialog = false
-                startDeploy(DeployActionMode.Reinstall)
+                startDeploy(DeployActionMode.Reinstall, confirmed = true)
             },
             title = "Переустановка сервера",
             description = "Серверная часть будет установлена заново. Клиенты, пароли, конфигурация и сертификаты сохранятся. На время установки подключения прервутся.",
