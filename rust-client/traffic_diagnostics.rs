@@ -6,6 +6,14 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 pub const PREFIX: &str = "__CSQTT_TRAFFIC__|";
 pub const PERIOD: Duration = Duration::from_secs(5);
 static ENABLED: AtomicBool = AtomicBool::new(false);
+static REQUESTED: AtomicBool = AtomicBool::new(false);
+static GENERATION: AtomicU64 = AtomicU64::new(0);
+const MEASUREMENT_DURATION: Duration = Duration::from_secs(120);
+
+// The stats task owns measurement boundaries and snapshots; stdin only requests a restart.
+pub fn request_measurement() {
+    REQUESTED.store(true, Ordering::Release);
+}
 
 #[derive(Clone, Copy)]
 #[repr(usize)]
