@@ -52,6 +52,33 @@ class ReviewedDeployInterfaceTest {
         }
     }
 
+    @Test fun authorizationGeneratorsPreview() {
+        openDeploy()
+        compose.onNodeWithText("Авторизация").performClick()
+        compose.onNodeWithContentDescription("Сгенерировать пароль туннеля").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Сгенерировать пароль веб-панели").assertIsDisplayed()
+        compose.waitForIdle()
+        File(compose.activity.getExternalFilesDir(null), "authorization-generators.png").outputStream().use {
+            compose.onNode(isDialog()).captureToImage().asAndroidBitmap().compress(Bitmap.CompressFormat.PNG, 100, it)
+        }
+    }
+
+    @Test fun matchingTunnelAndDeployFieldsPreview() {
+        for (theme in listOf("dark", "light")) {
+            runBlocking { store.saveThemeMode(theme) }
+            compose.onNodeWithText("Туннель").performClick()
+            compose.waitForIdle()
+            val tunnel = compose.onNodeWithContentDescription("Адрес сервера").getUnclippedBoundsInRoot()
+            shot("fields-tunnel-$theme")
+            openDeploy()
+            compose.waitForIdle()
+            val deployField = compose.onNodeWithContentDescription("Адрес сервера").getUnclippedBoundsInRoot()
+            assertEquals((deployField.right - deployField.left).value, (tunnel.right - tunnel.left).value, 1f)
+            assertEquals((deployField.bottom - deployField.top).value, (tunnel.bottom - tunnel.top).value, 1f)
+            shot("fields-deploy-$theme")
+        }
+    }
+
     @Test fun independentDeploySelectionAndSharedTunnelSelection() {
         compose.onNodeWithText("Connection 2").performClick()
         compose.onNodeWithText("Туннель").performClick()

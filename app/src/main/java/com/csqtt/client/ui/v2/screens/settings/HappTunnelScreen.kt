@@ -145,20 +145,20 @@ internal fun HappTunnelScreen(settingsStore: SettingsStore, version: String, onS
                 }
             }
             }
-            V2Card(modifier = Modifier.testTag("tunnel-card"), contentPadding = PaddingValues(layout.cardPadding), color = c.surface,
+            V2Card(modifier = Modifier.testTag("tunnel-card"), shape = RoundedCornerShape(28.dp), contentPadding = PaddingValues(start = 14.dp, end = 14.dp, top = 12.dp, bottom = 8.dp), color = c.surface,
                 contentModifier = Modifier.heightIn(min = (layout.height - 116.dp - layout.gap * 2).coerceAtLeast(0.dp)),
                 verticalArrangement = Arrangement.SpaceBetween) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    HappField("Адрес сервера", host, { host = it }, Modifier.weight(1.65f), enabled = !busy, compact = true, shape = pill, floatingLabel = true)
-                    HappField("Порт PEER", port, { port = it.filter(Char::isDigit).take(5) }, Modifier.weight(1f), number = true, enabled = !busy, compact = true, shape = pill, floatingLabel = true)
+                    HappField("Адрес сервера", host, { host = it }, Modifier.weight(1f), enabled = !busy, compact = true, shape = pill, floatingLabel = true, maxFieldHeight = 44.dp)
+                    HappField("Порт PEER", port, { port = it.filter(Char::isDigit).take(5) }, Modifier.weight(1f), number = true, enabled = !busy, compact = true, shape = pill, floatingLabel = true, maxFieldHeight = 44.dp)
                 }
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Bottom) {
-                HappField("Пароль туннеля", password, { password = it }, Modifier.weight(1.3f), password = true, visibilityKey = profile, enabled = !busy, compact = true, shape = pill, floatingLabel = true)
+                HappField("Пароль туннеля", password, { password = it }, Modifier.weight(1f), password = true, visibilityKey = profile, enabled = !busy, compact = true, shape = pill, floatingLabel = true, maxFieldHeight = 44.dp)
                 Box(Modifier.weight(1f)) {
                 if (!linkTokenActive && ownerHashes.isEmpty() && authMode != "auto_js" && hashMode == "manual" || ownerHashes.isNotEmpty()) {
-                    V2PillButton("Настроить хеши", { showHashes = true }, modifier = Modifier.fillMaxWidth(), height = layout.fieldHeight, horizontalPadding = 4.dp, enabled = !busy, style = V2PillStyle.Outline, shape = pill)
+                    V2PillButton("Настроить хеши", { showHashes = true }, modifier = Modifier.fillMaxWidth(), height = layout.fieldHeight.coerceAtMost(44.dp), horizontalPadding = 4.dp, enabled = !busy, style = V2PillStyle.Outline, shape = pill)
                 } else {
-                    V2PillButton(if (linkTokenActive) "Аккаунт из ссылки" else if (token.isNotBlank()) "Аккаунт VK подключён" else "Войти в VK", onVkAuthRequested, modifier = Modifier.fillMaxWidth(), height = layout.fieldHeight, horizontalPadding = 4.dp, enabled = !busy && !linkTokenActive, style = V2PillStyle.Accent, shape = pill, maxLines = 2)
+                    V2PillButton(if (linkTokenActive) "Аккаунт из ссылки" else if (token.isNotBlank()) "Аккаунт VK подключён" else "Войти в VK", onVkAuthRequested, modifier = Modifier.fillMaxWidth(), height = layout.fieldHeight.coerceAtMost(44.dp), horizontalPadding = 4.dp, enabled = !busy && !linkTokenActive, style = V2PillStyle.Accent, shape = pill, maxLines = 2)
                 }
                 }
                 }

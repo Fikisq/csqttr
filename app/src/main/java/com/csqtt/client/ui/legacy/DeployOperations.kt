@@ -764,7 +764,7 @@ internal suspend fun performDeploy(
                 )
             }
         }
-        val overridesFile = if (mode != DeployActionMode.Install) null else {
+        val overridesFile = if (mode == DeployActionMode.Update) null else {
             File(workingDir, "csqtt-deploy.json").apply {
                 writeText(
                     JSONObject()
@@ -781,7 +781,8 @@ internal suspend fun performDeploy(
         val secretEnv = if (secretPath.isNotBlank()) "CSQTT_WEB_SECRET_PATH=${deployEnvironmentValue(secretPath.trim(), false)} " else ""
         val deployEnvironment =
             "env ${secretEnv}CSQTT_PEER_PORT=$peerPort CSQTT_SSH_PORT=$port CSQTT_WEB_PORT=$webPort CSQTT_PUBLIC_IP=${host.trim()} " +
-                "CSQTT_DEPLOY_MODE=${deployMode(installInDocker)} CSQTT_INSTANCE=${instance.wire} CSQTT_APPLY_PANEL=1"
+                "CSQTT_DEPLOY_MODE=${deployMode(installInDocker)} CSQTT_INSTANCE=${instance.wire} CSQTT_APPLY_PANEL=1 " +
+                "CSQTT_APPLY_TUNNEL_PASSWORD=${if (mode == DeployActionMode.Reinstall) 1 else 0}"
         onProgress(0.10f, "Загрузка нового сервера...")
         val digest = java.security.MessageDigest.getInstance("SHA-256")
         serverFile.inputStream().use { input ->

@@ -12,7 +12,8 @@ class DeployScriptPreflightTest {
         val operations = deployOperations()
         val install = operations.substringAfter("val environmentFile =").substringBefore("internal suspend fun performUninstall")
         assertFalse(install.contains("bash /tmp/deploy.sh purge"))
-        assertTrue(install.contains("if (mode != DeployActionMode.Install) null else"))
+        assertTrue(install.contains("if (mode == DeployActionMode.Update) null else"))
+        assertTrue(install.contains("CSQTT_APPLY_TUNNEL_PASSWORD=${'$'}{if (mode == DeployActionMode.Reinstall) 1 else 0}"))
         assertTrue(install.contains("if (mode == DeployActionMode.Install) mainPass else"))
     }
 

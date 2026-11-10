@@ -1300,7 +1300,7 @@ internal fun V2DeployScreen(
                 CheckChoice(
                     if (reinstalls) "Переустановить с сохранением данных" else action.title,
                     if (reinstalls) {
-                        "Серверная часть устанавливается заново. Клиенты, пароли, настройки и сертификаты сохраняются"
+                        "Данные клиентов сохраняются. Пароли туннеля и веб-панели применяются из профиля «Деплоя»"
                     } else {
                         action.detail
                     },
@@ -1397,7 +1397,7 @@ internal fun V2DeployScreen(
                 startDeploy(DeployActionMode.Reinstall, confirmed = true)
             },
             title = "Переустановка сервера",
-            description = "Серверная часть будет установлена заново. Клиенты, пароли, конфигурация и сертификаты сохранятся. На время установки подключения прервутся.",
+            description = "Серверная часть будет установлена заново. Данные клиентов и их настройки сохранятся. Пароли туннеля и веб-панели, логин и путь панели будут применены из профиля «Деплоя». На время установки подключения прервутся.",
             confirmLabel = "Переустановить",
         )
     }
@@ -1410,9 +1410,19 @@ internal fun V2DeployScreen(
         androidx.lifecycle.compose.LifecycleEventEffect(androidx.lifecycle.Lifecycle.Event.ON_STOP) { visible = false }
         androidx.compose.material3.AlertDialog(containerColor = colors.surface, onDismissRequest = { showSecretsDialog = false }, title = { Text("Авторизация") }, text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                HappField("Пароль туннеля", tunnelPassword, { tunnelPassword = it }, password = !visible, visibilityKey = visible)
+                Row(verticalAlignment = Alignment.Bottom) {
+                    HappField("Пароль туннеля", tunnelPassword, { tunnelPassword = it }, Modifier.weight(1f), password = !visible, visibilityKey = visible)
+                    androidx.compose.material3.IconButton(onClick = { tunnelPassword = generate16CharPassword() }) {
+                        Icon(Icons.Default.Refresh, "Сгенерировать пароль туннеля", tint = colors.accent)
+                    }
+                }
                 HappField("Логин веб-панели", webLoginDraft, { webLoginDraft = it })
-                HappField("Пароль веб-панели", webPasswordDraft, { webPasswordDraft = it }, password = !visible, visibilityKey = visible)
+                Row(verticalAlignment = Alignment.Bottom) {
+                    HappField("Пароль веб-панели", webPasswordDraft, { webPasswordDraft = it }, Modifier.weight(1f), password = !visible, visibilityKey = visible)
+                    androidx.compose.material3.IconButton(onClick = { webPasswordDraft = generate16CharPassword() }) {
+                        Icon(Icons.Default.Refresh, "Сгенерировать пароль веб-панели", tint = colors.accent)
+                    }
+                }
                 androidx.compose.material3.TextButton(onClick = { visible = !visible }) { Text(if (visible) "Скрыть пароли" else "Показать пароли") }
             }
         }, confirmButton = { androidx.compose.material3.TextButton(enabled = isValidTunnelPassword(tunnelPassword) && hasWebPanelCredentials(webLoginDraft, webPasswordDraft), onClick = {

@@ -993,7 +993,9 @@ prepare_uploaded_release() {
     if [ "$PRESERVE_CONFIG" = "1" ]; then
         # Explicit panel update uses the freshly uploaded profile configuration.
         # Old clients/CLI updates still preserve the server environment by default.
-        rm -f -- "$UPLOAD_OVERRIDES_FILE"
+        if [ "${CSQTT_APPLY_TUNNEL_PASSWORD:-0}" != "1" ]; then
+            rm -f -- "$UPLOAD_OVERRIDES_FILE"
+        fi
         if [ "${CSQTT_APPLY_PANEL:-0}" = "1" ]; then
             [ -s "$UPLOAD_ENV_FILE" ] || die "WEB-конфигурация профиля не загружена" "$EXIT_PREFLIGHT_FAILED"
         else
@@ -1001,7 +1003,9 @@ prepare_uploaded_release() {
             [ -s "$CSQTT_ENV_FILE" ] || die "Не найдена WEB-конфигурация сервера" "$EXIT_PREFLIGHT_FAILED"
             install -m 0600 "$CSQTT_ENV_FILE" "$UPLOAD_ENV_FILE" || die "Не удалось прочитать WEB-конфигурацию" "$EXIT_PREFLIGHT_FAILED"
         fi
-        if [ -s "$CSQTT_DEPLOY_OVERRIDES_FILE" ]; then
+        if [ "${CSQTT_APPLY_TUNNEL_PASSWORD:-0}" = "1" ]; then
+            [ -s "$UPLOAD_OVERRIDES_FILE" ] || die "Пароль туннеля из профиля не загружен" "$EXIT_PREFLIGHT_FAILED"
+        elif [ -s "$CSQTT_DEPLOY_OVERRIDES_FILE" ]; then
             install -m 0600 "$CSQTT_DEPLOY_OVERRIDES_FILE" "$UPLOAD_OVERRIDES_FILE" || die "Не удалось прочитать существующую deploy-конфигурацию" "$EXIT_PREFLIGHT_FAILED"
         else
             # The server deletes its deploy overrides once it has applied them (main.rs), so a server that has started
