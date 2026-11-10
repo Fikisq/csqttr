@@ -118,6 +118,7 @@ class MainActivity : ComponentActivity() {
     override fun onStart() {
         super.onStart()
         activeActivities++
+        TunnelManager.setUiForeground(true)
         WifiDiscovery.setForeground(true)
         WifiDiscovery.acquire(this, this)
         renderUi = true
@@ -127,6 +128,7 @@ class MainActivity : ComponentActivity() {
     override fun onStop() {
         renderUi = false
         activeActivities = (activeActivities - 1).coerceAtLeast(0)
+        TunnelManager.setUiForeground(isForeground)
         WifiDiscovery.release(this)
         WifiDiscovery.setForeground(isForeground)
         super.onStop()

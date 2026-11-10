@@ -8,6 +8,31 @@ import org.mockito.Mockito.mock
 
 @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 class TunnelPendingLogTest {
+    @Test fun backgroundBatchPreservesCountsAndForegroundFlushesImmediately() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        try {
+            TunnelManager.clearLogs()
+            runCurrent()
+            TunnelManager.setUiForeground(false)
+            repeat(12) { TunnelManager.updateLog("background_test", "Message", 99) }
+            runCurrent()
+            advanceTimeBy(121)
+            runCurrent()
+            assertFalse(TunnelManager.logs.any { it.key == "background_test" })
+            TunnelManager.setUiForeground(true)
+            runCurrent()
+            assertEquals(12, TunnelManager.logs.single { it.key == "background_test" }.count)
+            advanceTimeBy(1001)
+            runCurrent()
+            assertEquals(12, TunnelManager.logs.single { it.key == "background_test" }.count)
+        } finally {
+            TunnelManager.setUiForeground(false)
+            TunnelManager.clearLogs()
+            runCurrent()
+            Dispatchers.resetMain()
+        }
+    }
+
     private fun field(name: String) = TunnelManager::class.java.getDeclaredField(name).apply { isAccessible = true }
 
     @Test fun explicitClearRemovesPendingMessages() = runTest {

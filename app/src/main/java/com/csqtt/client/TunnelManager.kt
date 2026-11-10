@@ -160,12 +160,22 @@ object TunnelManager {
     )
 
     private const val LOG_UI_FLUSH_MS = 120L
+    private const val LOG_BACKGROUND_FLUSH_MS = 1_000L
     private const val MAX_LOG_ENTRIES = 100
     private const val MAX_PENDING_LOGS = 512
     private const val MAX_LOG_MESSAGE_LENGTH = 4_096
     private val pendingLogLock = Any()
     private val pendingLogs = LinkedHashMap<String, PendingLog>()
     private val pendingLogFlushScheduled = AtomicBoolean(false)
+    private var pendingLogFlushJob: Job? = null
+    @Volatile private var uiForeground = false
+
+    fun setUiForeground(foreground: Boolean) {
+        uiForeground = foreground
+        if (foreground) synchronized(pendingLogLock) {
+            if (pendingLogs.isNotEmpty()) scheduleLogFlushLocked(immediate = true)
+        }
+    }
 
     @Volatile
     private var wrapAuthTimeoutCount = 0
@@ -912,14 +922,17 @@ object TunnelManager {
                 pending.message = cleanMessage
                 pending.count += 1
             }
-            scheduleLogFlushLocked()
+            scheduleLogFlushLocked(immediate = isError || pendingLogs.size >= MAX_PENDING_LOGS)
         }
     }
 
-    private fun scheduleLogFlushLocked() {
-        if (!pendingLogFlushScheduled.compareAndSet(false, true)) return
-        scope.launch(Dispatchers.Main) {
-            delay(LOG_UI_FLUSH_MS)
+    private fun scheduleLogFlushLocked(immediate: Boolean = false) {
+        if (immediate) {
+            pendingLogFlushJob?.cancel()
+            pendingLogFlushScheduled.set(true)
+        } else if (!pendingLogFlushScheduled.compareAndSet(false, true)) return
+        pendingLogFlushJob = scope.launch(Dispatchers.Main) {
+            if (!immediate) delay(if (uiForeground) LOG_UI_FLUSH_MS else LOG_BACKGROUND_FLUSH_MS)
             flushPendingLogs()
         }
     }
