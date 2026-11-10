@@ -33,6 +33,26 @@ class TunnelPendingLogTest {
         }
     }
 
+    @Test fun backgroundFlushesWithoutOpeningUiAndErrorsDoNotWait() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        try {
+            TunnelManager.clearLogs()
+            runCurrent()
+            TunnelManager.setUiForeground(false)
+            TunnelManager.updateLog("background_timer", "Normal", 99)
+            runCurrent()
+            advanceTimeBy(1001)
+            runCurrent()
+            assertEquals(1, TunnelManager.logs.single { it.key == "background_timer" }.count)
+            TunnelManager.updateLog("background_error", "Error", 200, true)
+            runCurrent()
+            assertTrue(TunnelManager.logs.any { it.key == "background_error" && it.isError })
+        } finally {
+            TunnelManager.clearLogs()
+            runCurrent()
+            Dispatchers.resetMain()
+        }
+    }
     private fun field(name: String) = TunnelManager::class.java.getDeclaredField(name).apply { isAccessible = true }
 
     @Test fun explicitClearRemovesPendingMessages() = runTest {
