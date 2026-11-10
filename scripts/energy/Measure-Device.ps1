@@ -108,3 +108,7 @@ try {
 
 
 
+
+if($manifest.status -eq 'captured'){
+ & (Join-Path $PSScriptRoot 'Analyze-Trace.ps1') -RunDirectory $out
+}
