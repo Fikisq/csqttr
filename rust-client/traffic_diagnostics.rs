@@ -120,8 +120,42 @@ pub struct Reporter {
     previous_up: i64,
     previous_down: i64,
     sequence: u64,
+    measurement: u64,
+    deadline: Option<Instant>,
+    sampled_at: Option<Instant>,
 }
 impl Reporter {
+    pub fn tick(&mut self, now: Instant, up: i64, down: i64, active: i32) {
+        if REQUESTED.swap(false, Ordering::AcqRel) {
+            ENABLED.store(false, Ordering::Relaxed);
+            self.measurement = GENERATION.fetch_add(1, Ordering::AcqRel) + 1;
+            // Reset only high-water marks; cumulative counters use a fresh baseline.
+            for (i, name) in NAMES.iter().enumerate() {
+                if name.ends_with("_max_us") { COUNTERS[i].store(0, Ordering::Relaxed); }
+            }
+            self.previous = std::array::from_fn(|i| COUNTERS[i].load(Ordering::Relaxed));
+            self.previous_up = up;
+            self.previous_down = down;
+            self.sequence = 0;
+            self.sampled_at = Some(now);
+            self.deadline = Some(now + MEASUREMENT_DURATION);
+            ENABLED.store(true, Ordering::Relaxed);
+            crate::log_error!("[ДИАГНОСТИКА] Замер передачи #{} включён на 120 с", self.measurement);
+            return;
+        }
+        let elapsed = now.saturating_duration_since(*self.sampled_at.get_or_insert(now));
+        let finished = self.deadline.is_some_and(|deadline| now >= deadline);
+        if elapsed >= PERIOD || finished {
+            self.emit(elapsed, up, down, active);
+            self.sampled_at = Some(now);
+        }
+        if finished {
+            ENABLED.store(false, Ordering::Relaxed);
+            self.deadline = None;
+            crate::log_error!("[ДИАГНОСТИКА] Замер передачи #{} завершён (120 с)", self.measurement);
+        }
+    }
+
     pub fn emit(&mut self, elapsed: Duration, up: i64, down: i64, active: i32) {
         if !ENABLED.load(Ordering::Relaxed) {
             return;
