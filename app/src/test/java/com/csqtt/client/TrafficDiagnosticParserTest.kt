@@ -6,6 +6,15 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class TrafficDiagnosticParserTest {
+    @Test fun repeatedMeasurementsRemainDistinctAndLegacyReportsStillParse() {
+        val legacy = requireNotNull(parse(payload()))
+        val first = requireNotNull(parse(payload().put("measurement_id", 1)))
+        val second = requireNotNull(parse(payload().put("measurement_id", 2)))
+        assertTrue(legacy.message.contains("за подключение"))
+        assertTrue(first.message.contains("замер #1"))
+        assertTrue(first.message.contains("за замер"))
+        assertNotEquals(first.key, second.key)
+    }
     private fun payload(): JSONObject {
         val names = "dispatch_bytes no_worker_drops wrap_drops fragment_pool_drops udp_socket_bytes udp_socket_packets udp_send_drops udp_closing_drops udp_would_block udp_wait_us udp_wait_max_us turn_enqueue_errors turn_queue_full turn_queue_wait_us turn_queue_wait_max_us turn_closing_drops relay_bytes relay_packets relay_queue_drops relay_pool_drops auth_drops replay_drops non_rtp_drops non_ip_drops downlink_queue_drops tun_write_drops tun_would_block tun_transient_errors"
         val counters = JSONObject()
