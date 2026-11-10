@@ -95,15 +95,18 @@ pub fn add(metric: Metric, value: u64) {
 }
 
 /// Only constructed on a slow path; no per-packet clock reads on the fast path.
-pub struct WaitTimer(Option<Instant>, Metric, Metric);
+pub struct WaitTimer(Option<(Instant, u64)>, Metric, Metric);
 impl WaitTimer {
     pub fn new(sum: Metric, max: Metric) -> Self {
-        Self(ENABLED.load(Ordering::Relaxed).then(Instant::now), sum, max)
+        Self(ENABLED.load(Ordering::Relaxed).then(|| (Instant::now(), GENERATION.load(Ordering::Acquire))), sum, max)
     }
 }
 impl Drop for WaitTimer {
     fn drop(&mut self) {
-        if let Some(started) = self.0 {
+        if let Some((started, generation)) = self.0 {
+            if !ENABLED.load(Ordering::Relaxed) || GENERATION.load(Ordering::Acquire) != generation {
+                return;
+            }
             let us = started.elapsed().as_micros().min(u64::MAX as u128) as u64;
             COUNTERS[self.1 as usize].fetch_add(us, Ordering::Relaxed);
             COUNTERS[self.2 as usize].fetch_max(us, Ordering::Relaxed);
