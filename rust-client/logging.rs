@@ -472,10 +472,11 @@ fn writer_loop<Out: Write, Err: Write>(
             && !shared.shutdown.load(Ordering::Acquire)
             && shared.protocol.is_empty()
             && shared.diagnostic.is_empty()
+            && !(shared.idle() && shared.flush_requested.load(Ordering::Acquire) > shared.flush_completed.load(Ordering::Acquire))
         {
-            let _ = shared
+            let _guard = shared
                 .wake
-                .wait_timeout(guard, Duration::from_millis(100))
+                .wait(guard)
                 .unwrap_or_else(|poisoned| poisoned.into_inner());
         }
     }
@@ -855,4 +856,19 @@ mod tests {
         assert!(lines[0].1.len() <= MAX_LINE_BYTES);
         assert!(std::str::from_utf8(lines[0].1.as_bytes()).is_ok());
     }
+    #[test]
+    fn idle_writer_wakes_for_flush_and_new_records() {
+        let records = Records::new();
+        let logger = Logger::with_writers(
+            RecordingWriter::new(0, records.clone()),
+            RecordingWriter::new(1, records.clone()), 8, 8);
+        for i in 0..100 {
+            assert!(logger.flush(Duration::from_secs(2)));
+            logger.enqueue_protocol(format_args!("record-{i}"));
+            assert!(logger.flush(Duration::from_secs(2)));
+        }
+        assert!(logger.shutdown(Duration::from_secs(2)));
+        assert_eq!(records.snapshot().len(), 100);
+    }
+
 }
