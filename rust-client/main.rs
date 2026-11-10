@@ -864,6 +864,7 @@ fn start_control_input(
                 crate::log_error!("[STDIN] {}", loggable_stdin_line(line));
             }
             match line {
+                "TRAFFIC_DIAGNOSTICS" => crate::traffic_diagnostics::request_measurement(),
                 "PAUSE" => paused.set_paused(true),
                 "RESUME" => paused.set_paused(false),
                 "FINISH_VK_CALLS" => finish_js_calls.store(true, Ordering::Release),
