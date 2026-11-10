@@ -22,7 +22,7 @@ class TunnelPendingLogTest {
             TunnelManager.setUiForeground(true)
             runCurrent()
             assertEquals(12, TunnelManager.logs.single { it.key == "background_test" }.count)
-            advanceTimeBy(121)
+            advanceTimeBy(1001)
             runCurrent()
             assertEquals(12, TunnelManager.logs.single { it.key == "background_test" }.count)
         } finally {
@@ -44,7 +44,7 @@ class TunnelPendingLogTest {
             runCurrent()
             TunnelManager.clearLogs()
             runCurrent()
-            advanceTimeBy(121)
+            advanceTimeBy(1001)
             runCurrent()
             assertFalse(TunnelManager.logs.any { it.key == "clear_test" })
         } finally {
@@ -95,7 +95,7 @@ class TunnelPendingLogTest {
             assertTrue(sessions.last().exportMessage.contains("#102"))
             // A later flush in the same session still aggregates only that session.
             enqueue.invoke(TunnelManager, nextIdentity, "tail_test", "New connection again", 99, false, LogLevel.LOG)
-            advanceTimeBy(121)
+            advanceTimeBy(1001)
             runCurrent()
             assertEquals(listOf(1, 3), TunnelManager.logs.filter { it.key == "tail_test" }.map { it.count })
         } finally {
