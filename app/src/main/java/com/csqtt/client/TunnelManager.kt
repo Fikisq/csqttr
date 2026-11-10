@@ -1204,7 +1204,7 @@ object TunnelManager {
         pb.environment()["TMPDIR"] = context.cacheDir.absolutePath
         pb.environment()[CsqttConstants.Tunnel.PROCESS_ENV_EVENTS] = "1"
         pb.environment()["RAYON_NUM_THREADS"] = "2"
-        pb.environment()["CSQTT_TRAFFIC_DIAGNOSTICS"] = if (isLoggingEnabled) "1" else "0"
+        pb.environment()["CSQTT_TRAFFIC_DIAGNOSTICS"] = "0" // Enabled only by an explicit timed measurement.
         if (params.connectionPassword.isNotEmpty()) {
             pb.environment()["CSQTT_PASSWORD"] = params.connectionPassword
         }
