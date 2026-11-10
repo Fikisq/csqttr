@@ -49,6 +49,7 @@ buffers { size_kb: 16384 fill_policy: RING_BUFFER }
 duration_ms: $($Seconds*1000)
 write_into_file: true
 file_write_period_ms: 5000
+flush_period_ms: 5000
 max_file_size_bytes: 67108864
 data_sources { config {
  name: "linux.process_stats"
@@ -103,4 +104,5 @@ try {
   Device @('shell','rm','-f',$remoteConfig,$remoteTrace) | Out-Null
  }
 }
+
 
