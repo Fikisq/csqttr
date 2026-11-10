@@ -241,16 +241,25 @@ object TunnelManager {
         uptimeSeconds.value = 0L
         uptimeJob?.cancel()
         uptimeJob = scope.launch(Dispatchers.Default) {
-            while (isActive) {
-                val start = processStartedAtMs
-                val isProcessActive = running.value || process != null
-                if (start > 0L && isProcessActive) {
-                    uptimeSeconds.value = (SystemClock.elapsedRealtime() - start) / 1000L
-                    trafficTracker.expire(SystemClock.elapsedRealtime())
-                } else if (!isProcessActive && !starting.value) {
-                    break
+            val displayJob = launch {
+                publishObservedUptime(uptimeSeconds) {
+                    processStartedAtMs.takeIf { it > 0L }?.let {
+                        (SystemClock.elapsedRealtime() - it) / 1000L
+                    }
                 }
-                delay(1000L)
+            }
+            try {
+                while (isActive) {
+                    val isProcessActive = running.value || process != null
+                    if (processStartedAtMs > 0L && isProcessActive) {
+                        trafficTracker.expire(SystemClock.elapsedRealtime())
+                    } else if (!isProcessActive && !starting.value) {
+                        break
+                    }
+                    delay(1000L)
+                }
+            } finally {
+                displayJob.cancel()
             }
         }
     }
