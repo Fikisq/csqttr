@@ -213,6 +213,13 @@ object TunnelManager {
     val lastTunnelDiagnostic = MutableStateFlow("")
     val uptimeSeconds = MutableStateFlow<Long?>(null)
     private var uptimeJob: Job? = null
+
+    fun startTrafficMeasurement() {
+        val identity = processIdentity ?: return
+        activeScope.launch(Dispatchers.IO) {
+            writeProcessCommand(identity, "TRAFFIC_DIAGNOSTICS", "traffic_measurement_error")
+        }
+    }
     
     private val pausedForNoNetwork = NetworkPauseGate()
 
