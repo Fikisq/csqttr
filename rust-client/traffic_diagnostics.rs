@@ -208,6 +208,44 @@ impl Reporter {
 mod tests {
     use super::*;
     #[test]
+    fn timed_measurement_stops_and_restarts_without_previous_traffic() {
+        ENABLED.store(false, Ordering::Relaxed);
+        REQUESTED.store(false, Ordering::Relaxed);
+        let now = Instant::now();
+        let mut r = Reporter::default();
+        add(Metric::DispatchBytes, 500);
+        request_measurement();
+        r.tick(now, 10_000, 20_000, 70);
+        assert!(ENABLED.load(Ordering::Relaxed));
+        assert_eq!(r.previous_up, 10_000);
+        assert_eq!(r.sequence, 0);
+        let first_id = r.measurement;
+        let old_wait = WaitTimer::new(Metric::UdpWaitUs, Metric::UdpWaitMaxUs);
+        add(Metric::DispatchBytes, 120);
+        r.tick(now + PERIOD, 10_120, 20_300, 70);
+        assert_eq!(r.sequence, 1);
+        r.tick(now + MEASUREMENT_DURATION, 10_120, 20_300, 70);
+        assert!(!ENABLED.load(Ordering::Relaxed));
+        let stopped = COUNTERS[Metric::DispatchBytes as usize].load(Ordering::Relaxed);
+        add(Metric::DispatchBytes, 999);
+        assert_eq!(COUNTERS[Metric::DispatchBytes as usize].load(Ordering::Relaxed), stopped);
+        request_measurement();
+        r.tick(now + Duration::from_secs(130), 99_000, 88_000, 70);
+        assert!(r.measurement > first_id);
+        assert_eq!(r.sequence, 0);
+        assert_eq!(r.previous_up, 99_000);
+        let waits = COUNTERS[Metric::UdpWaitUs as usize].load(Ordering::Relaxed);
+        drop(old_wait);
+        assert_eq!(COUNTERS[Metric::UdpWaitUs as usize].load(Ordering::Relaxed), waits);
+        add(Metric::DispatchBytes, 10);
+        r.tick(now + Duration::from_secs(135), 99_010, 88_020, 70);
+        assert_eq!(r.sequence, 1);
+        r.tick(now + Duration::from_secs(250), 99_010, 88_020, 70);
+        assert!(!ENABLED.load(Ordering::Relaxed));
+        assert!(r.deadline.is_none());
+    }
+
+    #[test]
     fn windows_use_deltas_real_elapsed_and_do_not_call_backpressure_loss() {
         let mut r = Reporter::default();
         let mut c = [0; N];
