@@ -9,6 +9,7 @@ param(
  [ValidatePattern('^[a-zA-Z0-9_.]+$')][string]$Package='csqtt.quic.amurcanov.happdebug',
  [string]$Adb='E:/csqtt-deps/android-sdk/platform-tools/adb.exe',
  [string]$OutputRoot=(Join-Path $PSScriptRoot '../../.local/energy'),
+ [switch]$PowerRails,
  [switch]$Smoke
 )
 $ErrorActionPreference='Stop'
@@ -68,14 +69,14 @@ data_sources { config {
   battery_counters: BATTERY_COUNTER_CAPACITY_PERCENT
   battery_counters: BATTERY_COUNTER_CURRENT
   battery_counters: BATTERY_COUNTER_VOLTAGE
-  collect_power_rails: true
+  collect_power_rails: $($PowerRails.IsPresent.ToString().ToLowerInvariant())
  }
 } }
 "@
 [IO.File]::WriteAllText((Join-Path $out 'config.pbtxt'),$config,[Text.UTF8Encoding]::new($false))
 $packageInfo=Device @('shell','dumpsys','package',$Package)
 $appVersion=[regex]::Match($packageInfo,'versionName=([^\r\n]+)').Groups[1].Value
-$manifest=[ordered]@{label=$Label;package=$Package;appVersion=$appVersion;requestedSeconds=$Seconds;warmupSeconds=$WarmupSeconds;smoke=[bool]$Smoke;emulator=$isEmulator;perfetto=$version;brightness=(Device @('shell','settings','get','system','screen_brightness')).Trim();autoBrightness=(Device @('shell','settings','get','system','screen_brightness_mode')).Trim();status='preparing';before=$null;after=$null;workload='Externally prepared; recorder does not assert identical video content or network bytes.'}
+$manifest=[ordered]@{label=$Label;package=$Package;appVersion=$appVersion;requestedSeconds=$Seconds;warmupSeconds=$WarmupSeconds;smoke=[bool]$Smoke;powerRails=[bool]$PowerRails;emulator=$isEmulator;perfetto=$version;brightness=(Device @('shell','settings','get','system','screen_brightness')).Trim();autoBrightness=(Device @('shell','settings','get','system','screen_brightness_mode')).Trim();status='preparing';before=$null;after=$null;workload='Externally prepared; recorder does not assert identical video content or network bytes.'}
 $manifest | ConvertTo-Json -Depth 6 | Set-Content (Join-Path $out 'manifest.json') -Encoding utf8
 try {
 
@@ -104,5 +105,6 @@ try {
   Device @('shell','rm','-f',$remoteConfig,$remoteTrace) | Out-Null
  }
 }
+
 
 
