@@ -179,7 +179,7 @@ impl Reporter {
         self.sequence += 1;
         let mut counters = serde_json::Map::new();
         for (i, name) in NAMES.iter().enumerate() {
-            // Maxima are lifetime high water marks; all other fields are window deltas.
+            // Maxima cover the measurement; all other fields are window deltas.
             let value = if name.ends_with("_max_us") {
                 current[i]
             } else {
@@ -188,6 +188,7 @@ impl Reporter {
             counters.insert((*name).into(), value.into());
         }
         let payload = serde_json::json!({
+            "measurement_id": self.measurement,
             "sequence": self.sequence,
             "time_ms": SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis() as u64,
             "elapsed_ms": elapsed.as_millis().max(1) as u64,
