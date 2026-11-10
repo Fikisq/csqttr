@@ -77,11 +77,12 @@ $appVersion=[regex]::Match($packageInfo,'versionName=([^\r\n]+)').Groups[1].Valu
 $manifest=[ordered]@{label=$Label;package=$Package;appVersion=$appVersion;requestedSeconds=$Seconds;warmupSeconds=$WarmupSeconds;smoke=[bool]$Smoke;emulator=$isEmulator;perfetto=$version;brightness=(Device @('shell','settings','get','system','screen_brightness')).Trim();autoBrightness=(Device @('shell','settings','get','system','screen_brightness_mode')).Trim();status='preparing';before=$null;after=$null;workload='Externally prepared; recorder does not assert identical video content or network bytes.'}
 $manifest | ConvertTo-Json -Depth 6 | Set-Content (Join-Path $out 'manifest.json') -Encoding utf8
 try {
- Device @('push',(Join-Path $out 'config.pbtxt'),$remoteConfig) | Out-Null
+
  for($left=$WarmupSeconds;$left -gt 0;$left-=5){Write-Output "Warm-up: $left s";Start-Sleep -Seconds ([math]::Min(5,$left))}
  $manifest.before=Battery
  if(!$Smoke -and $manifest.before.powered){throw 'Charging started during warm-up'}
- Device @('shell','perfetto','--background-wait','--txt','-c',$remoteConfig,'-o',$remoteTrace) | Out-Null
+ $startResult=$config | & $Adb -s $Serial shell perfetto --background-wait --txt -c - -o $remoteTrace 2>&1
+ if($LASTEXITCODE -ne 0){throw "Perfetto start failed: $($startResult -join ' ')"}
  $manifest.status='recording'
  $manifest | ConvertTo-Json -Depth 6 | Set-Content (Join-Path $out 'manifest.json') -Encoding utf8
  # The phone records autonomously. No ADB polling or screen interaction during this window.
@@ -102,3 +103,4 @@ try {
   Device @('shell','rm','-f',$remoteConfig,$remoteTrace) | Out-Null
  }
 }
+
