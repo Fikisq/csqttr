@@ -38,7 +38,7 @@ use tokio::{
 const CONTROL_MAX: usize = 2048;
 const MAGIC_COOKIE: [u8; 4] = [0x21, 0x12, 0xa4, 0x42];
 const UDP_RECEIVE_BUFFER_BYTES: usize = 32 * 1024;
-const UDP_SEND_BUFFER_BYTES: usize = 32 * 1024;
+const UDP_SEND_BUFFER_BYTES: usize = 16 * 1024;
 const _: () = assert!(UDP_RECEIVE_BUFFER_BYTES + UDP_SEND_BUFFER_BYTES <= 512 * 1024);
 const INCOMING_QUEUE_CAPACITY: usize = 16;
 const CONTROL_TIMEOUT: Duration = Duration::from_secs(12);
@@ -1693,7 +1693,7 @@ mod tests {
     #[test]
     fn turn_socket_buffer_budget_is_bounded_per_worker() {
         assert_eq!(UDP_RECEIVE_BUFFER_BYTES, 32 * 1024);
-        assert_eq!(UDP_SEND_BUFFER_BYTES, 32 * 1024);
+        assert_eq!(UDP_SEND_BUFFER_BYTES, 16 * 1024);
         assert_eq!(INCOMING_QUEUE_CAPACITY, 16);
     }
 
