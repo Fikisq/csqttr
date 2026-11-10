@@ -22,7 +22,7 @@ class TunnelPendingLogTest {
             TunnelManager.setUiForeground(true)
             runCurrent()
             assertEquals(12, TunnelManager.logs.single { it.key == "background_test" }.count)
-            advanceTimeBy(1001)
+            advanceTimeBy(121)
             runCurrent()
             assertEquals(12, TunnelManager.logs.single { it.key == "background_test" }.count)
         } finally {
