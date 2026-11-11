@@ -374,16 +374,16 @@ fun ExceptionsTab(
         val loadedApps = withContext(Dispatchers.IO) {
             val packageManager = context.packageManager
             packageManager
-                .getInstalledApplications(PackageManager.GET_META_DATA)
+                .getInstalledApplications(0)
                 .asSequence()
                 .filter { app ->
                     app.packageName != context.packageName
                 }
                 .map { app ->
                     AppItem(
-                        name = app.loadLabel(packageManager).toString(),
+                        name = runCatching { app.loadLabel(packageManager).toString() }.getOrDefault(app.packageName),
                         packageName = app.packageName,
-                        icon = runCatching { app.loadIcon(packageManager).toBitmap().asImageBitmap() }.getOrNull(),
+                        icon = null, // As in 59.9, visible rows load their icons without delaying the whole list.
                         isSystem = (app.flags and android.content.pm.ApplicationInfo.FLAG_SYSTEM) != 0,
                     )
                 }

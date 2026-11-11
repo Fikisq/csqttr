@@ -17,6 +17,13 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.produceState
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.core.graphics.drawable.toBitmap
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -39,6 +46,8 @@ internal data class AppItem(
     val isSystem: Boolean,
 )
 
+private val routingIconCache = android.util.LruCache<String, ImageBitmap>(96)
+
 @Composable
 internal fun AppRow(
     app: AppItem,
@@ -46,6 +55,19 @@ internal fun AppRow(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val appContext = LocalContext.current.applicationContext
+    val icon by produceState(initialValue = app.icon ?: routingIconCache.get(app.packageName), key1 = app.packageName) {
+        if (value == null) {
+            val loaded = withContext(Dispatchers.IO) {
+                runCatching {
+                    appContext.packageManager.getApplicationIcon(app.packageName)
+                        .toBitmap(width = 96, height = 96).asImageBitmap()
+                }.getOrNull()
+            }
+            loaded?.let { routingIconCache.put(app.packageName, it) }
+            value = loaded
+        }
+    }
     val colors = MaterialTheme.colorScheme
     val isDark = colors.background.luminance() < 0.22f
 
@@ -80,9 +102,9 @@ internal fun AppRow(
             horizontalArrangement = Arrangement.spacedBy(CsqttSpacing.Md),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            if (app.icon != null) {
+            if (icon != null) {
                 Image(
-                    bitmap = app.icon,
+                    bitmap = icon!!,
                     contentDescription = null,
                     modifier = Modifier.size(42.dp).clip(CsqttShapes.Small),
                 )
