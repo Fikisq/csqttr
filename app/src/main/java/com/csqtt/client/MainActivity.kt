@@ -522,7 +522,6 @@ fun MainScreen(
                             .fillMaxSize()
                             .padding(bottom = navOverlayReserve),
                     ) {
-                        key(selectedTab) {
                             val tab = selectedTab
                             val tabStateKey: Any = when (tab) {
                                 0 -> "connection:${tunnelAuthSettings.profile}"
@@ -575,7 +574,6 @@ fun MainScreen(
                                 else -> Spacer(modifier = Modifier.fillMaxSize())
                                 }
                             }
-                        }
                     }
 
                     if (!imeVisible) ProxyNavigationBar(
