@@ -51,6 +51,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalView
@@ -739,7 +740,9 @@ private fun NavigationIndicator(
         shape = shape,
         color = color,
         modifier = Modifier
-            .offset(x = trackPadding + itemWidth * visualIndex.value)
+            .graphicsLayer {
+                translationX = (trackPadding + itemWidth * visualIndex.value).toPx()
+            }
             .padding(vertical = 7.dp)
             .width(itemWidth)
             .fillMaxHeight(),
@@ -758,7 +761,9 @@ private fun RowScope.NavigationItem(
     tunnelRunning: Boolean,
     onTabSelected: (Int) -> Unit,
 ) {
-    val emphasis = (1f - abs(index - visualIndex.value)).coerceIn(0f, 1f)
+    val emphasis by remember(index, visualIndex) {
+        derivedStateOf { (1f - abs(index - visualIndex.value)).coerceIn(0f, 1f) }
+    }
     val iconColor = lerp(unselectedColor, selectedColor, emphasis)
     val label = stringResource(item.labelRes)
     val colors = MaterialTheme.colorScheme
