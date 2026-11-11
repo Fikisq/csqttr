@@ -1803,10 +1803,16 @@ object TunnelManager {
         panelRestartPending.set(false)
         transportRestartPending.set(false)
         activeContext()?.let { ctx ->
-            val stopIntent = Intent(ctx, TunVpnService::class.java).apply { action = "STOP" }
-            try { ctx.startService(stopIntent) } catch (_: Exception) {}
-            val stopTunnelIntent = Intent(ctx, TunnelService::class.java).apply { action = "STOP" }
-            try { ctx.startService(stopTunnelIntent) } catch (_: Exception) {}
+            dispatchTunnelStop(preserveWifiAutoPause,
+                stopVpn = {
+                    val stopIntent = Intent(ctx, TunVpnService::class.java).apply { action = "STOP" }
+                    try { ctx.startService(stopIntent) } catch (_: Exception) {}
+                },
+                stopController = {
+                    val stopIntent = Intent(ctx, TunnelService::class.java).apply { action = "STOP" }
+                    try { ctx.startService(stopIntent) } catch (_: Exception) {}
+                },
+            )
         }
         terminateProcessLocked(identity, finishVkCalls)
         running.value = false

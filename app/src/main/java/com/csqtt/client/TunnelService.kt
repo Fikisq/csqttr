@@ -680,7 +680,7 @@ class TunnelService : Service() {
     private fun startTunnel(params: TunnelParams) {
         if (isStopping || !serviceJob.isActive) return
         autoPauseRequested = true
-        if (autoPauseOnWifiEnabled && hasPhysicalWifiNetwork()) {
+        if (autoPauseOnWifiEnabled && wifiConnectedForAutoPause()) {
             serviceScope.launch { reconcileWifiAutoPause() }
             return
         }
@@ -1026,8 +1026,8 @@ class TunnelService : Service() {
     private fun observeAutoPauseOnWifi() {
         autoPauseSettingsJob?.cancel()
         autoPauseSettingsJob = serviceScope.launch {
-            SettingsStore(applicationContext).autoPauseOnWifi.collect { enabled ->
-                autoPauseOnWifiEnabled = enabled
+            Native250RuntimeSettings(applicationContext).changes.collect { settings ->
+                autoPauseOnWifiEnabled = settings.flag("wifi.enabled")
                 reconcileWifiAutoPause()
             }
         }
@@ -1068,7 +1068,8 @@ class TunnelService : Service() {
         }
     }
 
-    private suspend fun reconcileWifiAutoPause(): Boolean = autoPauseMutex.withLock {
+    private suspend fun reconcileWifiAutoPause(): Boolean = runWifiAutoPauseTransition(serviceScope) {
+      autoPauseMutex.withLock {
         if (isStopping) return@withLock autoPausedForWifi
         when (
             wifiAutoPauseAction(
@@ -1083,10 +1084,11 @@ class TunnelService : Service() {
             WifiAutoPauseAction.NONE -> Unit
         }
         autoPausedForWifi
+      }
     }
 
     private suspend fun enterWifiAutoPause() {
-        if (!autoPauseRequested || !autoPauseOnWifiEnabled || !hasPhysicalWifiNetwork()) return
+        if (!autoPauseRequested || !autoPauseOnWifiEnabled || !wifiConnectedForAutoPause()) return
         autoPausedForWifi = true
         updateJob?.cancel()
         updateJob = null
@@ -1102,8 +1104,11 @@ class TunnelService : Service() {
             vkProbeJobs.clear()
         }
         CaptchaWebViewManager.onTunnelStop()
-        SettingsStore(applicationContext).saveTunnelWasRunning(true)
-        TunnelManager.pauseForWifi()
+        if (!completeWifiAutoPause(
+            isRequested = { autoPauseRequested && !isStopping },
+            saveRunningIntent = { SettingsStore(applicationContext).saveTunnelWasRunning(true) },
+            pauseDataPlane = { TunnelManager.pauseForWifi() },
+        )) return
         releaseWakeLock()
         releaseWifiLock()
         updateNotification("Ожидание. Автопауза при Wi-Fi")
@@ -1168,10 +1173,12 @@ class TunnelService : Service() {
     }
 
     private fun wifiConnectedForAutoPause(): Boolean {
-        return effectiveWifiAutoPauseConnection(
-            paused = autoPausedForWifi,
+        val connected = effectiveWifiAutoPauseConnection(
             callbackWifiConnected = hasPhysicalWifiNetwork(),
             defaultPhysicalWifiConnected = defaultPhysicalWifiNetwork(),
+        )
+        return native250ShouldPauseForWifi(
+            Native250RuntimeSettings(applicationContext).snapshot(), connected, currentWifiSsid(applicationContext),
         )
     }
 

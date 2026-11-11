@@ -670,9 +670,7 @@ class SettingsStore(
     val tcpTransportRiskAcknowledged: Flow<Boolean> = dataStore.data.map { prefs ->
         prefs[TCP_TRANSPORT_RISK_ACKNOWLEDGED] ?: false
     }
-    val autoPauseOnWifi: Flow<Boolean> = dataStore.data.map { prefs ->
-        prefs[AUTO_PAUSE_ON_WIFI] ?: false
-    }
+    val autoPauseOnWifi: Flow<Boolean> = runtimeValues.map { it.flag("wifi.enabled") }
     suspend fun isBatteryOptimizationPromptHandled(): Boolean =
         dataStore.data.first()[BATTERY_OPTIMIZATION_PROMPT_HANDLED] ?: false
 
