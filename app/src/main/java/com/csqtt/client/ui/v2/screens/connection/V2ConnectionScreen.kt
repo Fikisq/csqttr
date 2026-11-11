@@ -85,6 +85,9 @@ import com.csqtt.client.ui.v2.components.V2FlowerButton
 import com.csqtt.client.ui.v2.components.V2TopBar
 import com.csqtt.client.ui.v2.design.V2DisplayFamily
 import com.csqtt.client.ui.v2.design.V2Shapes
+import com.csqtt.client.ui.v2.components.LocalV2AdaptiveMetrics
+import com.csqtt.client.ui.v2.components.V2AdaptiveScreen
+import com.csqtt.client.ui.v2.design.V2TextSizes
 import com.csqtt.client.ui.v2.design.V2Sizes
 import com.csqtt.client.ui.v2.design.V2Spacing
 import com.csqtt.client.ui.v2.design.V2Theme
@@ -371,23 +374,34 @@ fun V2ConnectionScreen(
         (tunnelRunning || isStarting || autoPausedForWifi || !cooldownActive || !configurationValid)
     val activeVisual = tunnelRunning || isStarting || autoPausedForWifi || tunnelStopping
 
-    Column(modifier.fillMaxSize().padding(horizontal = 16.dp)) {
+    val darkSurface = colors.background.luminance() < 0.5f
+    val powerInk = when {
+        isStarting || tunnelStopping || autoPausedForWifi || profileChecking -> colors.warning
+        tunnelRunning -> colors.success
+        darkSurface -> androidx.compose.ui.graphics.Color(0xFF78ADF5)
+        else -> colors.accent
+    }
+    val powerOutline = if (!activeVisual && !profileChecking && darkSurface)
+        androidx.compose.ui.graphics.Color(0xFF3567AA) else powerInk
+
+    V2AdaptiveScreen(modifier.fillMaxSize().padding(horizontal = V2Sizes.ScreenPadding)) {
+        val layout = LocalV2AdaptiveMetrics.current
         V2TopBar(version = version, onSettings = onSettings, actions = {
             V2CircleIconButton(iconPainter = painterResource(R.drawable.ic_v2_plus), contentDescription = "Добавить профиль", onClick = { showAddChoiceDialog = true })
         })
-        Column(Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 20.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        Column(Modifier.fillMaxWidth().padding(top = layout.gap, bottom = layout.gap * 2), horizontalAlignment = Alignment.CenterHorizontally) {
             androidx.compose.material3.Surface(shape = androidx.compose.foundation.shape.CircleShape,
-                color = colors.accentSoft, modifier = Modifier.size(204.dp)) {
+                color = powerOutline.copy(alpha = 0.07f), modifier = Modifier.size(layout.powerSize)) {
                 Box(contentAlignment = Alignment.Center) {
             androidx.compose.material3.Surface(onClick = { toggleTunnel() }, enabled = canToggle, shape = androidx.compose.foundation.shape.CircleShape,
-                color = if(activeVisual) colors.accent else colors.flower,
-                border = androidx.compose.foundation.BorderStroke(2.dp, colors.accent.copy(alpha = 0.65f)), modifier = Modifier.size(172.dp)) {
+                color = colors.surface,
+                border = androidx.compose.foundation.BorderStroke(2.dp, powerOutline), modifier = Modifier.size(layout.powerSize - 14.dp)) {
                 Column(verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
-                    val buttonText = colors.onAccent
-                    Icon(androidx.compose.material.icons.Icons.Outlined.PowerSettingsNew, if(activeVisual) "Отключить" else "Подключить", tint = buttonText, modifier = Modifier.size(56.dp))
+                    val buttonText = powerInk
+                    Icon(androidx.compose.material.icons.Icons.Outlined.PowerSettingsNew, if(activeVisual) "Отключить" else "Подключить", tint = buttonText, modifier = Modifier.size((layout.powerSize / 4).coerceIn(28.dp, 56.dp)))
                     Text(when { profileChecking -> "Проверка…"; tunnelStopping -> "Остановка…"; isStarting -> "Подключение…"; autoPausedForWifi -> "Пауза Wi-Fi"; tunnelRunning -> "Подключено"; else -> "Отключено" },
-                        fontSize = 13.sp, color = buttonText, modifier = Modifier.padding(top = 10.dp))
-                    if(tunnelRunning) Text(formatTunnelUptime(uptimeSeconds), fontSize = 13.sp, color = buttonText, modifier = Modifier.padding(top = 4.dp))
+                        fontSize = V2TextSizes.Action, color = buttonText, modifier = Modifier.padding(top = 10.dp))
+                    if(tunnelRunning) Text(formatTunnelUptime(uptimeSeconds), fontSize = V2TextSizes.Secondary, color = buttonText, modifier = Modifier.padding(top = 4.dp))
                 }
             }
                 }
@@ -639,8 +653,8 @@ private fun V2ProfileCard(
                 text = displayName,
                 style = MaterialTheme.typography.titleMedium.copy(
                     fontFamily = V2DisplayFamily,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Normal,
+                    fontSize = V2TextSizes.Body,
                     letterSpacing = 0.5.sp,
                 ),
                 color = colors.textPrimary,
