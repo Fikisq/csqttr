@@ -21,6 +21,16 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.TextButton
+import androidx.compose.ui.platform.testTag
+import com.csqtt.client.ui.v2.components.V2AdaptiveScreen
+import com.csqtt.client.ui.v2.components.V2AdaptiveForm
+import com.csqtt.client.ui.v2.components.LocalV2AdaptiveMetrics
+import com.csqtt.client.ui.v2.design.V2TextSizes
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -205,6 +215,8 @@ internal fun V2DeployScreen(
 
     if (!savedSettings.isLoaded) return
     val isDeploying by DeployManager.isDeploying.collectAsStateWithLifecycle()
+    val deployProgress by DeployManager.deployProgress.collectAsStateWithLifecycle()
+    val deployStep by DeployManager.currentStep.collectAsStateWithLifecycle()
     val deployServers by settingsStore.deployServers.collectAsStateWithLifecycle(initialValue = emptyList())
     val tunnelRunning by TunnelManager.running.collectAsStateWithLifecycle()
 
@@ -238,6 +250,7 @@ internal fun V2DeployScreen(
 
     var showConfigSheet by remember { mutableStateOf(false) }
     var showActionsMenu by rememberSaveable { mutableStateOf(false) }
+    var showRenameDialog by rememberSaveable(savedSettings.profile) { mutableStateOf(false) }
     var showServerMenu by remember { mutableStateOf(false) }
     var addingServer by remember { mutableStateOf(false) }
     var serverCardExpanded by rememberSaveable { mutableStateOf(true) }
@@ -1006,70 +1019,110 @@ internal fun V2DeployScreen(
         }
     }
 
-    Column(modifier.fillMaxSize().padding(horizontal = 16.dp)) {
+    V2AdaptiveScreen(modifier.fillMaxSize().padding(horizontal = V2Sizes.ScreenPadding), dense = true) {
+        val layout = LocalV2AdaptiveMetrics.current
         V2TopBar(version = version, title = "Деплой", onSettings = onSettings)
-        Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            V2Card(contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp), borderColor = colors.outline) {
+        V2AdaptiveForm(Modifier.weight(1f).fillMaxWidth(), fieldRows = 3, controlRows = 3,
+            extraHeight = 80.dp + if (isDeploying) 48.dp else if (actionsBusy) 32.dp else 0.dp) { form ->
+        val formLayout = LocalV2AdaptiveMetrics.current
+        val pill = RoundedCornerShape(50)
+        BoxWithConstraints(Modifier.fillMaxSize()) {
+        val progressSpace = if (isDeploying) 60.dp else if (actionsBusy) 44.dp else 0.dp
+        val cardMinimum = (maxHeight - form.profileHeight - 12.dp - progressSpace).coerceAtLeast(0.dp)
+        Column(Modifier.fillMaxWidth().imePadding().verticalScroll(rememberScrollState()).testTag("deploy-settings"), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            V2Card(contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp), shape = RoundedCornerShape(22.dp), color = colors.surface) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    androidx.compose.material3.TextButton(onClick = { showServerMenu = true }, enabled = !actionsBusy, modifier = Modifier.weight(1f)) { Text(serverTitle, maxLines = 1, overflow = TextOverflow.Ellipsis) }
-                    V2CircleIconButton(icon = Icons.Default.Edit, contentDescription = "Редактировать VPS", onClick = {
-                        if (!actionsBusy && host.isNotBlank()) { addingServer = false; showConfigSheet = true }
-                    })
-                    V2CircleIconButton(icon = Icons.Default.Delete, contentDescription = "Удалить VPS из приложения", onClick = { if(!actionsBusy && host.isNotBlank()) showDeleteAppServerDialog = true })
-                    V2CircleIconButton(icon = Icons.Default.Add, contentDescription = "Добавить VPS", onClick = { openAddServerSheet() })
-                    V2CircleIconButton(icon = Icons.Default.MoreVert, contentDescription = "Действия веб-панели", onClick = {
-                        if (!actionsBusy) showActionsMenu = true
-                    })
-                }
-            }
-            V2Card(contentPadding = PaddingValues(4.dp), borderColor = colors.outline) {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    HappField("IP сервера", host, { value -> val split = splitPastedHostPort(host, value); host = split?.first ?: value; if (split != null) sshPort = split.second }, Modifier.weight(1.65f), enabled = !actionsBusy)
-                    HappField("Порт SSH", sshPort, { sshPort = it.filter(Char::isDigit).take(5) }, Modifier.weight(1f), number = true, enabled = !actionsBusy)
-                }
-                Spacer(Modifier.height(4.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Bottom) {
-                    HappField("Логин SSH", sshLogin, { sshLogin = it }, Modifier.weight(1f), enabled = !actionsBusy)
-                    if(sshKeysMode) androidx.compose.material3.OutlinedButton(onClick = { showSshKeysDialog = true }, modifier = Modifier.weight(1f).height(54.dp), enabled = !actionsBusy) { Text(if(sshKeysFilled > 0) "Ключ задан" else "Ключ SSH", fontSize = 12.sp) }
-                    else HappField("Пароль SSH", sshPassword, { sshPassword = it }, Modifier.weight(1f), password = true, enabled = !actionsBusy)
-                }
-                HappChoice("Способ входа", if(sshKeysMode) "SSH-ключ" else "Пароль", listOf("Пароль", "SSH-ключ"), { sshKeysMode = it == "SSH-ключ" }, enabled = !actionsBusy,
-                    help = "Вход на VPS по паролю или приватному ключу SSH. Пароль ключа и сертификат OpenSSH задаются в окне ключей.")
-            }
-            V2Card(contentPadding = PaddingValues(4.dp), borderColor = colors.outline) {
-                Row(Modifier.fillMaxWidth().height(28.dp).clickable(enabled = !actionsBusy) { dockerInstall = !dockerInstall }, verticalAlignment = Alignment.CenterVertically) {
-                    Text("Установка в Docker", Modifier.weight(1f), fontSize = 14.sp)
-                    com.csqtt.client.ui.v2.components.V2Switch(dockerInstall, { dockerInstall = it }, enabled = !actionsBusy)
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    HappField("Порт PEER", peerPort, { peerPort = it.filter(Char::isDigit).take(5); manualPorts = true }, Modifier.weight(1f), number = true, enabled = !actionsBusy)
-                    HappField("Порт WEB", webPort, { webPort = it.filter(Char::isDigit).take(5); manualPorts = true }, Modifier.weight(1f), number = true, enabled = !actionsBusy)
-                }
-                Spacer(Modifier.height(4.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Bottom) {
-                    HappField("Пароль туннеля", mainPassDraft, { mainPassDraft = it }, Modifier.weight(1f), password = true, enabled = !actionsBusy)
-                    androidx.compose.material3.IconButton(onClick = { mainPassDraft = generate16CharPassword() }, enabled = !actionsBusy, modifier = Modifier.height(44.dp)) {
-                        Icon(Icons.Default.Refresh, contentDescription = "Сгенерировать пароль туннеля", tint = colors.accent)
+                    androidx.compose.material3.TextButton(onClick = { showServerMenu = true }, enabled = !actionsBusy,
+                        modifier = Modifier.weight(1f).height(form.profileHeight), contentPadding = PaddingValues(0.dp)) {
+                        Text(serverTitle, Modifier.weight(1f), color = colors.textPrimary, fontSize = V2TextSizes.Body, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Icon(Icons.Default.KeyboardArrowDown, null, Modifier.size(18.dp), tint = colors.textSecondary)
+                    }
+                    androidx.compose.material3.IconButton(onClick = { showRenameDialog = true }, enabled = !actionsBusy, modifier = Modifier.size(44.dp)) {
+                        Icon(Icons.Default.Edit, "Изменить название профиля", tint = colors.textPrimary, modifier = Modifier.size(20.dp))
+                    }
+                    androidx.compose.material3.IconButton(onClick = { showDeleteAppServerDialog = true }, enabled = !actionsBusy && host.isNotBlank(), modifier = Modifier.size(44.dp)) {
+                        Icon(Icons.Default.Delete, "Удалить VPS из приложения", tint = colors.danger, modifier = Modifier.size(20.dp))
+                    }
+                    androidx.compose.material3.IconButton(onClick = { openAddServerSheet() }, enabled = !actionsBusy, modifier = Modifier.size(44.dp)) {
+                        Icon(Icons.Default.Add, "Добавить VPS", tint = colors.textPrimary, modifier = Modifier.size(22.dp))
                     }
                 }
-                Spacer(Modifier.height(4.dp))
+            }
+            V2Card(modifier = Modifier.testTag("deploy-card"), shape = RoundedCornerShape(28.dp), contentPadding = PaddingValues(start = 14.dp, end = 14.dp, top = 12.dp, bottom = 8.dp), color = colors.surface,
+                contentModifier = Modifier.heightIn(min = cardMinimum), verticalArrangement = Arrangement.SpaceBetween) {
+                Column {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    HappField("Логин веб-панели", panelLoginDraft, { panelLoginDraft = it }, Modifier.weight(1f), enabled = !actionsBusy)
-                    HappField("Пароль веб-панели", panelPasswordDraft, { panelPasswordDraft = it }, Modifier.weight(1f), password = true, enabled = !actionsBusy)
+                    HappField("Адрес сервера", host, { value -> val split = splitPastedHostPort(host, value); host = split?.first ?: value; if (split != null) sshPort = split.second }, Modifier.weight(1f), enabled = !actionsBusy, compact = true, shape = pill, floatingLabel = true, maxFieldHeight = 44.dp)
+                    HappField("Порт SSH", sshPort, { sshPort = it.filter(Char::isDigit).take(5) }, Modifier.weight(1f), number = true, enabled = !actionsBusy, compact = true, shape = pill, floatingLabel = true, maxFieldHeight = 44.dp)
+                }
+                Spacer(Modifier.height(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    HappField("Порт туннеля", peerPort, { peerPort = it.filter(Char::isDigit).take(5); manualPorts = true }, Modifier.weight(1f), number = true, enabled = !actionsBusy, compact = true, shape = pill, floatingLabel = true, maxFieldHeight = 44.dp)
+                    HappField("Порт WEB", webPort, { webPort = it.filter(Char::isDigit).take(5); manualPorts = true }, Modifier.weight(1f), number = true, enabled = !actionsBusy, compact = true, shape = pill, floatingLabel = true, maxFieldHeight = 44.dp)
+                }
+                Spacer(Modifier.height(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Bottom) {
+                    HappField("Логин SSH", sshLogin, { sshLogin = it }, Modifier.weight(1f), enabled = !actionsBusy, compact = true, shape = pill, floatingLabel = true, maxFieldHeight = 44.dp)
+                    if (sshKeysMode) Column(Modifier.weight(1f)) {
+                        V2PillButton(if(sshKeysFilled > 0) "Изменить ключ" else "Настроить ключ",
+                            onClick = { showSshKeysDialog = true }, modifier = Modifier.fillMaxWidth(),
+                            enabled = !actionsBusy, style = V2PillStyle.Outline, height = maxOf(48.dp, formLayout.fieldHeight.coerceAtMost(44.dp) + 8.dp),
+                            horizontalPadding = 4.dp, shape = pill)
+                    }
+                    else HappField("Пароль SSH", sshPassword, { sshPassword = it }, Modifier.weight(1f), password = true, visibilityKey = savedSettings.profile, enabled = !actionsBusy, compact = true, shape = pill, floatingLabel = true, maxFieldHeight = 44.dp)
+                }
+                }
+                DeployFormToggle("Ключи SSH", sshKeysMode, { sshKeysMode = it }, enabled = !actionsBusy)
+                DeployFormToggle("Установить в Docker", dockerInstall, { dockerInstall = it }, enabled = !actionsBusy)
+                Row(Modifier.fillMaxWidth().heightIn(min = formLayout.rowHeight).clickable(enabled = !actionsBusy) { showSecretsDialog = true }, verticalAlignment = Alignment.CenterVertically) {
+                    Text("Авторизация", Modifier.weight(1f), fontSize = V2TextSizes.Body)
+                    Text("›", fontSize = 22.sp, color = colors.textSecondary)
+                }
+                Column {
+                Text("Секретный путь и ссылка панели", color = colors.textSecondary, fontSize = V2TextSizes.Secondary)
+                Surface(shape = pill, color = colors.field, border = androidx.compose.foundation.BorderStroke(1.dp, colors.outline), modifier = Modifier.fillMaxWidth().padding(top = 4.dp)) {
+                    Row(Modifier.heightIn(min = 58.dp).padding(start = 12.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text(panelDisplayUrl, Modifier.weight(1f).clickable(enabled = !actionsBusy) { showActionsMenu = true }.padding(vertical = 8.dp), color = colors.accent, fontSize = V2TextSizes.Body, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                        androidx.compose.material3.IconButton(onClick = {
+                            showRegenConfirmDialog = true
+                        }, enabled = !actionsBusy && host.isNotBlank() && sshAuthReady, modifier = Modifier.size(48.dp)) {
+                            Icon(Icons.Default.Refresh, "Изменить секретный путь", tint = colors.textSecondary, modifier = Modifier.size(26.dp))
+                        }
+                    }
+                }
                 }
             }
-            if(actionsBusy) Text(if(isInspecting) "Проверка VPS по SSH…" else "Операция выполняется · подробности в логах", color = colors.textSecondary, fontSize = 12.sp)
-        }
-        Column(Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                V2PillButton(if(serverDeployed) "Обновить" else "Установить", { scope.launch { persistServerDraft(); startDeploy(if(serverDeployed) DeployActionMode.Update else DeployActionMode.Install) } }, modifier = Modifier.weight(1f), enabled = !actionsBusy, height = 44.dp, fontSize = 12.sp)
-                V2PillButton("Переустановить", { showReinstallDialog = true }, modifier = Modifier.weight(1f), enabled = !actionsBusy, style = V2PillStyle.Outline, height = 44.dp, fontSize = 12.sp)
+            if (isDeploying) {
+                Column(Modifier.fillMaxWidth().testTag("deploy-progress"), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text(deployStep, Modifier.weight(1f), color = colors.textSecondary, fontSize = V2TextSizes.Secondary)
+                        Text("${(deployProgress.coerceIn(0f, 1f) * 100).toInt()} %", color = colors.accent, fontSize = V2TextSizes.Secondary)
+                    }
+                    LinearProgressIndicator(
+                        progress = { deployProgress.coerceIn(0f, 1f) },
+                        modifier = Modifier.fillMaxWidth().height(6.dp),
+                        color = colors.accent,
+                        trackColor = colors.outline,
+                        drawStopIndicator = {},
+                    )
+                }
+            } else if (actionsBusy) {
+                Text(if(isInspecting) "Проверка VPS по SSH…" else "Операция выполняется · подробности в логах", color = colors.textSecondary, fontSize = V2TextSizes.Secondary)
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                V2PillButton("Веб-панель", { openPanel() }, modifier = Modifier.weight(1f), enabled = !actionsBusy && host.isNotBlank(), style = V2PillStyle.Outline, height = 44.dp, fontSize = 12.sp)
-                V2PillButton("Удалить с сервера", { requestUninstall() }, modifier = Modifier.weight(1f), enabled = !actionsBusy && host.isNotBlank() && sshAuthReady, style = V2PillStyle.Danger, height = 44.dp, fontSize = 12.sp)
-            }
         }
+        }
+        }
+        Row(Modifier.fillMaxWidth().testTag("deploy-actions").padding(top = 6.dp, bottom = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            V2PillButton("Удалить", { requestUninstall() }, modifier = Modifier.weight(1f), enabled = !actionsBusy && host.isNotBlank() && sshAuthReady, style = V2PillStyle.Danger, height = layout.buttonHeight, fontSize = V2TextSizes.Action, shape = RoundedCornerShape(50))
+            V2PillButton(if (serverDeployed) "Обновить" else "Установить", { scope.launch { persistServerDraft(); startDeploy(if(serverDeployed) DeployActionMode.Update else DeployActionMode.Install) } }, modifier = Modifier.weight(1f), enabled = !actionsBusy, height = layout.buttonHeight, fontSize = V2TextSizes.Action, shape = RoundedCornerShape(50), maxLines = 2)
+        }
+    }
+    if (showRenameDialog) {
+        var name by remember { mutableStateOf(serverName) }
+        androidx.compose.material3.AlertDialog(containerColor = colors.surface, onDismissRequest = { showRenameDialog = false }, title = { Text("Название профиля") },
+            text = { HappField("Название", name, { name = it }, placeholder = "Например, Финляндия") },
+            confirmButton = { androidx.compose.material3.TextButton(onClick = { serverName = name.trim(); scope.launch { settingsStore.saveDeployServerName(name) }; showRenameDialog = false }, enabled = name.isNotBlank()) { Text("Сохранить") } },
+            dismissButton = { androidx.compose.material3.TextButton(onClick = { showRenameDialog = false }) { Text("Отмена") } })
     }
     if(showServerMenu) androidx.compose.material3.AlertDialog(onDismissRequest = { showServerMenu = false }, title = { Text("Серверы VPS") }, text = {
         Column(Modifier.verticalScroll(rememberScrollState())) {
@@ -1090,6 +1143,9 @@ internal fun V2DeployScreen(
     if (showActionsMenu) androidx.compose.material3.AlertDialog(
         onDismissRequest = { showActionsMenu = false }, title = { Text("Веб-панель") },
         text = { Column {
+            androidx.compose.material3.TextButton(onClick = { showActionsMenu = false; openPanel() }, enabled = host.isNotBlank()) { Text("Открыть веб-панель") }
+            androidx.compose.material3.TextButton(onClick = { showActionsMenu = false; addingServer = false; showConfigSheet = true }, enabled = host.isNotBlank()) { Text("Редактировать VPS") }
+            androidx.compose.material3.TextButton(onClick = { showActionsMenu = false; showReinstallDialog = true }) { Text("Переустановить") }
             androidx.compose.material3.TextButton(onClick = { showActionsMenu = false; showSecretsDialog = true }) { Text("Настройки веб-панели") }
             androidx.compose.material3.TextButton(onClick = { showActionsMenu = false; copyPanelLink() }, enabled = host.isNotBlank()) { Text("Копировать ссылку панели") }
             androidx.compose.material3.TextButton(onClick = { showActionsMenu = false; showRegenConfirmDialog = true }, enabled = host.isNotBlank() && sshAuthReady) { Text("Сменить путь панели") }
@@ -1343,15 +1399,18 @@ internal fun V2DeployScreen(
     }
 
     if (showSecretsDialog) {
+        var mainPasswordInput by remember { mutableStateOf(mainPassDraft) }
         var webLoginDraft by remember { mutableStateOf(panelLoginDraft) }
         var webPasswordDraft by remember { mutableStateOf(panelPasswordDraft) }
-        androidx.compose.material3.AlertDialog(onDismissRequest = { showSecretsDialog = false }, title = { Text("Доступ к веб-панели") }, text = {
+        androidx.compose.material3.AlertDialog(onDismissRequest = { showSecretsDialog = false }, title = { Text("Авторизация") }, text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                HappField("Пароль туннеля", mainPasswordInput, { mainPasswordInput = it }, password = true)
+                TextButton(onClick = { mainPasswordInput = generate16CharPassword() }) { Text("Сгенерировать пароль туннеля") }
                 HappField("Логин веб-панели", webLoginDraft, { webLoginDraft = it })
                 HappField("Пароль веб-панели", webPasswordDraft, { webPasswordDraft = it }, password = true)
                 V2SwitchSetting("Секретный путь панели", savedSettings.secretPathEnabled, { enabled -> scope.launch { settingsStore.saveDeploySecretPath(enabled) } })
             }
-        }, confirmButton = { androidx.compose.material3.TextButton(onClick = { panelLoginDraft = webLoginDraft; panelPasswordDraft = webPasswordDraft; val draft = serverDraft().copy(webLogin = webLoginDraft, webPassword = webPasswordDraft); scope.launch { settingsStore.saveDeployProfileDraft(draft); showSecretsDialog = false } }) { Text("Сохранить") } })
+        }, confirmButton = { androidx.compose.material3.TextButton(onClick = { mainPassDraft = mainPasswordInput; panelLoginDraft = webLoginDraft; panelPasswordDraft = webPasswordDraft; val draft = serverDraft().copy(mainPassword = mainPasswordInput, webLogin = webLoginDraft, webPassword = webPasswordDraft); scope.launch { settingsStore.saveDeployProfileDraft(draft); showSecretsDialog = false } }) { Text("Сохранить") } })
     }
 
     if (showSshKeysDialog) {
@@ -2047,3 +2106,11 @@ private fun V2DeployActionMenuItem(
     }
 }
 
+@Composable
+private fun DeployFormToggle(title: String, checked: Boolean, onChange: (Boolean) -> Unit, enabled: Boolean) {
+    Row(Modifier.fillMaxWidth().heightIn(min = LocalV2AdaptiveMetrics.current.rowHeight)
+        .clickable(enabled = enabled) { onChange(!checked) }, verticalAlignment = Alignment.CenterVertically) {
+        Text(title, Modifier.weight(1f), fontSize = V2TextSizes.Body)
+        com.csqtt.client.ui.v2.components.V2Switch(checked, onChange, enabled = enabled)
+    }
+}
