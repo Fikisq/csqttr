@@ -1106,6 +1106,7 @@ object TunnelManager {
         cmd.add(params.obfsMode)
         cmd.add("-turn-transport")
         cmd.add(params.turnTransport)
+        cmd.addAll(GoobyPolicy.arguments(params.goobyEnabled, params.turnTransport, params.goobyStrategy))
         cmd.add("-srtp-mode")
         cmd.add(params.srtpMode)
         if (params.customTurnIps.isNotBlank()) {
@@ -1331,6 +1332,12 @@ object TunnelManager {
                     }
 
                     if (TunnelLogPolicy.isInternalRecovery(lineTrim)) {
+                        return@forEachLine
+                    }
+
+                    GoobyLogParser.parse(lineTrim)?.let { event ->
+                        if (event.isError) lastDiagnostic = event.message.take(240)
+                        updateProcessLog(identity, event.key, event.message, event.priority, event.isError, event.level)
                         return@forEachLine
                     }
 
@@ -2149,6 +2156,8 @@ data class TunnelParams(
     val clientIds: String = CsqttConstants.Tunnel.DEFAULT_CLIENT_IDS,
     val obfsMode: String = CsqttConstants.Tunnel.DEFAULT_OBFS_MODE,
     val turnTransport: String = CsqttConstants.Tunnel.DEFAULT_TURN_TRANSPORT,
+    val goobyEnabled: Boolean = false,
+    val goobyStrategy: String = GoobyPolicy.DEFAULT_STRATEGY,
     val srtpMode: String = CsqttConstants.SrtpMode.DEFAULT,
     val generationId: Long = 0,
     val sessionSalt: String = "",

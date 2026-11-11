@@ -229,7 +229,11 @@ class TunnelService : Service() {
                         val hasIps = ipList.isNotBlank()
                         val effectiveIpEnabled = store.ipRoutingEnabled.first() && hasIps
 
+                        val gooby = GoobyPolicy.fromUi(Native250RuntimeSettings(applicationContext).snapshot(), store.activeProfile.first())
+
                         val params = TunnelParams(
+                            goobyEnabled = gooby.first,
+                            goobyStrategy = gooby.second,
                             peer = intent.getStringExtra("peer") ?: "",
                             vkHashes = resolvedHashes.value,
                             secondaryVkHash = intent.getStringExtra("secondary_vk_hash") ?: "",
@@ -453,7 +457,11 @@ class TunnelService : Service() {
                 val ipList = if (ipWhite) store.directIpsWhite.first() else store.directIpsBlack.first()
                 val ipRouting = store.ipRoutingEnabled.first() || ipList.isNotBlank()
 
+                val gooby = GoobyPolicy.fromUi(Native250RuntimeSettings(applicationContext).snapshot(), store.activeProfile.first())
+
                 val params = TunnelParams(
+                    goobyEnabled = gooby.first,
+                    goobyStrategy = gooby.second,
                     peer = source.peer,
                     vkHashes = restoredHashes?.value ?: "",
                     secondaryVkHash = store.secondaryVkHash.first(),
