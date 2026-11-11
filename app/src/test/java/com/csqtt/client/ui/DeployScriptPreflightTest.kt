@@ -6,6 +6,12 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class DeployScriptPreflightTest {
+    @Test
+    fun `shell asset stays LF on Windows so uploaded bash can execute it`() {
+        val source = listOf(File("app/src/main/assets/deploy.sh"), File("src/main/assets/deploy.sh")).first(File::isFile)
+        assertFalse("deploy.sh must not contain CRLF in the APK", source.readBytes().any { it == 13.toByte() })
+    }
+
     private fun script(): String {
         val candidates = listOf(
             File("app/src/main/assets/deploy.sh"),
