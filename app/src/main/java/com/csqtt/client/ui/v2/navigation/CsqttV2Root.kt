@@ -87,7 +87,6 @@ fun CsqttV2Root(
     }
     CsqttV2Theme(
         darkTheme = isDark,
-        themePalette = "nordic_slate",
     ) {
         val colors = V2Theme.colors
         val context = LocalContext.current.applicationContext
