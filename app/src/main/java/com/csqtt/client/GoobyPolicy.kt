@@ -1,6 +1,10 @@
 package com.csqtt.client
 
 internal object GoobyPolicy {
+    fun fromUi(config: Native250RuntimeConfig, profile: Int): Pair<Boolean, String> {
+        val mode = config.value("gooby.$profile", "off")
+        return (strategies.any { it.first == mode }) to normalizeStrategy(mode)
+    }
     const val DEFAULT_STRATEGY = "current"
     val strategies = listOf("current" to "Текущая", "gentle" to "Мягкая", "extended" to "Расширенная")
     fun normalizeStrategy(value: String?): String = strategies.firstOrNull { it.first == value }?.first ?: DEFAULT_STRATEGY

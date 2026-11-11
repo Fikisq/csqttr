@@ -7,6 +7,5 @@ internal object TunnelServicePolicy {
         wasEverRunning: Boolean,
         running: Boolean,
         elapsedMs: Long,
-        pausedForWifi: Boolean = false,
-    ): Boolean = !pausedForWifi && !running && (wasEverRunning || elapsedMs >= STARTUP_GRACE_MS)
+    ): Boolean = !running && (wasEverRunning || elapsedMs >= STARTUP_GRACE_MS)
 }

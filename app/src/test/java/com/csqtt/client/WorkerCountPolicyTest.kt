@@ -5,9 +5,19 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class WorkerCountPolicyTest {
+    @Test fun extraWorkersSettingChangesAdmissionWithoutLeakingAcrossProfilesOrAutoVk() {
+        val config = Native250RuntimeConfig(mapOf("extraWorkers.0" to "true", "extraWorkers.1" to "false"))
+        assertEquals(100, WorkerCountPolicy.maximumForProfile(config, 0, false))
+        for ((profile, autoVk) in listOf(0 to true, 1 to false, 2 to false)) {
+            val maximum = WorkerCountPolicy.maximumForProfile(config, profile, autoVk)
+            assertEquals(70, maximum)
+            assertEquals(70, WorkerCountPolicy.normalize(Int.MAX_VALUE, maximum))
+        }
+        assertEquals(70, WorkerCountPolicy.maximumForProfile(Native250RuntimeConfig(mapOf("extraWorkers.0" to "invalid")), 0, false))
+    }
 
     @Test
-    fun everySupportedTotalRemainsAnExactMultipleOfTen() {
+    fun everySupportedTotalRemainsAnExactMultipleOfFive() {
         val supported = (1..CsqttConstants.Tunnel.MAX_WORKERS / CsqttConstants.Tunnel.WORKERS_PER_GROUP)
             .map { it * CsqttConstants.Tunnel.WORKERS_PER_GROUP }
         for ((groups, workers) in supported.withIndex()) {
@@ -16,25 +26,6 @@ class WorkerCountPolicyTest {
         }
         assertEquals(100, supported.last())
         assertEquals(100, WorkerCountPolicy.normalize(CsqttConstants.Tunnel.MAX_WORKERS))
-    }
-
-    @Test
-    fun extraWorkersRaiseTheDefaultMaximum() {
-        assertEquals(
-            CsqttConstants.Tunnel.DEFAULT_MAX_WORKERS,
-            WorkerCountPolicy.defaultMaximum(extraWorkers = false),
-        )
-        assertEquals(
-            CsqttConstants.Tunnel.MAX_WORKERS,
-            WorkerCountPolicy.defaultMaximum(extraWorkers = true),
-        )
-        assertEquals(
-            CsqttConstants.Tunnel.DEFAULT_MAX_WORKERS,
-            WorkerCountPolicy.normalize(
-                Int.MAX_VALUE,
-                maximum = WorkerCountPolicy.defaultMaximum(extraWorkers = false),
-            ),
-        )
     }
 
     @Test
@@ -83,9 +74,9 @@ class WorkerCountPolicyTest {
     fun invalidPersistedCountsAreBoundedAndNeverCreatePartialCredentialGroup() {
         for (requested in -1_000..1_000) {
             val normalized = WorkerCountPolicy.normalize(requested)
-            assertTrue(normalized in 10..CsqttConstants.Tunnel.MAX_WORKERS)
-            assertEquals(0, normalized % 10)
-            assertTrue(normalized <= requested.coerceAtLeast(10) || normalized == 100)
+            assertTrue(normalized in 5..CsqttConstants.Tunnel.MAX_WORKERS)
+            assertEquals(0, normalized % 5)
+            assertTrue(normalized <= requested.coerceAtLeast(5) || normalized == 100)
         }
     }
 
@@ -104,8 +95,8 @@ class WorkerCountPolicyTest {
     fun automaticHashModeAllowsTheFullWorkerRange() {
         for (requested in -100..300) {
             val admitted = WorkerCountPolicy.normalize(requested)
-            assertTrue(admitted in 10..CsqttConstants.Tunnel.MAX_WORKERS)
-            assertEquals(0, admitted % 10)
+            assertTrue(admitted in 5..CsqttConstants.Tunnel.MAX_WORKERS)
+            assertEquals(0, admitted % 5)
         }
         assertEquals(100, WorkerCountPolicy.normalize(Int.MAX_VALUE))
     }
@@ -115,8 +106,8 @@ class WorkerCountPolicyTest {
         for (requested in listOf(Int.MIN_VALUE, -1, 0, 4, 28, 109, Int.MAX_VALUE)) {
             for (hashCount in 1..CsqttConstants.Tunnel.MAX_VK_HASHES) {
                 val admitted = WorkerCountPolicy.normalizeForHashes(requested, hashCount)
-                assertTrue(admitted in 10..WorkerCountPolicy.maximumForHashes(hashCount))
-                assertTrue(admitted % CsqttConstants.Tunnel.WORKERS_PER_GROUP == 0)
+                assertTrue(admitted in 5..WorkerCountPolicy.maximumForHashes(hashCount))
+                assertTrue(admitted == 5 || admitted % CsqttConstants.Tunnel.WORKERS_PER_GROUP == 0)
             }
         }
         assertEquals(

@@ -610,6 +610,7 @@ prog() { echo "CSQTT_PROGRESS|$1|$2"; }
 run_timed() {
     local label="$1" started=$SECONDS
     shift
+    log_step "Начало этапа: $label"
     "$@"
     log_info "Время этапа «$label»: $((SECONDS - started))с"
 }
@@ -990,13 +991,21 @@ validate_candidate_environment() {
 prepare_uploaded_release() {
     DEPLOY_PHASE="preflight"
     if [ "$PRESERVE_CONFIG" = "1" ]; then
-        # An update uploads neither file (the app keeps the server's own), so one already in /tmp is a leftover — maybe
-        # the other instance's, from a deploy cut off after its upload: this instance's own config always wins.
-        rm -f -- "$UPLOAD_ENV_FILE" "$UPLOAD_OVERRIDES_FILE"
-        [ -s "$CSQTT_ENV_FILE" ] || \
-            die "Не найдена существующая WEB-конфигурация ${CSQTT_ENV_FILE}; выполните первый деплой" "$EXIT_PREFLIGHT_FAILED"
-        install -m 0600 "$CSQTT_ENV_FILE" "$UPLOAD_ENV_FILE" || die "Не удалось прочитать существующую WEB-конфигурацию" "$EXIT_PREFLIGHT_FAILED"
-        if [ -s "$CSQTT_DEPLOY_OVERRIDES_FILE" ]; then
+        # Explicit panel update uses the freshly uploaded profile configuration.
+        # Old clients/CLI updates still preserve the server environment by default.
+        if [ "${CSQTT_APPLY_TUNNEL_PASSWORD:-0}" != "1" ]; then
+            rm -f -- "$UPLOAD_OVERRIDES_FILE"
+        fi
+        if [ "${CSQTT_APPLY_PANEL:-0}" = "1" ]; then
+            [ -s "$UPLOAD_ENV_FILE" ] || die "WEB-конфигурация профиля не загружена" "$EXIT_PREFLIGHT_FAILED"
+        else
+            rm -f -- "$UPLOAD_ENV_FILE"
+            [ -s "$CSQTT_ENV_FILE" ] || die "Не найдена WEB-конфигурация сервера" "$EXIT_PREFLIGHT_FAILED"
+            install -m 0600 "$CSQTT_ENV_FILE" "$UPLOAD_ENV_FILE" || die "Не удалось прочитать WEB-конфигурацию" "$EXIT_PREFLIGHT_FAILED"
+        fi
+        if [ "${CSQTT_APPLY_TUNNEL_PASSWORD:-0}" = "1" ]; then
+            [ -s "$UPLOAD_OVERRIDES_FILE" ] || die "Пароль туннеля из профиля не загружен" "$EXIT_PREFLIGHT_FAILED"
+        elif [ -s "$CSQTT_DEPLOY_OVERRIDES_FILE" ]; then
             install -m 0600 "$CSQTT_DEPLOY_OVERRIDES_FILE" "$UPLOAD_OVERRIDES_FILE" || die "Не удалось прочитать существующую deploy-конфигурацию" "$EXIT_PREFLIGHT_FAILED"
         else
             # The server deletes its deploy overrides once it has applied them (main.rs), so a server that has started
@@ -1007,7 +1016,7 @@ prepare_uploaded_release() {
             ( umask 077; printf '{"main_password":""}\n' > "$UPLOAD_OVERRIDES_FILE" ) || \
                 die "Не удалось подготовить deploy-конфигурацию обновления" "$EXIT_PREFLIGHT_FAILED"
         fi
-        log_info "Режим обновления: логин, пароли и путь панели сохраняются"
+        log_info "Режим обновления: база клиентов и их настройки сохраняются"
     fi
     [ -f "$UPLOAD_BINARY" ] && [ -s "$UPLOAD_BINARY" ] || \
         die "Новый бинарник не загружен или пуст" "$EXIT_PREFLIGHT_FAILED"
@@ -1073,7 +1082,7 @@ remove_csqtt_tun_interface() {
 }
 
 csqtt_cleanup() {
-    prog 0.15 "Очистка..."
+    prog 0.38 "Очистка..."
     echo "🧹 Переключение со старой установки CSQTT..."
 
     local had_old_install=0 managed_systemd_unit=0
@@ -1604,7 +1613,8 @@ ensure_letsencrypt_client() {
             return 1
         fi
     fi
-    if ! timeout 180 "$CSQTT_LE_VENV/bin/pip" install --disable-pip-version-check --no-cache-dir --upgrade 'certbot>=5.4,<6' >>"$LOG_FILE" 2>&1; then
+    log_step "Загрузка Certbot: ожидание не более 45 секунд..."
+    if ! timeout -k 5s 45s "$CSQTT_LE_VENV/bin/pip" install --disable-pip-version-check --no-cache-dir --retries 0 --timeout 10 --upgrade 'certbot>=5.4,<6' 2>&1 | tee -a "$LOG_FILE"; then
         log_warn "Не удалось установить актуальный Certbot с поддержкой IP-сертификатов; WEB-панель временно останется на self-signed TLS"
         return 1
     fi
@@ -1740,11 +1750,11 @@ issue_letsencrypt_ip_certificate() {
         log_warn "TCP/${LE_HTTP_PORT} уже занят другим сервисом; Let’s Encrypt IP-сертификат отложен, сохранён self-signed fallback"
         return 1
     fi
-    if ! timeout 90 "$certbot" certonly --standalone --http-01-port "$LE_HTTP_PORT" \
+    if ! timeout -k 5s 30s "$certbot" certonly --standalone --http-01-port "$LE_HTTP_PORT" \
         --non-interactive --agree-tos --register-unsafely-without-email \
         --preferred-profile shortlived --ip-address "$public_ip" \
         --cert-name "$cert_name" --keep-until-expiring >>"$LOG_FILE" 2>&1; then
-        if ! timeout 90 "$certbot" certonly --standalone --http-01-port "$LE_HTTP_PORT" \
+        if ! timeout -k 5s 30s "$certbot" certonly --standalone --http-01-port "$LE_HTTP_PORT" \
             --non-interactive --agree-tos --register-unsafely-without-email \
             --ip-address "$public_ip" \
             --cert-name "$cert_name" --keep-until-expiring >>"$LOG_FILE" 2>&1; then
@@ -2097,6 +2107,7 @@ LETIMER
 
 setup_letsencrypt_ip_tls() {
     local public_ip cert_name
+    prog 0.45 "Проверка TLS-сертификата веб-панели..."
     if ! certificate_is_csqtt_letsencrypt && adopt_letsencrypt_certificate; then
         log_info "Let’s Encrypt IP-сертификат CSQTT принят под автоматическое продление"
     fi
@@ -2110,6 +2121,16 @@ setup_letsencrypt_ip_tls() {
     if [ -z "$public_ip" ]; then
         public_ip="$(state_value IP 2>/dev/null || true)"
     fi
+    # Check before installing Python/Certbot: another service owns HTTP/80,
+    # so standalone HTTP-01 cannot run regardless of the client installation.
+    if ss -ltnH "sport = :${LE_HTTP_PORT}" 2>/dev/null | grep -q .; then
+        log_warn "TCP/${LE_HTTP_PORT} занят: установка Certbot и выпуск сертификата пропущены; чужой сервис не изменён"
+        if [ ! -s "$CSQTT_CONFIG_DIR/web_cert.pem" ] || ! openssl x509 -noout -checkend 0 -in "$CSQTT_CONFIG_DIR/web_cert.pem" >/dev/null 2>&1; then
+            generate_rcgen_fallback_certificate "$public_ip" || true
+        fi
+        return 0
+    fi
+    prog 0.47 "Подготовка клиента сертификатов..."
     if ! ensure_letsencrypt_client; then
         if [ ! -s "$CSQTT_CONFIG_DIR/web_cert.pem" ] || ! openssl x509 -noout -checkend 0 -in "$CSQTT_CONFIG_DIR/web_cert.pem" >/dev/null 2>&1; then
             generate_rcgen_fallback_certificate "$public_ip" || true
@@ -2138,6 +2159,7 @@ setup_letsencrypt_ip_tls() {
         log_info "Let’s Encrypt IP-сертификат действителен; перевыпуск не требуется"
     else
         cert_name="$(letsencrypt_cert_name "$public_ip")"
+        prog 0.52 "Получение TLS-сертификата..."
         if ! issue_letsencrypt_ip_certificate "$LE_CERTBOT_COMMAND" "$public_ip" "$cert_name"; then
             if [ ! -s "$CSQTT_CONFIG_DIR/web_cert.pem" ] || ! openssl x509 -noout -checkend 0 -in "$CSQTT_CONFIG_DIR/web_cert.pem" >/dev/null 2>&1; then
                 generate_rcgen_fallback_certificate "$public_ip" || true
@@ -2151,7 +2173,9 @@ verify_web_panel() {
     local attempt scheme code
     local probe_file="/tmp/csqtt-web-probe.$$"
     local secret_path="${CSQTT_WEB_SECRET_PATH:-}"
-    if [ -z "$secret_path" ] && [ -f "$CSQTT_ENV_FILE" ]; then
+    # Probe the configuration actually used by the running server, not the
+    # caller's stale form value (especially after switching Android clients).
+    if [ -f "$CSQTT_ENV_FILE" ]; then
         secret_path="$(grep -E '^[[:space:]]*(export[[:space:]]+)?CSQTT_WEB_SECRET_PATH=' "$CSQTT_ENV_FILE" 2>/dev/null | head -n1 | cut -d= -f2- | tr -d '\"' | tr -d "'\"'" | tr -d '[:space:]' || true)"
     fi
     local probe_path=""
@@ -2275,7 +2299,7 @@ probe_tun_support() {
 }
 
 run_platform_preflight() {
-    prog 0.35 "Совместимость ядра..."
+    prog 0.28 "Совместимость ядра..."
     log_step "Проверка совместимости ядра и VPS..."
     check_kernel_compatibility
     probe_tun_support
@@ -2339,9 +2363,8 @@ write_csqtt_dockerfile() {
     # /usr/local/bin/csqtt in the entrypoint)
     cat > "$target" << 'DOCKERFILE'
 FROM alpine:3.21
-ARG CSQTT_BUILD_DNS_PRIMARY
-ARG CSQTT_BUILD_DNS_SECONDARY
-RUN set -eu; if [ -n "${CSQTT_BUILD_DNS_PRIMARY:-}" ]; then printf 'nameserver %s\n' "$CSQTT_BUILD_DNS_PRIMARY" > /etc/resolv.conf; fi; if [ -n "${CSQTT_BUILD_DNS_SECONDARY:-}" ]; then printf 'nameserver %s\n' "$CSQTT_BUILD_DNS_SECONDARY" >> /etc/resolv.conf; fi; timeout -k 5s 120s apk add --no-cache --no-progress ca-certificates iproute2 iptables; rm -rf /var/cache/apk/*
+ARG CSQTT_APK_MIRROR=https://dl-cdn.alpinelinux.org/alpine
+RUN set -eu; printf '%s/v3.21/main\n%s/v3.21/community\n' "$CSQTT_APK_MIRROR" "$CSQTT_APK_MIRROR" > /etc/apk/repositories; timeout -k 5s 60s apk add --no-cache --no-progress ca-certificates iproute2 iptables; rm -rf /var/cache/apk/*
 COPY csqtt @IMG_BIN@
 COPY network-up.sh @IMG_LIB@/network-up.sh
 COPY tun-recover.sh @IMG_LIB@/tun-recover.sh
@@ -2352,32 +2375,33 @@ DOCKERFILE
 }
 
 docker_build_candidate_image() {
-    local image="$1" context_dir="$2" primary_log fallback_log
-    primary_log="$(mktemp)" || return 1
-    if timeout -k 15s "${DOCKER_BUILD_TIMEOUT_SECONDS}s" docker build --network host -t "$image" "$context_dir" >"$primary_log" 2>&1; then
-        cat "$primary_log" >>"$LOG_FILE"
-        rm -f -- "$primary_log"
-        return 0
-    fi
-    cat "$primary_log" >>"$LOG_FILE"
-    if ! grep -Eqi 'Temporary failure resolving|Could not resolve|Name or service not known|Connection timed out|Could not connect|Network is unreachable|Failed to fetch|apk|returned a non-zero code: 124' "$primary_log"; then
-        rm -f -- "$primary_log"
-        return 1
-    fi
-    rm -f -- "$primary_log"
-    log_warn "Docker build не получил DNS через сеть VPS; повтор с резервными DNS Яндекса"
-    fallback_log="$(mktemp)" || return 1
-    if timeout -k 15s "${DOCKER_BUILD_TIMEOUT_SECONDS}s" docker build --network default \
-        --build-arg CSQTT_BUILD_DNS_PRIMARY=77.88.8.8 \
-        --build-arg CSQTT_BUILD_DNS_SECONDARY=77.88.8.1 \
-        -t "$image" "$context_dir" >"$fallback_log" 2>&1; then
-        cat "$fallback_log" >>"$LOG_FILE"
-        rm -f -- "$fallback_log"
-        log_info "Docker-образ собран через резервные DNS Яндекса"
-        return 0
-    fi
-    cat "$fallback_log" >>"$LOG_FILE"
-    rm -f -- "$fallback_log"
+    local image="$1" context_dir="$2" mirror host ip build_log attempt=0
+    local -a host_args
+    for mirror in https://dl-cdn.alpinelinux.org/alpine https://mirror.yandex.ru/mirrors/alpine; do
+        attempt=$((attempt + 1))
+        host="${mirror#https://}"; host="${host%%/*}"
+        prog 0.30 "Docker: загрузка зависимостей, попытка ${attempt}/2 (${host})"
+        log_step "Сборка Docker: ${mirror}"
+        host_args=()
+        ip="$(timeout 10 getent ahostsv4 "$host" 2>/dev/null | awk 'NR == 1 {print $1}' || true)"
+        if [[ "$ip" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            host_args=(--add-host "${host}:${ip}")
+        fi
+        build_log="$(mktemp)" || return 1
+        if timeout -k 15s "${DOCKER_BUILD_TIMEOUT_SECONDS}s" docker build --network host \
+            "${host_args[@]}" --build-arg "CSQTT_APK_MIRROR=$mirror" \
+            -t "$image" "$context_dir" 2>&1 | tee "$build_log" | tee -a "$LOG_FILE"; then
+            rm -f -- "$build_log"
+            log_info "Docker-образ собран"
+            return 0
+        fi
+        if ! grep -Eqi 'fetch|resolve|network|timed out|timeout|Terminated|apk|TLS|SSL' "$build_log"; then
+            rm -f -- "$build_log"
+            return 1
+        fi
+        rm -f -- "$build_log"
+        log_warn "Сборка не завершилась через ${host}; проверяется резервное зеркало, если осталось"
+    done
     return 1
 }
 
@@ -2690,7 +2714,11 @@ csqtt_instance_installed() {
 
 do_uninstall() {
     log_step "Удаление CSQTT..."
-    csqtt_instance_installed || die "Сервер ${CSQTT_NAME} на этом VPS не установлен — удалять нечего"
+    if ! csqtt_instance_installed; then
+        log_info "Сервер ${CSQTT_NAME} уже отсутствует"
+        echo "CSQTT_UNINSTALL_OK"
+        return 0
+    fi
     if [ "$CSQTT_ROLE" = main ]; then
         # this removal's cleanup stops, kills and deletes every csqtt unit, container and process it matches
         local strangers
@@ -3102,13 +3130,14 @@ main() {
                 run_timed "Docker preflight" prepare_docker_candidate "$UPLOAD_BINARY"
             fi
             DEPLOY_PHASE="cutover"
+            prog 0.36 "Переключение серверного сервиса..."
             run_timed "переключение runtime" csqtt_cleanup
             run_timed "preflight" run_platform_preflight
             detect_firewall
             run_timed "NAT/firewall" setup_nat_and_firewall
             install_network_helper
             if [ "$PRESERVE_CONFIG" = "1" ]; then
-                log_info "Режим обновления: логин, пароли и путь панели сохраняются без изменений"
+                log_info "Режим обновления: база клиентов и их настройки сохраняются"
             fi
             setup_csqtt_environment
             run_timed "Let’s Encrypt" setup_letsencrypt_ip_tls

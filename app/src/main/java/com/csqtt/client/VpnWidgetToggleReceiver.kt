@@ -15,9 +15,10 @@ class VpnWidgetToggleReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action != ACTION) return
         val pendingResult = goAsync()
+        val running = TunnelManager.running.value
         CoroutineScope(SupervisorJob() + Dispatchers.Main).launch {
             try {
-                toggleTunnelFromQuickAction(context) { openMainActivity(context) }
+                toggleTunnelFromQuickAction(context, running) { openMainActivity(context) }
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to toggle tunnel from widget", e)
                 context.showRaisedToast("Ошибка запуска: ${e.localizedMessage}", Toast.LENGTH_SHORT)

@@ -226,7 +226,6 @@ struct OutboundQueue {
     space: Notify,
     shared: Arc<DriverShared>,
     socket: Arc<UdpSocket>,
-    core: Arc<NativeCore>,
 }
 
 async fn outbound_writer_loop(queue: Arc<OutboundQueue>) {
@@ -290,9 +289,6 @@ async fn outbound_writer_loop(queue: Arc<OutboundQueue>) {
                 traffic_add(if queue.shared.closing.load(Ordering::Acquire) { TM::UdpClosingDrops } else { TM::UdpSendDrops }, 1);
             }
             drop(packet);
-            if delivered {
-                queue.core.record_udp_data_sent();
-            }
         }
         if queue.shared.closing.load(Ordering::Acquire) {
             return;
@@ -427,7 +423,6 @@ impl TurnAllocation {
                     space: Notify::new(),
                     shared: shared.clone(),
                     socket: socket.clone(),
-                    core: core.clone(),
                 });
                 let writer_task = tokio::spawn(outbound_writer_loop(queue.clone()));
                 (Some(queue), Some(writer_task))
@@ -1637,8 +1632,39 @@ fn channel_data_padding(packet: &PacketBuf, channel: u16) -> Result<usize> {
 
 fn configure_udp_socket_buffers(socket: &UdpSocket) {
     let socket = SockRef::from(socket);
-    let _ = socket.set_recv_buffer_size(UDP_RECEIVE_BUFFER_BYTES);
-    let _ = socket.set_send_buffer_size(UDP_SEND_BUFFER_BYTES);
+    for (direction, requested, result) in [
+        (
+            "приём",
+            UDP_RECEIVE_BUFFER_BYTES,
+            socket.set_recv_buffer_size(UDP_RECEIVE_BUFFER_BYTES),
+        ),
+        (
+            "отправка",
+            UDP_SEND_BUFFER_BYTES,
+            socket.set_send_buffer_size(UDP_SEND_BUFFER_BYTES),
+        ),
+    ] {
+        if let Err(error) = result {
+            crate::log_error!(
+                "[TURN] UDP буфер ({direction}): установка {requested} байт не удалась: {error}"
+            );
+        }
+    }
+    // Read back each socket once at creation, never on the packet path.
+    // Linux reports doubled limits including kernel bookkeeping, not payload capacity.
+    for (direction, requested, actual) in [
+        ("приём", UDP_RECEIVE_BUFFER_BYTES, socket.recv_buffer_size()),
+        ("отправка", UDP_SEND_BUFFER_BYTES, socket.send_buffer_size()),
+    ] {
+        match actual {
+            Ok(actual) => crate::log_info!(
+                "[TURN] UDP буфер ({direction}): запрос={requested} байт; ОС={actual} байт (лимит памяти сокета, не размер очереди пакетов)"
+            ),
+            Err(error) => crate::log_error!(
+                "[TURN] UDP буфер ({direction}): не удалось прочитать размер: {error}"
+            ),
+        }
+    }
 }
 
 fn method_name(method: u32) -> &'static str {

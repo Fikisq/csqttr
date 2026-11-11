@@ -7,6 +7,7 @@ plugins {
 
 val localProperties = Properties()
 val localPropertiesFile = rootProject.file("local.properties")
+val native250UpdateExisting = providers.gradleProperty("native250UpdateExisting").orNull == "true"
 if (localPropertiesFile.isFile) {
     localPropertiesFile.inputStream().use { input -> localProperties.load(input) }
 }
@@ -42,14 +43,6 @@ val releaseSigningProblems = mutableListOf<String>().apply {
 }
 val releaseSigningReady = releaseSigningProblems.isEmpty()
 
-val supportedAbis = listOf("arm64-v8a", "armeabi-v7a", "x86_64")
-val selectedAbis = providers.gradleProperty("csqtt.abis").orNull
-    ?.split(',')?.map(String::trim)?.filter(String::isNotEmpty)?.distinct()
-    ?: supportedAbis
-require(selectedAbis.isNotEmpty() && selectedAbis.all { it in supportedAbis }) {
-    "csqtt.abis must contain supported ABIs: ${supportedAbis.joinToString()}"
-}
-
 val verifyReleaseSigning = tasks.register("verifyReleaseSigning") {
     group = "verification"
     description = "Verifies that a release build has an explicit, readable signing configuration."
@@ -72,7 +65,7 @@ android {
         applicationId = "csqtt.quic.amurcanov"
         minSdk = 26
         targetSdk = 37
-        versionCode = 250
+        versionCode = if (native250UpdateExisting) 258 else 238
         versionName = "2.5.3"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
@@ -80,18 +73,24 @@ android {
             useSupportLibrary = true
         }
 
+        ndk {
+            abiFilters.add("arm64-v8a")
+        }
     }
 
     splits {
         abi {
-            isEnable = true
+            isEnable = false
             reset()
-            include(*selectedAbis.toTypedArray())
-            isUniversalApk = selectedAbis.size > 1
+            include("arm64-v8a")
+            isUniversalApk = false
         }
     }
 
     signingConfigs {
+        getByName("debug") {
+            storeFile = file("E:/csqtt-deps/android-user-home/debug.keystore")
+        }
         create("release") {
             if (releaseSigningReady) {
                 storeFile = requireNotNull(releaseKeystoreFile)
@@ -107,17 +106,8 @@ android {
 
     buildTypes {
         getByName("debug") {
-            if (providers.gradleProperty("csqtt.compactApk").orNull == "true") {
-                isMinifyEnabled = true
-                isShrinkResources = true
-                proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-            }
-            applicationIdSuffix = providers.gradleProperty("csqtt.debugApplicationIdSuffix")
-                .getOrElse(".forktest")
-            manifestPlaceholders["csqttDebugAppLabel"] = providers.gradleProperty("csqtt.debugAppLabel")
-                .getOrElse("@string/app_name")
-            versionNameSuffix = providers.gradleProperty("csqtt.debugVersionNameSuffix")
-                .getOrElse("-fork-test.3")
+            applicationIdSuffix = if (native250UpdateExisting) ".happdebug" else ".native250preview"
+            versionNameSuffix = "-classic250.8"
         }
         getByName("release") {
             isMinifyEnabled = true
@@ -134,9 +124,6 @@ android {
 
     packaging {
         jniLibs {
-            excludes += "**/x86/**"
-            // ABI splits alone do not filter the universal APK.
-            (supportedAbis - selectedAbis.toSet()).forEach { excludes += "**/$it/**" }
             useLegacyPackaging = true
             keepDebugSymbols += "**/libclient.so"
             keepDebugSymbols += "**/libandroidx.graphics.path.so"
@@ -157,24 +144,20 @@ android {
     }
 
     lint {
-        checkReleaseBuilds = false
-        abortOnError = false
+        checkReleaseBuilds = true
+        abortOnError = true
     }
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
-        encoding = "UTF-8"
-    }
-
-    androidResources {
-        // Keep sources locally for verification, but fetch pinned server cores during deploy.
-        ignoreAssetsPattern = "csqtt-linux-*"
     }
 
     sourceSets {
         getByName("main") {
             jniLibs.directories.add("src/main/jniLibs")
+            jniLibs.srcDir(rootProject.file(".local/runtime16/jniLibs"))
+            assets.srcDir(rootProject.file(".local/runtime16/assets"))
         }
     }
 }
@@ -201,9 +184,9 @@ dependencies {
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-graphics")
     implementation("androidx.compose.ui:ui-tooling-preview")
+    debugImplementation("androidx.compose.ui:ui-tooling")
     implementation("androidx.compose.foundation:foundation")
-    implementation("androidx.compose.material3:material3:1.5.0-alpha28")
-    implementation("androidx.graphics:graphics-shapes:1.0.1")
+    implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.material:material-icons-extended")
     implementation("androidx.activity:activity-compose:1.13.0")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.11.0")

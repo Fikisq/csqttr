@@ -6,10 +6,7 @@ use sha1::Sha1;
 use std::{
     collections::VecDeque,
     net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr},
-    sync::{
-        Arc, Mutex, MutexGuard,
-        atomic::{AtomicU64, Ordering},
-    },
+    sync::{Arc, Mutex, MutexGuard},
     time::{Duration, Instant},
 };
 
@@ -223,8 +220,6 @@ struct Inner {
 
 pub(crate) struct NativeCore {
     inner: Mutex<Inner>,
-    created_at: Instant,
-    last_udp_data_ms: AtomicU64,
 }
 
 impl NativeCore {
@@ -304,8 +299,6 @@ impl NativeCore {
             );
         }
         Ok(Arc::new(Self {
-            created_at: Instant::now(),
-            last_udp_data_ms: AtomicU64::new(0),
             inner: Mutex::new(Inner {
                 server,
                 peer,
@@ -483,12 +476,6 @@ impl NativeCore {
         0
     }
 
-    pub(crate) fn record_udp_data_sent(&self) {
-        // One UDP writer per allocation. Zero represents no successful data send.
-        let elapsed_ms = self.created_at.elapsed().as_millis() as u64;
-        self.last_udp_data_ms.store(elapsed_ms + 1, Ordering::Relaxed);
-    }
-
     pub(crate) fn poll(&self) -> Result<Option<Duration>> {
         let now = Instant::now();
         let mut inner = self.lock();
@@ -539,18 +526,9 @@ impl NativeCore {
             }
 
             if inner.keepalive.is_some_and(|deadline| now >= deadline) {
-                let interval = inner.profile.keepalive_interval;
-                inner.keepalive = Some(now + interval);
+                inner.keepalive = Some(now + inner.profile.keepalive_interval);
                 if !control_started {
-                    let last_udp_data_ms = self.last_udp_data_ms.load(Ordering::Relaxed);
-                    let idle_deadline = last_udp_data_ms
-                        .checked_sub(1)
-                        .map(|ms| self.created_at + Duration::from_millis(ms) + interval);
-                    if let Some(deadline) = idle_deadline.filter(|&deadline| deadline > now) {
-                        inner.keepalive = Some(deadline);
-                    } else {
-                        inner.queue_keepalive();
-                    }
+                    inner.queue_keepalive();
                 }
             }
         }

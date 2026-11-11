@@ -33,16 +33,13 @@ internal suspend fun buildQuickStartIntent(context: Context): Intent? {
         putExtra("fingerprint", store.selectedFingerprint.first())
         putExtra("obfs_mode", store.obfsMode.first())
         putExtra("turn_transport", store.turnTransport.first())
-        putExtra("gooby_enabled", store.goobyEnabled.first())
-                putExtra("gooby_strategy", store.goobyStrategy.first())
         putExtra("srtp_mode", store.srtpMode.first())
         putExtra("custom_turn_ips", store.customTurnIps.first())
     }
 }
 
-internal suspend fun toggleTunnelFromQuickAction(context: Context, openMain: () -> Unit) {
-    if (TunnelManager.stopping.value) return
-    if (tunnelPowerIsOn(TunnelManager.running.value, TunnelManager.starting.value, TunnelManager.autoPausedForWifi.value)) {
+internal suspend fun toggleTunnelFromQuickAction(context: Context, running: Boolean, openMain: () -> Unit) {
+    if (running) {
         context.startService(Intent(context, TunnelService::class.java).apply { action = QuickTunnelAction.STOP })
         return
     }
