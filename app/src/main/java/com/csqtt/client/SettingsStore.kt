@@ -260,6 +260,9 @@ private val DEPLOY_LAST_INSPECTION_PANEL = booleanPreferencesKey("deploy_last_in
         private val VK_AUTH_MODE = stringPreferencesKey("vk_auth_mode") 
         private val OBFS_MODE = stringPreferencesKey("obfs_mode") 
         private val TURN_TRANSPORT = stringPreferencesKey("turn_transport")
+        private val GOOBY_MODE = stringPreferencesKey("gooby_mode")
+        private val LEGACY_GOOBY_ENABLED = booleanPreferencesKey("gooby_enabled")
+        private val LEGACY_GOOBY_STRATEGY = stringPreferencesKey("gooby_strategy")
         private val SRTP_MODE = stringPreferencesKey("srtp_mode")
         private val CAPTCHA_MODE = stringPreferencesKey("captcha_mode")
         private val CAPTCHA_SOLVE_METHOD = stringPreferencesKey("captcha_solve_method") 
@@ -437,6 +440,9 @@ private val DEPLOY_LAST_INSPECTION_PANEL = booleanPreferencesKey("deploy_last_in
     suspend fun saveBatterySaverPercent(percent: Int) { appContext.dataStore.edit { it[BATTERY_SAVER_PERCENT] = percent.coerceIn(5, 95) } }
     suspend fun saveUiOwnerMode(owner: Boolean) { appContext.dataStore.edit { it[UI_OWNER_MODE] = owner } }
     private val secureStore = SecureStringStore(appContext)
+    private val classicGoobyPreferences by lazy {
+        appContext.getSharedPreferences("native250_ui_preview", Context.MODE_PRIVATE)
+    }
 
     val activeProfile: Flow<Int> = dataStore.data.map {
         (it[ACTIVE_PROFILE] ?: CsqttConstants.Profiles.MIN_INDEX).coerceIn(
@@ -630,6 +636,33 @@ private val DEPLOY_LAST_INSPECTION_PANEL = booleanPreferencesKey("deploy_last_in
         when (prefs[getProfileKey(TURN_TRANSPORT, profile)]) {
             CsqttConstants.Tunnel.TURN_TRANSPORT_TCP_TLS -> CsqttConstants.Tunnel.TURN_TRANSPORT_TCP_TLS
             else -> CsqttConstants.Tunnel.DEFAULT_TURN_TRANSPORT
+        }
+    }
+
+    internal val goobyMode: Flow<GoobyMode> = dataStore.data.map { prefs ->
+        readGoobyMode(prefs, prefs[ACTIVE_PROFILE] ?: 0)
+    }.distinctUntilChanged()
+
+    private fun readGoobyMode(prefs: Preferences, profile: Int): GoobyMode {
+        prefs[getProfileKey(GOOBY_MODE, profile)]?.let { return GoobyMode.fromStored(it) }
+        if (prefs[getProfileKey(PROFILE_REMOVED, profile)] == true) return GoobyMode.OFF
+        (classicGoobyPreferences.all["gooby.$profile"] as? String)?.let { return GoobyMode.fromStored(it) }
+        return GoobyMode.fromLegacy(
+            prefs[getProfileKey(LEGACY_GOOBY_ENABLED, profile)] ?: false,
+            prefs[getProfileKey(LEGACY_GOOBY_STRATEGY, profile)],
+        )
+    }
+
+    private suspend fun migrateGoobyModes() {
+        val classic = classicGoobyPreferences.all
+        dataStore.edit { prefs ->
+            for (profile in CsqttConstants.Profiles.MIN_INDEX..CsqttConstants.Profiles.MAX_INDEX) {
+                val key = getProfileKey(GOOBY_MODE, profile)
+                if (prefs[key] == null && (classic.containsKey("gooby.$profile") ||
+                        prefs[getProfileKey(LEGACY_GOOBY_ENABLED, profile)] != null)) {
+                    prefs[key] = readGoobyMode(prefs, profile).storedValue
+                }
+            }
         }
     }
 
@@ -1104,6 +1137,7 @@ private val DEPLOY_LAST_INSPECTION_PANEL = booleanPreferencesKey("deploy_last_in
     suspend fun clearProfile(profile: Int) {
         dataStore.edit { prefs ->
             prefs[getProfileKey(PROFILE_REMOVED, profile)] = true
+            prefs[getProfileKey(GOOBY_MODE, profile)] = GoobyMode.OFF.storedValue
             prefs[getProfileKey(PROFILE_REVISION, profile)] = (prefs[getProfileKey(PROFILE_REVISION, profile)] ?: 0L) + 1L
             PingResultsCache.removeProfile(profile)
             listOf(
@@ -1344,6 +1378,7 @@ private val DEPLOY_LAST_INSPECTION_PANEL = booleanPreferencesKey("deploy_last_in
                 migrateLegacyWhitelistMode()
                 migrateSubscriptionMeta()
                 migrateDeployServerNames()
+                migrateGoobyModes()
             }
         }
         if (readOnlyProfile == null && uiCacheStarted.compareAndSet(false, true)) {
@@ -2069,6 +2104,12 @@ private val DEPLOY_LAST_INSPECTION_PANEL = booleanPreferencesKey("deploy_last_in
         }
     }
 
+    internal suspend fun saveGoobyMode(mode: GoobyMode, forProfile: Int) {
+        dataStore.edit { prefs ->
+            prefs[getProfileKey(GOOBY_MODE, forProfile)] = mode.storedValue
+        }
+    }
+
     suspend fun saveSrtpMode(mode: String, forProfile: Int? = null) {
         dataStore.edit { prefs ->
             val profile = forProfile ?: prefs[ACTIVE_PROFILE] ?: 0
@@ -2630,6 +2671,9 @@ private val DEPLOY_LAST_INSPECTION_PANEL = booleanPreferencesKey("deploy_last_in
             tunnel.put("connection_password", readConnectionPasswordState(prefs, p).value)
             tunnel.put("obfs_mode", prefs[getProfileKey(OBFS_MODE, p)] ?: CsqttConstants.Tunnel.DEFAULT_OBFS_MODE)
             tunnel.put("turn_transport", prefs[getProfileKey(TURN_TRANSPORT, p)] ?: CsqttConstants.Tunnel.DEFAULT_TURN_TRANSPORT)
+            val gooby = readGoobyMode(prefs, p)
+            tunnel.put("gooby_enabled", gooby != GoobyMode.OFF)
+            tunnel.put("gooby_strategy", if (gooby == GoobyMode.OFF) GoobyMode.CURRENT.storedValue else gooby.storedValue)
             tunnel.put("srtp_mode", prefs[getProfileKey(SRTP_MODE, p)] ?: CsqttConstants.SrtpMode.DEFAULT)
             tunnel.put("custom_turn_ips", prefs[getProfileKey(CUSTOM_TURN_IPS, p)] ?: "")
             tunnel.put("sni", prefs[getProfileKey(SNI, p)] ?: "")
@@ -2733,6 +2777,12 @@ private val DEPLOY_LAST_INSPECTION_PANEL = booleanPreferencesKey("deploy_last_in
                     }
                     if (tunnel.has("obfs_mode")) mutable[getProfileKey(OBFS_MODE, p)] = tunnel.getString("obfs_mode")
                     if (tunnel.has("turn_transport")) mutable[getProfileKey(TURN_TRANSPORT, p)] = tunnel.getString("turn_transport")
+                    if (tunnel.has("gooby_enabled")) {
+                        mutable[getProfileKey(GOOBY_MODE, p)] = GoobyMode.fromLegacy(
+                            tunnel.getBoolean("gooby_enabled"),
+                            tunnel.optString("gooby_strategy"),
+                        ).storedValue
+                    }
                     if (tunnel.has("srtp_mode")) mutable[getProfileKey(SRTP_MODE, p)] = tunnel.getString("srtp_mode")
                     if (tunnel.has("custom_turn_ips")) mutable[getProfileKey(CUSTOM_TURN_IPS, p)] = tunnel.getString("custom_turn_ips")
                     if (tunnel.has("sni")) mutable[getProfileKey(SNI, p)] = tunnel.getString("sni")
