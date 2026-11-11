@@ -10,7 +10,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import com.csqtt.client.ui.legacy.tunnel.ModeIndicator
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -18,6 +17,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import com.csqtt.client.*
+import com.csqtt.client.ui.legacy.tunnel.ModeIndicator
 import com.csqtt.client.ui.v2.components.*
 import com.csqtt.client.ui.v2.design.V2Theme
 import com.csqtt.client.ui.v2.design.V2Sizes
@@ -160,15 +160,17 @@ fun HappTunnelScreen(settingsStore: SettingsStore, version: String, onSettings: 
                 onEdit = { actionsExpanded = false; editing = profile },
                 onDelete = { actionsExpanded = false; confirmDelete = true },
             ) { swipeModifier ->
-            V2Card(modifier = swipeModifier, onClick = { if (actionsExpanded) actionsExpanded = false else if (!busy) picker = true }, contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp), color = c.surface) {
-                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) { Text(names[profile] ?: defaultProfileName(profile), fontSize = V2TextSizes.Body, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis); Text("$host:$port", color = c.textSecondary, fontSize = V2TextSizes.Secondary, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis) }
-                    TextButton(onClick = { editing = profile }, enabled = !busy) { Text("Изменить", fontSize = V2TextSizes.Action) }
-                }
-            }
+                HappProfileHeader(
+                    title = names[profile] ?: defaultProfileName(profile),
+                    subtitle = if (host.isBlank()) "Сервер не настроен" else "$host:$port",
+                    onSelect = { if (actionsExpanded) actionsExpanded = false else picker = true },
+                    onEdit = { actionsExpanded = false; editing = profile },
+                    enabled = !busy,
+                    modifier = swipeModifier.testTag("tunnel-profile-header"),
+                )
             }
             V2Card(modifier = Modifier.testTag("tunnel-card"), shape = RoundedCornerShape(28.dp), contentPadding = PaddingValues(start = 14.dp, end = 14.dp, top = 12.dp, bottom = 8.dp), color = c.surface,
-                contentModifier = Modifier.heightIn(min = (layout.height - 116.dp - layout.gap * 2).coerceAtLeast(0.dp)),
+                contentModifier = Modifier.heightIn(min = (layout.height - 56.dp - happProfileHeaderHeight() - layout.gap * 2).coerceAtLeast(0.dp)),
                 verticalArrangement = Arrangement.SpaceBetween) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     HappField("Адрес сервера", host, { host = it }, Modifier.weight(1f), enabled = loaded && !busy, compact = true, shape = pill, floatingLabel = true, maxFieldHeight = 44.dp)

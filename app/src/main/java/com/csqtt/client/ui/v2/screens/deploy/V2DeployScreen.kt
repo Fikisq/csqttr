@@ -56,7 +56,6 @@ import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Download
-import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Refresh
@@ -139,6 +138,7 @@ import com.csqtt.client.ui.v2.components.V2PillButton
 import com.csqtt.client.ui.v2.components.V2PillStyle
 import androidx.compose.material.icons.filled.ContentCopy
 import com.csqtt.client.ui.v2.components.V2TopBar
+import com.csqtt.client.ui.v2.components.HappProfileHeader
 import com.csqtt.client.ui.v2.design.V2BodyFamily
 import com.csqtt.client.ui.v2.design.V2DisplayFamily
 import com.csqtt.client.ui.v2.design.V2Palette
@@ -1030,23 +1030,21 @@ internal fun V2DeployScreen(
         val progressSpace = if (isDeploying) 60.dp else if (actionsBusy) 44.dp else 0.dp
         val cardMinimum = (maxHeight - form.profileHeight - 12.dp - progressSpace).coerceAtLeast(0.dp)
         Column(Modifier.fillMaxWidth().imePadding().verticalScroll(rememberScrollState()).testTag("deploy-settings"), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            V2Card(contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp), shape = RoundedCornerShape(22.dp), color = colors.surface) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    androidx.compose.material3.TextButton(onClick = { showServerMenu = true }, enabled = !actionsBusy,
-                        modifier = Modifier.weight(1f).height(form.profileHeight), contentPadding = PaddingValues(0.dp)) {
-                        Text(serverTitle, Modifier.weight(1f), color = colors.textPrimary, fontSize = V2TextSizes.Body, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        Icon(Icons.Default.KeyboardArrowDown, null, Modifier.size(18.dp), tint = colors.textSecondary)
-                    }
-                    androidx.compose.material3.IconButton(onClick = { showRenameDialog = true }, enabled = !actionsBusy, modifier = Modifier.size(44.dp)) {
-                        Icon(Icons.Default.Edit, "Изменить название профиля", tint = colors.textPrimary, modifier = Modifier.size(20.dp))
-                    }
+            HappProfileHeader(
+                title = serverTitle,
+                subtitle = if (host.isBlank()) "Сервер не настроен" else "$host:${sshPort.ifBlank { "22" }}",
+                onSelect = { showServerMenu = true },
+                onEdit = { showRenameDialog = true },
+                enabled = !actionsBusy,
+                modifier = Modifier.testTag("deploy-profile-header"),
+                editDescription = "Изменить название профиля",
+            ) {
                     androidx.compose.material3.IconButton(onClick = { showDeleteAppServerDialog = true }, enabled = !actionsBusy && host.isNotBlank(), modifier = Modifier.size(44.dp)) {
                         Icon(Icons.Default.Delete, "Удалить VPS из приложения", tint = colors.danger, modifier = Modifier.size(20.dp))
                     }
                     androidx.compose.material3.IconButton(onClick = { openAddServerSheet() }, enabled = !actionsBusy, modifier = Modifier.size(44.dp)) {
                         Icon(Icons.Default.Add, "Добавить VPS", tint = colors.textPrimary, modifier = Modifier.size(22.dp))
                     }
-                }
             }
             V2Card(modifier = Modifier.testTag("deploy-card"), shape = RoundedCornerShape(28.dp), contentPadding = PaddingValues(start = 14.dp, end = 14.dp, top = 12.dp, bottom = 8.dp), color = colors.surface,
                 contentModifier = Modifier.heightIn(min = cardMinimum), verticalArrangement = Arrangement.SpaceBetween) {
