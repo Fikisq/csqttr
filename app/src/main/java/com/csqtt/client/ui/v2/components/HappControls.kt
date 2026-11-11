@@ -32,8 +32,8 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.csqtt.client.ui.legacy.tunnel.ModeIndicator
-import com.csqtt.client.ui.legacy.tunnel.ModeProgressBar
+import com.csqtt.client.ui.legacy.ModeIndicator
+import com.csqtt.client.ui.legacy.ModeProgressBar
 import com.csqtt.client.ui.v2.design.V2Theme
 
 @Composable

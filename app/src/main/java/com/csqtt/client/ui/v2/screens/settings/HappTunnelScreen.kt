@@ -17,7 +17,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import com.csqtt.client.*
-import com.csqtt.client.ui.legacy.tunnel.ModeIndicator
+import com.csqtt.client.ui.legacy.ModeIndicator
 import com.csqtt.client.ui.v2.components.*
 import com.csqtt.client.ui.v2.design.V2Theme
 import com.csqtt.client.ui.v2.design.V2Sizes
