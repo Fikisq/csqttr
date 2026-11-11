@@ -202,11 +202,17 @@ class MainActivity : ComponentActivity() {
         }
         android.app.AlertDialog.Builder(this)
             .setTitle("Импорт конфигурации CSQTT")
-            .setMessage("Хост: ${link.host}\nPeer: ${link.port}\n\nЗаменить текущую конфигурацию?")
+            .setMessage("Хост: ${link.host}\nPeer: ${link.port}\n\nДобавить в свободный профиль?")
             .setPositiveButton("Импортировать") { _, _ ->
                 lifecycleScope.launch {
-                    appSettingsStore.saveCsqttParticipantLink(raw)
-                    showRaisedToast("Конфигурация CSQTT успешно подключена", Toast.LENGTH_SHORT)
+                    runCatching {
+                        appSettingsStore.importCsqttParticipantProfile(raw,
+                            activate = !TunnelManager.running.value && !TunnelManager.starting.value && !TunnelManager.stopping.value)
+                    }.onSuccess { profile ->
+                        showRaisedToast("Конфигурация добавлена: профиль $profile", Toast.LENGTH_SHORT)
+                    }.onFailure {
+                        showRaisedToast(it.message ?: "Не удалось добавить профиль", Toast.LENGTH_LONG)
+                    }
                 }
             }
             .setNegativeButton("Отмена", null)

@@ -278,6 +278,7 @@ class SettingsStore(
     }
 
     private val dataStore = previewDataStore ?: appContext.dataStore
+    private val liveRuntimeSettings = if (previewDataStore == null) Native250RuntimeSettings(appContext) else null
     private val runtimeValues = if (previewDataStore == null) Native250RuntimeSettings(appContext).changes
         else kotlinx.coroutines.flow.flowOf(Native250RuntimeConfig(emptyMap()))
     val batterySaverMode = runtimeValues.map { config ->
@@ -900,6 +901,45 @@ class SettingsStore(
             prefs[getProfileKey(CSQTT_LINK, profile)] = link
             prefs[getProfileKey(CSQTT_LINK_MODE, profile)] = true
         }
+    }
+
+    /** External links get a free profile; an owner profile is never replaced by an incoming intent. */
+    internal suspend fun importCsqttParticipantProfile(raw: String, activate: Boolean = true): Int {
+        val normalized = raw.trim()
+        val link = requireNotNull(com.csqtt.client.ui.utils.parseCsqttLink(normalized)) { "Неверная ссылка CSQTT" }
+        var target = -1
+        var created = false
+        dataStore.edit { prefs ->
+            val profiles = CsqttConstants.Profiles.MIN_INDEX..CsqttConstants.Profiles.MAX_INDEX
+            val duplicate = profiles.firstOrNull { profile ->
+                prefs[getProfileKey(CSQTT_LINK_MODE, profile)] == true &&
+                    prefs[getProfileKey(CSQTT_LINK, profile)] == normalized
+            }
+            val protectedFields = listOf(PEER, DEPLOY_IP, PROFILE_NAME, CSQTT_LINK, CONNECTION_PASSWORD_LOCAL,
+                CONNECTION_PASSWORD, CONNECTION_PASSWORD_ENCRYPTED, DEPLOY_PASSWORD, DEPLOY_PASSWORD_ENCRYPTED,
+                DEPLOY_MAIN_PASSWORD, DEPLOY_MAIN_PASSWORD_ENCRYPTED, VK_HASHES, VK_ACCESS_TOKEN,
+                VK_ACCESS_TOKEN_ENCRYPTED, SSH_PRIVATE_KEY, SSH_PRIVATE_KEY_ENCRYPTED)
+            target = duplicate ?: profiles.firstOrNull { profile ->
+                protectedFields.all { prefs[getProfileKey(it, profile)].isNullOrBlank() }
+            } ?: error("Нет свободного профиля. Существующие профили сохранены")
+            if (duplicate == null) {
+                created = true
+                prefs[getProfileKey(CSQTT_LINK, target)] = normalized
+                prefs[getProfileKey(CSQTT_LINK_MODE, target)] = true
+                prefs[getProfileKey(PEER, target)] = link.host
+                prefs[getProfileKey(SERVER_PEER_PORT, target)] = link.port
+                prefs[getProfileKey(MANUAL_PORTS_ENABLED, target)] = true
+                prefs[getProfileKey(CONNECTION_PASSWORD_LOCAL, target)] = link.password
+                prefs[getProfileKey(VK_HASHES, target)] = link.hashes.joinToString(",")
+                prefs[getProfileKey(PROFILE_NAME, target)] = link.host
+            }
+            if (activate) prefs[ACTIVE_PROFILE] = target
+        }
+        if (created) {
+            liveRuntimeSettings?.put("extraWorkers.$target", "false")
+            liveRuntimeSettings?.put("gooby.$target", "off")
+        }
+        return target
     }
 
     suspend fun saveParticipantShowLogs(show: Boolean) {
