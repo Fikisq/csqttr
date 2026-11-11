@@ -10,6 +10,7 @@ mod dns;
 #[path = "../shared/dtls.rs"]
 pub mod dtls;
 mod events;
+mod gooby;
 mod logging;
 mod namegen;
 mod obfs;
@@ -111,6 +112,11 @@ struct Arguments {
     obfs: String,
     #[arg(long, default_value = "udp")]
     turn_transport: String,
+    /// Start the embedded Gooby runtime for TURN TCP/TLS.
+    #[arg(long)]
+    gooby: bool,
+    #[arg(long, requires = "gooby")]
+    gooby_strategy: Option<csqtt_gooby::Preset>,
     #[arg(long, default_value = "auto")]
     srtp_mode: String,
     #[arg(long = "gen", default_value_t = 0)]
@@ -240,11 +246,41 @@ async fn run(arguments: Arguments) -> Result<i32> {
     if password.is_empty() {
         bail!("[КЛИЕНТ] Нужен пароль в переменной CSQTT_PASSWORD");
     }
+    let turn_transport = TurnTransportMode::parse(&arguments.turn_transport)?;
+    if arguments.gooby && turn_transport != TurnTransportMode::TcpTls {
+        bail!("[КЛИЕНТ] Встроенный Gooby требует TCP/TLS");
+    }
     let mut stdin = spawn_stdin_reader();
     let peer = resolve_peer(&arguments.peer).await?;
     let mode = ObfsMode::parse(&arguments.obfs)?;
-    let turn_transport = TurnTransportMode::parse(&arguments.turn_transport)?;
     let srtp_mode = SrtpMode::parse(&arguments.srtp_mode)?;
+    let embedded_gooby = if arguments.gooby {
+        let preset = arguments.gooby_strategy.unwrap_or_default();
+        let name = preset.name();
+        let bundle = csqtt_gooby::ConfigBundle::builtin_turn()?.with_preset(preset);
+        let runtime = csqtt_gooby::Runtime::start_with_observer(
+            bundle,
+            true,
+            Some(Arc::new(move |event| {
+                let message = match event {
+                    csqtt_gooby::StrategyEvent::TurnAllocateSplit => "TURN/TCP: разделение Allocate применено",
+                    csqtt_gooby::StrategyEvent::TlsClientHelloSplit => "TLS: разделение ClientHello применено",
+                    csqtt_gooby::StrategyEvent::Passthrough => "Начальные данные переданы без обработки",
+                };
+                crate::log_error!("[GOOBY] {message}; стратегия={name}");
+            })),
+        )
+        .await
+        .context("запуск встроенного Gooby")?;
+        crate::log_error!("[GOOBY] Встроенный Gooby запущен; стратегия={name}");
+        Some(runtime)
+    } else {
+        None
+    };
+    let gooby_proxy = embedded_gooby
+        .as_ref()
+        .map(|runtime| runtime.address().to_string().parse())
+        .transpose()?;
     let wrap_key = derive_wrap_key(&password)?;
     let client_wrap_key = wrap_key;
     let session_profile = profiles::random_profile(&arguments.fingerprint);
@@ -367,6 +403,7 @@ async fn run(arguments: Arguments) -> Result<i32> {
         turn_port: (!arguments.port.is_empty()).then(|| Arc::from(arguments.port.as_str())),
         turn_ip_pool,
         turn_transport,
+        gooby_proxy,
         srtp_mode,
         hashes: hashes.into(),
         wrap_key,
@@ -497,6 +534,9 @@ async fn run(arguments: Arguments) -> Result<i32> {
         }
     }
     let termination = dispatcher.termination();
+    if let Some(runtime) = embedded_gooby {
+        runtime.shutdown().await;
+    }
     shutdown_events.stopped();
     crate::log_error!("[КЛИЕНТ] Все воркеры завершены");
     match termination {

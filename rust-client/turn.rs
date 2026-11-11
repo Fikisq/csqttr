@@ -210,6 +210,7 @@ pub struct TurnConnectTarget<'a> {
     pub override_host: Option<&'a str>,
     pub override_port: Option<&'a str>,
     pub transport_mode: TurnTransportMode,
+    pub gooby_proxy: Option<crate::gooby::GoobyProxy>,
 }
 
 #[derive(Clone)]
@@ -350,7 +351,8 @@ impl TurnAllocation {
             target.override_port,
             target.transport_mode,
         )?;
-        let (outbound, inbound, server, transport) = connect_transport(&endpoints).await?;
+        let (outbound, inbound, server, transport) =
+            connect_transport(&endpoints, target.gooby_proxy).await?;
         crate::log_error!("[TURN] Транспорт: {}", transport.as_str());
         let control_transport = if transport == TurnWireTransport::Udp {
             TurnControlTransport::Datagram
@@ -764,12 +766,22 @@ impl Drop for TurnAllocation {
 
 async fn connect_transport(
     endpoints: &[TurnEndpoint],
+    gooby_proxy: Option<crate::gooby::GoobyProxy>,
 ) -> Result<(TurnOutbound, TurnInbound, SocketAddr, TurnWireTransport)> {
+    if gooby_proxy.is_some()
+        && endpoints.iter().any(|endpoint| endpoint.transport == TurnWireTransport::Udp)
+    {
+        bail!("Gooby requires TURN TCP/TLS");
+    }
     let mut failures = Vec::with_capacity(endpoints.len());
     for endpoint in endpoints {
         let authority = endpoint.socket_authority();
         let attempt = match tokio::time::timeout(TRANSPORT_CONNECT_TIMEOUT, async {
-            let server = dns::resolve_socket(&authority).await?;
+            // Gooby resolves the original TURN host. This address only tags stream output.
+            let server = match gooby_proxy {
+                Some(proxy) => proxy.address(),
+                None => dns::resolve_socket(&authority).await?,
+            };
             match endpoint.transport {
                 TurnWireTransport::Udp => {
                     let bind = if server.is_ipv4() {
@@ -792,7 +804,7 @@ async fn connect_transport(
                 }
                 TurnWireTransport::Tcp | TurnWireTransport::Tls => {
                     let (writer, reader, write_failure) =
-                        turn_stream::connect(endpoint, server).await?;
+                        turn_stream::connect(endpoint, server, gooby_proxy).await?;
                     Ok((
                         TurnOutbound::Stream(writer),
                         TurnInbound::Stream(reader, write_failure),

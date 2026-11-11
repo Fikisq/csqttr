@@ -52,12 +52,18 @@ pub enum TurnStreamFrame {
 pub async fn connect(
     endpoint: &TurnEndpoint,
     server: SocketAddr,
+    gooby_proxy: Option<crate::gooby::GoobyProxy>,
 ) -> Result<(
     Arc<TurnStreamWriter>,
     TurnStreamReader,
     TurnStreamWriteFailure,
 )> {
-    let socket = timeout(STREAM_CONNECT_TIMEOUT, TcpStream::connect(server))
+    let socket = timeout(STREAM_CONNECT_TIMEOUT, async {
+        match gooby_proxy {
+            Some(proxy) => crate::gooby::connect(proxy, &endpoint.host, endpoint.port).await,
+            None => Ok(TcpStream::connect(server).await?),
+        }
+    })
         .await
         .context("TURN TCP connect timed out")?
         .with_context(|| format!("TURN {} connect {server}", endpoint.transport.as_str()))?;

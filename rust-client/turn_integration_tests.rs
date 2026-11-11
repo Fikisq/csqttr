@@ -382,6 +382,7 @@ async fn connect(
                 override_host: None,
                 override_port: None,
                 transport_mode: TurnTransportMode::Udp,
+                gooby_proxy: None,
             },
             Arc::from(USERNAME),
             Arc::from(PASSWORD),
@@ -396,6 +397,23 @@ async fn connect(
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn tcp_turn_transport_allocates_without_udp_fallback() {
+    check_tcp_turn_transport(None).await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn tcp_turn_allocation_and_data_work_with_all_gooby_presets() {
+    use csqtt_gooby::{ConfigBundle, Preset, Runtime};
+
+    for preset in [Preset::Gentle, Preset::Current, Preset::Extended] {
+        let bundle = ConfigBundle::builtin_turn().unwrap().with_preset(preset);
+        let runtime = Runtime::start(bundle, true).await.unwrap();
+        check_tcp_turn_transport(Some(runtime.address().to_string().parse().unwrap())).await;
+        assert_eq!(runtime.stats().turn_allocate_requests, 1, "{preset:?}");
+        runtime.shutdown().await;
+    }
+}
+
+async fn check_tcp_turn_transport(gooby_proxy: Option<crate::gooby::GoobyProxy>) {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let server_address = listener.local_addr().unwrap();
     let relay: SocketAddr = "127.0.0.1:49009".parse().unwrap();
@@ -453,6 +471,7 @@ async fn tcp_turn_transport_allocates_without_udp_fallback() {
             override_host: None,
             override_port: None,
             transport_mode: TurnTransportMode::TcpTls,
+            gooby_proxy,
         },
         Arc::from(USERNAME),
         Arc::from(PASSWORD),
@@ -738,6 +757,7 @@ async fn final_allocate_errors_preserve_stun_codes() {
                     override_host: None,
                     override_port: None,
                     transport_mode: TurnTransportMode::Udp,
+                    gooby_proxy: None,
                 },
                 Arc::from(USERNAME),
                 Arc::from(PASSWORD),
@@ -913,6 +933,7 @@ async fn cancelled_connect_deallocates_server_allocation_after_late_success() {
                 override_host: None,
                 override_port: None,
                 transport_mode: TurnTransportMode::Udp,
+                gooby_proxy: None,
             },
             Arc::from(USERNAME),
             Arc::from(PASSWORD),
@@ -1579,6 +1600,7 @@ async fn windows_client_reaches_wsl_server_through_a_real_turn_channel_and_dispa
             turn_host: None,
             turn_port: None,
             turn_transport: TurnTransportMode::Udp,
+            gooby_proxy: None,
             srtp_mode: SrtpMode::Auto,
             local_port: Arc::from(local_port),
             password: password.clone(),
@@ -1754,6 +1776,7 @@ async fn windows_client_reaches_wsl_server_over_dtls_srtp() {
             turn_host: None,
             turn_port: None,
             turn_transport: TurnTransportMode::Udp,
+            gooby_proxy: None,
             srtp_mode: SrtpMode::Dtls,
             local_port: Arc::from(local_port),
             password: password.clone(),
@@ -1933,6 +1956,7 @@ async fn getconf_timeout_recovers_without_terminating_the_tunnel() {
             turn_host: None,
             turn_port: None,
             turn_transport: TurnTransportMode::Udp,
+            gooby_proxy: None,
             srtp_mode: SrtpMode::Auto,
             local_port: Arc::from(local_port.clone()),
             password: password.clone(),
@@ -2007,6 +2031,7 @@ async fn getconf_timeout_recovers_without_terminating_the_tunnel() {
             turn_host: None,
             turn_port: None,
             turn_transport: TurnTransportMode::Udp,
+            gooby_proxy: None,
             srtp_mode: SrtpMode::Auto,
             local_port: Arc::from(local_port),
             password: password.clone(),
@@ -2121,6 +2146,7 @@ async fn running_client_receives_hot_dns_configuration_without_reconnect() {
             turn_host: None,
             turn_port: None,
             turn_transport: TurnTransportMode::Udp,
+            gooby_proxy: None,
             srtp_mode: SrtpMode::Auto,
             local_port: Arc::from(local_port),
             password: password.clone(),
@@ -2315,6 +2341,7 @@ async fn nine_windows_workers_register_with_a_wsl_server_without_missing_or_dupl
                 turn_host: None,
                 turn_port: None,
                 turn_transport: TurnTransportMode::Udp,
+                gooby_proxy: None,
                 srtp_mode: SrtpMode::Auto,
                 local_port: Arc::from(local_port.clone()),
                 password: password.clone(),
@@ -2772,6 +2799,7 @@ async fn linux_workers_hold_per_stream_rate_through_server_dataplane() {
                 turn_host: None,
                 turn_port: None,
                 turn_transport: TurnTransportMode::Udp,
+                gooby_proxy: None,
                 srtp_mode: SrtpMode::Auto,
                 local_port: Arc::from("0"),
                 password: password.clone(),
@@ -3023,6 +3051,7 @@ async fn assert_fatal_auth_case(wrap_pwd: &str, session_pwd: &str, expected_need
             turn_host: None,
             turn_port: None,
             turn_transport: TurnTransportMode::Udp,
+            gooby_proxy: None,
             srtp_mode: SrtpMode::Auto,
             local_port: Arc::from(local_port),
             password: Arc::from(session_pwd),
@@ -3174,6 +3203,7 @@ async fn streams_partial_death_keeps_tunnel_and_dataplane_alive() {
                 turn_host: None,
                 turn_port: None,
                 turn_transport: TurnTransportMode::Udp,
+                gooby_proxy: None,
                 srtp_mode: SrtpMode::Auto,
                 local_port: Arc::from(local_port.clone()),
                 password: password.clone(),
