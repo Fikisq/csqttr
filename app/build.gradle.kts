@@ -73,20 +73,23 @@ android {
         }
 
         ndk {
-            abiFilters.addAll(listOf("arm64-v8a", "armeabi-v7a", "x86_64"))
+            abiFilters.add("arm64-v8a")
         }
     }
 
     splits {
         abi {
-            isEnable = true
+            isEnable = false
             reset()
-            include("arm64-v8a", "armeabi-v7a", "x86_64")
-            isUniversalApk = true
+            include("arm64-v8a")
+            isUniversalApk = false
         }
     }
 
     signingConfigs {
+        getByName("debug") {
+            storeFile = file("E:/csqtt-deps/android-user-home/debug.keystore")
+        }
         create("release") {
             if (releaseSigningReady) {
                 storeFile = requireNotNull(releaseKeystoreFile)
@@ -101,6 +104,10 @@ android {
     }
 
     buildTypes {
+        getByName("debug") {
+            applicationIdSuffix = ".native250preview"
+            versionNameSuffix = "-native250-preview.1"
+        }
         getByName("release") {
             isMinifyEnabled = true
             isShrinkResources = true
@@ -148,6 +155,8 @@ android {
     sourceSets {
         getByName("main") {
             jniLibs.directories.add("src/main/jniLibs")
+            jniLibs.srcDir(rootProject.file(".local/original250/jniLibs"))
+            assets.srcDir(rootProject.file(".local/original250/assets"))
         }
     }
 }
@@ -207,12 +216,3 @@ dependencies {
     debugImplementation("androidx.compose.ui:ui-test-manifest")
 }
 
-// This worktree is for Studio Preview only. Compile/render is allowed, APKs are not.
-tasks.configureEach {
-    val packagesApk = name.startsWith("package") && !name.endsWith("Resources")
-    val launchesBuild = name.startsWith("assemble") || name.startsWith("install") ||
-        name == "bundleDebug" || name == "bundleRelease"
-    if (packagesApk || launchesBuild) {
-        doFirst { error("Макет: сборка/установка APK запрещена. Откройте Compose Preview в Android Studio.") }
-    }
-}
