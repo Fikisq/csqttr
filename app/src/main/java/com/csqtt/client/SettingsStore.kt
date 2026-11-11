@@ -291,46 +291,6 @@ class SettingsStore(
     val batterySaverPercent = runtimeValues.map { it.value("battery.percent", "30").toIntOrNull()?.coerceIn(1, 100) ?: 30 }
     private val secureStore = SecureStringStore(appContext)
 
-    init {
-        if (previewDataStore == null && migrationsStarted.compareAndSet(false, true)) {
-            CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
-                ensureNative250RuntimeSettings()
-                migrateConnectionPasswordsToLocalStorage()
-                migrateSecretsToKeystore()
-                migrateLegacyWhitelistMode()
-            }
-        }
-        if (previewDataStore == null && uiCacheStarted.compareAndSet(false, true)) {
-            CoroutineScope(SupervisorJob() + Dispatchers.Default).launch {
-                launch { vkHashMode.collect { cachedVkHashMode = it } }
-                launch { vkAccessToken.collect { cachedVkAccessToken = it } }
-                launch { obfsMode.collect { cachedObfsMode = it } }
-                launch { turnTransport.collect { cachedTurnTransport = it } }
-                launch { srtpMode.collect { cachedSrtpMode = it } }
-                launch { csqttLinkMode.collect { cachedCsqttLinkMode = it } }
-                launch { workersPerHash.collect { cachedWorkersPerHash = it } }
-                launch { manualPortsEnabled.collect { cachedManualPortsEnabled = it } }
-                launch { serverPeerPort.collect { cachedServerPeerPort = it } }
-                launch { extraWorkers.collect { cachedExtraWorkers = it } }
-                launch { customTurnIps.collect { cachedCustomTurnIps = it } }
-                launch { excludedApps.collect { cachedExcludedApps = it } }
-                launch { whitelistApps.collect { cachedWhitelistApps = it } }
-                launch { isWhitelist.collect { cachedIsWhitelist = it } }
-                launch { domainRoutingEnabled.collect { cachedDomainRoutingEnabled = it } }
-                launch { domainIsWhitelist.collect { cachedDomainIsWhitelist = it } }
-                launch { excludeRuZonesEnabled.collect { cachedExcludeRuZonesEnabled = it } }
-                launch { templateDomainsEnabled.collect { cachedTemplateDomainsEnabled = it } }
-                launch { directDomains.collect { cachedDirectDomains = it } }
-                launch { directDomainsBlack.collect { cachedDirectDomainsBlack = it } }
-                launch { directDomainsWhite.collect { cachedDirectDomainsWhite = it } }
-                launch { ipRoutingEnabled.collect { cachedIpRoutingEnabled = it } }
-                launch { ipIsWhitelist.collect { cachedIpIsWhitelist = it } }
-                launch { directIpsBlack.collect { cachedDirectIpsBlack = it } }
-                launch { directIpsWhite.collect { cachedDirectIpsWhite = it } }
-            }
-        }
-    }
-
     val activeProfile: Flow<Int> = dataStore.data.map {
         (it[ACTIVE_PROFILE] ?: CsqttConstants.Profiles.MIN_INDEX).coerceIn(
             CsqttConstants.Profiles.MIN_INDEX,
@@ -719,6 +679,48 @@ class SettingsStore(
     val updateCheckIntervalHours: Flow<Int> = dataStore.data.map { it[UPDATE_CHECK_INTERVAL_HOURS] ?: 24 }
     val updatePostponeUntil: Flow<Long> = dataStore.data.map { it[UPDATE_POSTPONE_UNTIL] ?: 0L }
     val updatePostponeVersion: Flow<String> = dataStore.data.map { it[UPDATE_POSTPONE_VERSION] ?: "" }
+
+    // Launch collectors only after every Flow property has been constructed.
+    init {
+        if (previewDataStore == null && migrationsStarted.compareAndSet(false, true)) {
+            CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
+                ensureNative250RuntimeSettings()
+                migrateConnectionPasswordsToLocalStorage()
+                migrateSecretsToKeystore()
+                migrateLegacyWhitelistMode()
+            }
+        }
+        if (previewDataStore == null && uiCacheStarted.compareAndSet(false, true)) {
+            CoroutineScope(SupervisorJob() + Dispatchers.Default).launch {
+                launch { vkHashMode.collect { cachedVkHashMode = it } }
+                launch { vkAccessToken.collect { cachedVkAccessToken = it } }
+                launch { obfsMode.collect { cachedObfsMode = it } }
+                launch { turnTransport.collect { cachedTurnTransport = it } }
+                launch { srtpMode.collect { cachedSrtpMode = it } }
+                launch { csqttLinkMode.collect { cachedCsqttLinkMode = it } }
+                launch { workersPerHash.collect { cachedWorkersPerHash = it } }
+                launch { manualPortsEnabled.collect { cachedManualPortsEnabled = it } }
+                launch { serverPeerPort.collect { cachedServerPeerPort = it } }
+                launch { extraWorkers.collect { cachedExtraWorkers = it } }
+                launch { customTurnIps.collect { cachedCustomTurnIps = it } }
+                launch { excludedApps.collect { cachedExcludedApps = it } }
+                launch { whitelistApps.collect { cachedWhitelistApps = it } }
+                launch { isWhitelist.collect { cachedIsWhitelist = it } }
+                launch { domainRoutingEnabled.collect { cachedDomainRoutingEnabled = it } }
+                launch { domainIsWhitelist.collect { cachedDomainIsWhitelist = it } }
+                launch { excludeRuZonesEnabled.collect { cachedExcludeRuZonesEnabled = it } }
+                launch { templateDomainsEnabled.collect { cachedTemplateDomainsEnabled = it } }
+                launch { directDomains.collect { cachedDirectDomains = it } }
+                launch { directDomainsBlack.collect { cachedDirectDomainsBlack = it } }
+                launch { directDomainsWhite.collect { cachedDirectDomainsWhite = it } }
+                launch { ipRoutingEnabled.collect { cachedIpRoutingEnabled = it } }
+                launch { ipIsWhitelist.collect { cachedIpIsWhitelist = it } }
+                launch { directIpsBlack.collect { cachedDirectIpsBlack = it } }
+                launch { directIpsWhite.collect { cachedDirectIpsWhite = it } }
+            }
+        }
+    }
+
 
     suspend fun saveTunnelWasRunning(running: Boolean) {
         dataStore.edit { prefs ->
