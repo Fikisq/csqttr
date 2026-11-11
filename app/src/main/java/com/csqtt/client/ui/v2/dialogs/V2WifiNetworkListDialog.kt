@@ -47,6 +47,7 @@ fun V2WifiNetworkListDialog(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val autoPauseOnWifi by settingsStore.autoPauseOnWifi.collectAsStateWithLifecycle(false)
     val storedMode by settingsStore.wifiNetworkListMode.collectAsStateWithLifecycle(
         initialValue = WifiNetworkListMode.WHITELIST.storedValue,
     )
@@ -79,11 +80,16 @@ fun V2WifiNetworkListDialog(
     }
 
     V2DialogContainer(
-        title = "Wi-Fi списки",
+        title = "Автопауза Wi-Fi",
         subtitle = "Правила автопаузы по имени сети",
         icon = Icons.Default.Wifi,
         onDismiss = onDismiss,
     ) {
+        com.csqtt.client.ui.v2.components.V2SwitchSetting(
+            title = "Автопауза при Wi-Fi",
+            checked = autoPauseOnWifi,
+            onCheckedChange = { enabled -> scope.launch { settingsStore.saveAutoPauseOnWifi(enabled) } },
+        )
         Text(
             text = "Работает, когда включена «Автопауза при Wi-Fi». В белом списке VPN работает только в указанных сетях; в чёрном — отключается только в указанных сетях.",
             style = MaterialTheme.typography.bodyMedium.copy(

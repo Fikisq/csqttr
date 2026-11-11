@@ -12,6 +12,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.unit.sp
 import com.csqtt.client.ui.v2.design.V2Theme
+import com.csqtt.client.ui.v2.design.V2Sizes
+import com.csqtt.client.ui.v2.design.V2TextSizes
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.csqtt.client.SettingsStore
 import com.csqtt.client.BatterySaver
@@ -30,8 +32,6 @@ fun HappSettingsScreen(
     val owner by settingsStore.uiOwnerMode.collectAsStateWithLifecycle(false)
     val extra by settingsStore.extraWorkers.collectAsStateWithLifecycle(false)
     val wifi by settingsStore.autoPauseOnWifi.collectAsStateWithLifecycle(false)
-    val wifiMode by settingsStore.wifiNetworkListMode.collectAsStateWithLifecycle("whitelist")
-    val wifiSsids by settingsStore.wifiNetworkListSsids.collectAsStateWithLifecycle("")
     val logs by settingsStore.loggingEnabled.collectAsStateWithLifecycle(true)
     val showLogs by settingsStore.participantShowLogs.collectAsStateWithLifecycle(false)
     val profile by settingsStore.activeProfile.collectAsStateWithLifecycle(0)
@@ -45,9 +45,12 @@ fun HappSettingsScreen(
     var transfer by remember { mutableStateOf(false) }
     var wifiLists by remember { mutableStateOf(false) }
     var logsHelp by remember { mutableStateOf(false) }
-    Column(Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
+    var extraHelp by remember { mutableStateOf(false) }
+    V2AdaptiveScreen(Modifier.fillMaxSize().padding(horizontal = V2Sizes.ScreenPadding)) {
+        val layout = LocalV2AdaptiveMetrics.current
         V2TopBar(title = "Настройки", onBack = onBack)
-        Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(bottom = layout.gap),
+            verticalArrangement = Arrangement.spacedBy(layout.gap)) {
             V2Card {
                 Text("CSQTTR", style = MaterialTheme.typography.titleLarge)
                 Text(version, style = MaterialTheme.typography.bodySmall)
@@ -60,21 +63,20 @@ fun HappSettingsScreen(
                         Surface(onClick = { scope.launch { settingsStore.saveUiOwnerMode(value) } }, modifier = Modifier.weight(1f),
                             shape = RoundedCornerShape(14.dp), color = if(owner == value) V2Theme.colors.accentSoft else V2Theme.colors.field) {
                             Box(Modifier.padding(vertical = 12.dp), contentAlignment = Alignment.Center) {
-                                Text(label, fontSize = 14.sp, color = if(owner == value) V2Theme.colors.accent else V2Theme.colors.textSecondary)
+                                Text(label, fontSize = V2TextSizes.Action, color = if(owner == value) V2Theme.colors.accent else V2Theme.colors.textSecondary)
                             }
                         }
                     }
                 }
             }
             V2Card(contentPadding = PaddingValues(12.dp)) {
-                if (authMode != "auto_js") V2SwitchSetting("Экстра потоки", extra, { scope.launch { settingsStore.saveExtraWorkers(it, forProfile = profile) } }, enabled = !running)
-                V2SwitchSetting("Автопауза Wi-Fi", wifi, { scope.launch { settingsStore.saveAutoPauseOnWifi(it) } })
-                HappActionRow(
-                    "Wi-Fi списки",
-                    detail = "${if (wifiMode == "blacklist") "Чёрный" else "Белый"} · ${com.csqtt.client.decodeWifiSsids(wifiSsids).size}",
-                    onClick = { wifiLists = true },
-                    compact = true,
-                )
+                V2SwitchSetting("Экстра потоки", extra, { scope.launch { settingsStore.saveExtraWorkers(it, forProfile = profile) } },
+                    enabled = !running && authMode != "auto_js", onInfoClick = { extraHelp = true })
+                V2SettingRow(title = "Автопауза Wi-Fi", onClick = { wifiLists = true }) {
+                    Text(if (wifi) "Включена" else "Выключена", color = V2Theme.colors.textSecondary,
+                        fontSize = V2TextSizes.Secondary, maxLines = 1)
+                    Text("›", color = V2Theme.colors.textSecondary, fontSize = 22.sp)
+                }
                 V2SwitchSetting("Ведение логов", logs, { value ->
                     com.csqtt.client.TunnelManager.isLoggingEnabled = value
                     scope.launch { settingsStore.saveLoggingEnabled(value) }
@@ -105,6 +107,7 @@ fun HappSettingsScreen(
             }
         }
     }
+    if (extraHelp) com.csqtt.client.ui.v2.dialogs.V2ExtraWorkersInfoDialog { extraHelp = false }
     if (transfer) V2ImportExportDialog(settingsStore, { transfer = false })
     if (wifiLists) V2WifiNetworkListDialog(settingsStore, { wifiLists = false })
     if (logsHelp) AlertDialog(onDismissRequest = { logsHelp = false },
