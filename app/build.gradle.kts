@@ -7,6 +7,7 @@ plugins {
 
 val localProperties = Properties()
 val localPropertiesFile = rootProject.file("local.properties")
+val native250UpdateExisting = providers.gradleProperty("native250UpdateExisting").orNull == "true"
 if (localPropertiesFile.isFile) {
     localPropertiesFile.inputStream().use { input -> localProperties.load(input) }
 }
@@ -64,7 +65,7 @@ android {
         applicationId = "csqtt.quic.amurcanov"
         minSdk = 26
         targetSdk = 37
-        versionCode = 231
+        versionCode = if (native250UpdateExisting) 251 else 231
         versionName = "2.5.3"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
@@ -105,7 +106,7 @@ android {
 
     buildTypes {
         getByName("debug") {
-            applicationIdSuffix = ".native250preview"
+            applicationIdSuffix = if (native250UpdateExisting) ".happdebug" else ".native250preview"
             versionNameSuffix = "-classic250.1"
         }
         getByName("release") {
