@@ -464,7 +464,7 @@ fun ExceptionsTab(
                         overflow = TextOverflow.Ellipsis,
                     )
                     Text(
-                        text = if (appRoutingAll == true) { "Все приложения в туннеле" } else if (isWhitelist) {
+                        text = if (appRoutingAll ?: (!isWhitelist && persistedBlacklist.isEmpty())) { "Все приложения в туннеле" } else if (isWhitelist) {
                             "С VPN: ${whitelistSelection.size} в туннеле"
                         } else {
                             "Без VPN: ${blacklistSelection.size} исключено"
