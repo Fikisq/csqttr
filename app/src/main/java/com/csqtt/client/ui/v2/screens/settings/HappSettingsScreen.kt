@@ -85,7 +85,8 @@ fun HappSettingsScreen(
             }
             V2Card(contentPadding = PaddingValues(12.dp)) {
                 val classicDesignLabel = stringResource(R.string.design_classic_csqtt_250)
-                HappChoice("Дизайн", if (design == "classic") classicDesignLabel else "Новый", listOf("Новый", classicDesignLabel), {
+                val v2DesignLabel = stringResource(R.string.design_csqttr_253)
+                HappChoice("Дизайн", if (design == "classic") classicDesignLabel else v2DesignLabel, listOf(v2DesignLabel, classicDesignLabel), {
                     scope.launch { settingsStore.saveUiDesign(if (it == classicDesignLabel) "classic" else "v2") }
                 })
                 HappChoice("Оформление", when(theme) { "light" -> "Светлое"; "dark" -> "Тёмное"; else -> "Системное" }, listOf("Тёмное", "Светлое", "Системное"), { scope.launch { settingsStore.saveThemeMode(when(it) { "Тёмное" -> "dark"; "Светлое" -> "light"; else -> "system" }) } })

@@ -863,10 +863,11 @@ fun V2SettingsScreen(
             )
 
             val classicDesignLabel = stringResource(R.string.design_classic_csqtt_250)
+            val v2DesignLabel = stringResource(R.string.design_csqttr_253)
             V2DropdownSetting(
                 title = "Дизайн",
-                value = "Новый",
-                options = listOf(classicDesignLabel, "Новый"),
+                value = v2DesignLabel,
+                options = listOf(v2DesignLabel, classicDesignLabel),
                 onSelected = { label ->
                     if (label == classicDesignLabel) {
                         scope.launch { settingsStore.saveUiDesign(CsqttConstants.Theme.DESIGN_CLASSIC) }
