@@ -103,6 +103,7 @@ internal fun SettingsTabContent(
     }
     val savedWorkersPerHash by workersPerHash
         .collectAsStateWithLifecycle(initialValue = SettingsStore.cachedWorkersPerHash)
+    val extraWorkers by settingsStore.extraWorkers.collectAsStateWithLifecycle(initialValue = false)
 
     val activeProfile = tunnelAuthSettings.profile
     val csqttLinkMode = tunnelAuthSettings.csqttLinkMode
@@ -235,7 +236,7 @@ internal fun SettingsTabContent(
     val combinedHashes = remember(vkHash1, vkHash2, vkHash3, vkHash4, vkHash5, vkHash6) {
         allHashes.filter { it.isNotBlank() && it.length >= 16 }.distinct().joinToString(",")
     }
-    val selectableMaxWorkers = CsqttConstants.Tunnel.MAX_WORKERS.toFloat()
+    val selectableMaxWorkers = WorkerCountPolicy.defaultMaximum(extraWorkers && !accountAutoJsMode).toFloat()
     var sniInput by rememberSaveable { mutableStateOf("") }
 
     val currentWorkers = roundToGroup(

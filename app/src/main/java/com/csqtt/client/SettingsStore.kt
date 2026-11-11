@@ -278,6 +278,8 @@ class SettingsStore(
     }
 
     private val dataStore = previewDataStore ?: appContext.dataStore
+    private val runtimeValues = if (previewDataStore == null) Native250RuntimeSettings(appContext).changes
+        else kotlinx.coroutines.flow.flowOf(Native250RuntimeConfig(emptyMap()))
     private val secureStore = SecureStringStore(appContext)
 
     init {
@@ -306,7 +308,7 @@ class SettingsStore(
                 launch { workersPerHash.collect { cachedWorkersPerHash = it } }
                 launch { manualPortsEnabled.collect { cachedManualPortsEnabled = it } }
                 launch { serverPeerPort.collect { cachedServerPeerPort = it } }
-                cachedExtraWorkers = false
+                launch { extraWorkers.collect { cachedExtraWorkers = it } }
                 launch { customTurnIps.collect { cachedCustomTurnIps = it } }
                 launch { excludedApps.collect { cachedExcludedApps = it } }
                 launch { whitelistApps.collect { cachedWhitelistApps = it } }
@@ -364,10 +366,11 @@ class SettingsStore(
         val profile = prefs[ACTIVE_PROFILE] ?: 0
         prefs[getProfileKey(SECONDARY_VK_HASH, profile)] ?: ""
     }
-    val workersPerHash: Flow<Int> = dataStore.data.map { prefs ->
+    val workersPerHash: Flow<Int> = kotlinx.coroutines.flow.combine(dataStore.data, runtimeValues) { prefs, runtime ->
         val profile = prefs[ACTIVE_PROFILE] ?: 0
-        val isExtra = prefs[getProfileKey(EXTRA_WORKERS, profile)] ?: false
-        val max = WorkerCountPolicy.defaultMaximum(isExtra)
+        val autoVk = prefs[getProfileKey(VK_AUTH_MODE, profile)] == CsqttConstants.VkAuth.MODE_AUTO_JS ||
+            prefs[getProfileKey(VK_HASH_MODE, profile)] == CsqttConstants.VkAutoHash.MODE_AUTO_JS
+        val max = WorkerCountPolicy.maximumForProfile(runtime, profile, autoVk)
         val current = prefs[getProfileKey(WORKERS_PER_HASH, profile)] ?: 18
         WorkerCountPolicy.normalize(current, maximum = max)
     }
@@ -650,7 +653,12 @@ class SettingsStore(
         }
     }
 
-    val extraWorkers: Flow<Boolean> = kotlinx.coroutines.flow.flowOf(false)
+    val extraWorkers: Flow<Boolean> = kotlinx.coroutines.flow.combine(dataStore.data, runtimeValues) { prefs, runtime ->
+        val profile = prefs[ACTIVE_PROFILE] ?: 0
+        runtime.flag("extraWorkers.$profile") &&
+            prefs[getProfileKey(VK_AUTH_MODE, profile)] != CsqttConstants.VkAuth.MODE_AUTO_JS &&
+            prefs[getProfileKey(VK_HASH_MODE, profile)] != CsqttConstants.VkAutoHash.MODE_AUTO_JS
+    }
     val autoJsRiskAcknowledged: Flow<Boolean> = dataStore.data.map { prefs ->
         prefs[AUTO_JS_RISK_ACKNOWLEDGED] ?: false
     }

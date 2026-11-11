@@ -5,6 +5,16 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class WorkerCountPolicyTest {
+    @Test fun extraWorkersSettingChangesAdmissionWithoutLeakingAcrossProfilesOrAutoVk() {
+        val config = Native250RuntimeConfig(mapOf("extraWorkers.0" to "true", "extraWorkers.1" to "false"))
+        assertEquals(100, WorkerCountPolicy.maximumForProfile(config, 0, false))
+        for ((profile, autoVk) in listOf(0 to true, 1 to false, 2 to false)) {
+            val maximum = WorkerCountPolicy.maximumForProfile(config, profile, autoVk)
+            assertEquals(70, maximum)
+            assertEquals(70, WorkerCountPolicy.normalize(Int.MAX_VALUE, maximum))
+        }
+        assertEquals(70, WorkerCountPolicy.maximumForProfile(Native250RuntimeConfig(mapOf("extraWorkers.0" to "invalid")), 0, false))
+    }
 
     @Test
     fun everySupportedTotalRemainsAnExactMultipleOfFive() {

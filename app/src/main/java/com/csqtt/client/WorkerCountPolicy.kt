@@ -1,6 +1,8 @@
 package com.csqtt.client
 
 internal object WorkerCountPolicy {
+    fun maximumForProfile(config: Native250RuntimeConfig, profile: Int, autoVk: Boolean): Int =
+        defaultMaximum(config.flag("extraWorkers.$profile") && !autoVk)
     fun normalize(
         requested: Int,
         maximum: Int = CsqttConstants.Tunnel.MAX_WORKERS,
@@ -27,7 +29,8 @@ internal object WorkerCountPolicy {
         manualHashCount: Int,
     ): Int = CsqttConstants.Tunnel.MAX_WORKERS
 
-    fun defaultMaximum(extraWorkers: Boolean = false): Int = CsqttConstants.Tunnel.MAX_WORKERS
+    fun defaultMaximum(extraWorkers: Boolean = false): Int =
+        if (extraWorkers) CsqttConstants.Tunnel.MAX_WORKERS else 70
 
     fun normalizeForHashes(requested: Int, hashCount: Int): Int =
         normalize(requested, maximumForHashes(hashCount))

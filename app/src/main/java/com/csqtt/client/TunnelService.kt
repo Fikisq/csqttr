@@ -179,7 +179,7 @@ class TunnelService : Service() {
                             else -> requestedVkAuthMode
                         }
                         val accountAutoJs = vkAuthMode == CsqttConstants.VkAuth.MODE_AUTO_JS
-                        val maxWorkers = CsqttConstants.Tunnel.MAX_WORKERS
+                        val maxWorkers = WorkerCountPolicy.defaultMaximum(store.extraWorkers.first() && !accountAutoJs)
                         val workersPerHash = WorkerCountPolicy.normalize(requestedWorkers, maximum = maxWorkers)
                         TunnelManager.isLoggingEnabled = store.loggingEnabled.first()
                         if (accountAutoJs) {
