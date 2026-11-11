@@ -290,6 +290,7 @@ class SettingsStore(
     init {
         if (previewDataStore == null && migrationsStarted.compareAndSet(false, true)) {
             CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
+                ensureNative250RuntimeSettings()
                 migrateConnectionPasswordsToLocalStorage()
                 migrateSecretsToKeystore()
                 migrateLegacyWhitelistMode()
@@ -297,13 +298,6 @@ class SettingsStore(
         }
         if (previewDataStore == null && uiCacheStarted.compareAndSet(false, true)) {
             CoroutineScope(SupervisorJob() + Dispatchers.Default).launch {
-                launch {
-                    dataStore.edit { prefs ->
-                        for (p in CsqttConstants.Profiles.MIN_INDEX..CsqttConstants.Profiles.MAX_INDEX) {
-                            prefs[getProfileKey(EXTRA_WORKERS, p)] = false
-                        }
-                    }
-                }
                 launch { vkHashMode.collect { cachedVkHashMode = it } }
                 launch { vkAccessToken.collect { cachedVkAccessToken = it } }
                 launch { obfsMode.collect { cachedObfsMode = it } }
@@ -1177,12 +1171,12 @@ class SettingsStore(
         }
     }
 
+    internal suspend fun ensureNative250RuntimeSettings() {
+        Native250RuntimeSettings(appContext).migrateLegacy(dataStore.data.first().asMap().mapKeys { it.key.name })
+    }
+
     suspend fun saveExtraWorkers(enabled: Boolean = false) {
-        dataStore.edit { prefs ->
-            for (p in CsqttConstants.Profiles.MIN_INDEX..CsqttConstants.Profiles.MAX_INDEX) {
-                prefs[getProfileKey(EXTRA_WORKERS, p)] = false
-            }
-        }
+        Native250RuntimeSettings(appContext).put("extraWorkers.${activeProfile.first()}", enabled.toString())
     }
 
     suspend fun saveAutoJsRiskAcknowledged(acknowledged: Boolean) {
@@ -1198,9 +1192,7 @@ class SettingsStore(
     }
 
     suspend fun saveAutoPauseOnWifi(enabled: Boolean) {
-        dataStore.edit { prefs ->
-            prefs[AUTO_PAUSE_ON_WIFI] = enabled
-        }
+        Native250RuntimeSettings(appContext).put("wifi.enabled", enabled.toString())
     }
 
     suspend fun markBatteryOptimizationPromptHandled() {

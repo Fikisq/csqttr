@@ -13,6 +13,24 @@ import org.mockito.Mockito.*
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class Native250RuntimeSettingsTest {
+    @Test fun migrationPreservesExistingUiChoicesAndRunsOnlyOnce() {
+        val prefs = mock(SharedPreferences::class.java)
+        val edit = mock(SharedPreferences.Editor::class.java)
+        `when`(prefs.edit()).thenReturn(edit)
+        `when`(edit.putString(anyString(), anyString())).thenReturn(edit)
+        `when`(edit.commit()).thenReturn(true)
+        `when`(prefs.contains("gooby.1")).thenReturn(true)
+        val runtime = Native250RuntimeSettings(prefs)
+        runtime.migrateLegacy(mapOf("gooby_enabled_1" to true))
+        verify(edit, never()).putString(eq("gooby.1"), anyString())
+        verify(edit).putString("migration.59", "done")
+        verify(edit).commit()
+        clearInvocations(edit)
+        `when`(prefs.contains("migration.59")).thenReturn(true)
+        runtime.migrateLegacy(emptyMap())
+        verifyNoInteractions(edit)
+    }
+
     @Test fun servicesReceiveSavedValuesAndChangesAndReleaseListener() = runTest {
         val prefs = mock(SharedPreferences::class.java)
         var data: Map<String, *> = mapOf("gooby.0" to "gentle", "unrelated" to 12)

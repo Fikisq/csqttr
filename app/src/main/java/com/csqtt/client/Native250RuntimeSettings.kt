@@ -16,6 +16,18 @@ internal data class Native250RuntimeConfig(val values: Map<String, String>) {
 internal class Native250RuntimeSettings(private val preferences: SharedPreferences) {
     constructor(context: Context) : this(context.applicationContext.getSharedPreferences(PREFERENCES, Context.MODE_PRIVATE))
 
+    fun put(key: String, value: String) { preferences.edit().putString(key, value).apply() }
+
+    fun migrateLegacy(values: Map<String, Any?>) = synchronized(preferences) {
+        if (!preferences.contains("migration.59")) {
+            val edit = preferences.edit()
+            native250LegacySettings(values).forEach { (key, value) ->
+                if (!preferences.contains(key)) edit.putString(key, value)
+            }
+            check(edit.putString("migration.59", "done").commit()) { "Cannot persist settings migration" }
+        }
+    }
+
     fun snapshot() = Native250RuntimeConfig(preferences.all.mapNotNull { (key, value) ->
         (value as? String)?.let { key to it }
     }.toMap())

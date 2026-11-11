@@ -156,6 +156,7 @@ class TunnelService : Service() {
                 startJob = serviceScope.launch {
                     try {
                         val store = SettingsStore(applicationContext)
+                        store.ensureNative250RuntimeSettings()
                         autoPauseOnWifiEnabled = store.autoPauseOnWifi.first()
                         TunnelManager.isLoggingEnabled = store.loggingEnabled.first()
                         if (reconcileWifiAutoPause()) {
@@ -384,6 +385,7 @@ class TunnelService : Service() {
         startJob = serviceScope.launch {
             try {
                 val store = SettingsStore(appContext)
+                store.ensureNative250RuntimeSettings()
 
                 val wasRunning = store.tunnelWasRunning.first()
                 if (!wasRunning) {
