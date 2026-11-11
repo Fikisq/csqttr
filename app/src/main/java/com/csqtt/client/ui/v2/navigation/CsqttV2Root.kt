@@ -49,7 +49,6 @@ import com.csqtt.client.updateIntervalHoursToMillis
 import com.csqtt.client.ui.v2.components.V2BottomBar
 import com.csqtt.client.ui.v2.components.V2Tab
 import com.csqtt.client.ui.v2.design.CsqttV2Theme
-import com.csqtt.client.ui.v2.design.V2Sizes
 import com.csqtt.client.ui.v2.design.V2Theme
 import com.csqtt.client.ui.v2.design.V2Transitions
 import com.csqtt.client.ui.v2.dialogs.V2AppUpdateDialog
@@ -256,7 +255,8 @@ fun CsqttV2Root(
                     )
 
                     else -> Column(modifier = Modifier.fillMaxSize()) {
-                        Box(modifier = Modifier.weight(1f).imePadding()) {
+                        val formHandlesIme = selectedTab == V2Tab.Tunnel || selectedTab == V2Tab.Deploy
+                        Box(modifier = Modifier.weight(1f).then(if (formHandlesIme) Modifier else Modifier.imePadding())) {
                             key(selectedTab) {
                                 val tab = selectedTab
                                 tabStateHolder.SaveableStateProvider(key = tab.name) {
@@ -306,7 +306,7 @@ fun CsqttV2Root(
                             },
                             tabs = tabs,
                             modifier = Modifier.padding(
-                                horizontal = V2Sizes.ScreenPadding,
+                                horizontal = 8.dp,
                                 vertical = 8.dp,
                             ),
                         )
