@@ -67,6 +67,8 @@ class SettingsStore(
         private val Context.dataStore by preferencesDataStore("settings")
         private val ACTIVE_PROFILE = intPreferencesKey("active_profile")
         private val SHOW_SYSTEM_APPS = booleanPreferencesKey("show_system_apps")
+        private val APP_ROUTING_ALL = booleanPreferencesKey("app_routing_all")
+        private val APP_PRESETS_USED = stringPreferencesKey("app_presets_used")
         private val LOGGING_ENABLED = booleanPreferencesKey("logging_enabled")
         private val INFO_ACTIONS_EXPANDED = booleanPreferencesKey("info_actions_expanded")
         private val INFO_PROJECT_EXPANDED = booleanPreferencesKey("info_project_expanded")
@@ -268,6 +270,7 @@ class SettingsStore(
             val newName = "${baseKey.name}_$profile"
             @Suppress("UNCHECKED_CAST")
             return when (baseKey) {
+                APP_ROUTING_ALL -> booleanPreferencesKey(newName) as Preferences.Key<T>
                 PEER, VK_HASHES, SECONDARY_VK_HASH, PROTOCOL, SNI, USER_AGENT, DEPLOY_IP, DEPLOY_LOGIN, DEPLOY_PASSWORD, DEPLOY_PASSWORD_ENCRYPTED, DEPLOY_SSH_PORT, EXCLUDED_APPS, WHITELIST_APPS, DIRECT_DOMAINS, DIRECT_DOMAINS_BLACK, DIRECT_DOMAINS_WHITE, DIRECT_IPS_BLACK, DIRECT_IPS_WHITE, CONNECTION_PASSWORD, CONNECTION_PASSWORD_ENCRYPTED, CONNECTION_PASSWORD_LOCAL, DEPLOY_MAIN_PASSWORD, DEPLOY_MAIN_PASSWORD_ENCRYPTED, DEPLOY_WEB_LOGIN, DEPLOY_WEB_PASSWORD, DEPLOY_WEB_PASSWORD_ENCRYPTED, PROXY_MODE, PROXY_HOST, VK_AUTH_MODE, OBFS_MODE, TURN_TRANSPORT, SRTP_MODE, CAPTCHA_MODE, CAPTCHA_SOLVE_METHOD, CAPTCHA_WBV_SOLVE_METHOD, CSQTT_LINK, SELECTED_FINGERPRINT, ACTIVE_CLIENT_IDS, VK_HASH_MODE, VK_ACCESS_TOKEN, VK_ACCESS_TOKEN_ENCRYPTED, VK_ACCESS_TOKEN_USER_ID, SSH_PRIVATE_KEY, SSH_PRIVATE_KEY_ENCRYPTED, SSH_KEY_PASSPHRASE, SSH_KEY_PASSPHRASE_ENCRYPTED, SSH_CERTIFICATE, SSH_CERTIFICATE_ENCRYPTED, VK_HASH_CHECK_RESULTS, CLIENT_ID_CHECK_RESULTS, CUSTOM_TURN_IPS, SELECTED_TURN_SUBNET -> stringPreferencesKey(newName) as Preferences.Key<T>
                 WORKERS_PER_HASH, LISTEN_PORT, SERVER_PEER_PORT, PROXY_PORT, SERVER_WEB_PORT -> intPreferencesKey(newName) as Preferences.Key<T>
                 MANUAL_PORTS_ENABLED, NO_DNS, IS_WHITELIST, CSQTT_LINK_MODE, DETAILED_LOGS, SSH_KEYS_MODE, DOCKER_INSTALL, EXTRA_WORKERS, SPLIT_TUNNEL_WHITELIST_MIGRATED, DOMAIN_ROUTING_ENABLED, DOMAIN_IS_WHITELIST, EXCLUDE_RU_ZONES_ENABLED, TEMPLATE_DOMAINS_ENABLED, IP_ROUTING_ENABLED, IP_IS_WHITELIST -> booleanPreferencesKey(newName) as Preferences.Key<T>
@@ -449,6 +452,15 @@ class SettingsStore(
             csqttLinkMode = prefs[getProfileKey(CSQTT_LINK_MODE, profile)] ?: false,
         )
     }.onIo()
+    val appRoutingAll: Flow<Boolean?> = dataStore.data.map { prefs ->
+        prefs[getProfileKey(APP_ROUTING_ALL, prefs[ACTIVE_PROFILE] ?: 0)]
+    }
+
+    val appPresetsUsed: Flow<Set<String>> = dataStore.data.map { prefs ->
+        prefs[getProfileKey(APP_PRESETS_USED, prefs[ACTIVE_PROFILE] ?: 0)]
+            .orEmpty().split(',').filter(String::isNotBlank).toSet()
+    }
+
     val excludedApps: Flow<String> = dataStore.data.map { prefs ->
         val profile = prefs[ACTIVE_PROFILE] ?: 0
         prefs[getProfileKey(EXCLUDED_APPS, profile)] ?: ""
@@ -1065,6 +1077,18 @@ class SettingsStore(
         val profile = activeProfile.first()
         dataStore.edit { prefs ->
             prefs[getProfileKey(DEPLOY_IP, profile)] = ip
+        }
+    }
+
+    suspend fun saveAppRoutingSelection(black: String, white: String, mode: Boolean, used: Set<String>, profile: Int, allApps: Boolean) {
+        require(profile in CsqttConstants.Profiles.MIN_INDEX..CsqttConstants.Profiles.MAX_INDEX)
+        dataStore.edit { prefs ->
+            prefs[getProfileKey(EXCLUDED_APPS, profile)] = black
+            prefs[getProfileKey(WHITELIST_APPS, profile)] = white
+            prefs[getProfileKey(IS_WHITELIST, profile)] = mode
+            prefs[getProfileKey(APP_ROUTING_ALL, profile)] = allApps
+            prefs[getProfileKey(APP_PRESETS_USED, profile)] = used.sorted().joinToString(",")
+            prefs[SPLIT_TUNNEL_WHITELIST_MIGRATED] = true
         }
     }
 
