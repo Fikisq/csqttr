@@ -801,6 +801,8 @@ internal fun SettingsTabContent(
                     onSelected = ::requestTurnTransport,
                 )
 
+                Native250GoobySetting(profile = activeProfile, transport = turnTransport)
+
                 TunnelWorkersControl(
                     value = currentWorkers,
                     maximum = selectableMaxWorkers,
