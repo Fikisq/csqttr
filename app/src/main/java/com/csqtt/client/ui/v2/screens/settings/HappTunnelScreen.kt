@@ -139,7 +139,7 @@ fun HappTunnelScreen(settingsStore: SettingsStore, version: String, onSettings: 
         "Авто ВК" to ModeIndicator(1f, yellow),
     )
     val credentialIndicators = mapOf(
-        "Авто" to ModeIndicator(0.78f, green),
+        "Авто" to ModeIndicator(1f, green),
         "Капча" to ModeIndicator(0.30f, c.danger),
         "Авто ВК" to ModeIndicator(1f, yellow),
     )
@@ -215,7 +215,7 @@ fun HappTunnelScreen(settingsStore: SettingsStore, version: String, onSettings: 
                 },
                     compact = true, shape = pill, indicators = transportIndicators, enabled = !busy,
                     help = "UDP — основной транспорт TURN. TCP/TLS — альтернатива, если UDP недоступен.")
-                key(editingProfile, transport) {
+                if (GoobyMode.isAvailable(transport)) key(editingProfile) {
                     HappChoice(
                         label = "Gooby",
                         value = goobyMode.label,
@@ -226,7 +226,7 @@ fun HappTunnelScreen(settingsStore: SettingsStore, version: String, onSettings: 
                         },
                         indicators = goobyIndicators,
                         help = GOOBY_HELP,
-                        enabled = GoobyMode.isAvailable(transport) && !busy,
+                        enabled = !busy,
                         compact = true,
                         shape = pill,
                     )

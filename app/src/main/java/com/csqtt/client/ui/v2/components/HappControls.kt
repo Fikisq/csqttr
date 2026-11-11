@@ -33,7 +33,6 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.csqtt.client.ui.legacy.ModeIndicator
-import com.csqtt.client.ui.legacy.ModeProgressBar
 import com.csqtt.client.ui.v2.design.V2Theme
 
 @Composable
@@ -126,7 +125,7 @@ internal fun HappChoice(label: String, value: String, options: List<String>, onS
         if (labelContent == null) Text(label, modifier = Modifier.weight(1f), color = c.textPrimary, fontSize = V2TextSizes.Body)
         else Box(Modifier.weight(1f)) { labelContent() }
         if (help != null) HappHelp(label, help)
-        Box(Modifier.weight(1.15f)) {
+        BoxWithConstraints(Modifier.weight(1.15f)) {
             Surface(onClick = { if (enabled) expanded = true }, enabled = enabled, shape = shape,
                 color = c.field, border = BorderStroke(1.dp, c.outline)) {
                 Column(Modifier.heightIn(min = LocalV2AdaptiveMetrics.current.fieldHeight).padding(horizontal = 10.dp, vertical = 6.dp), verticalArrangement = Arrangement.Center) {
@@ -135,18 +134,23 @@ internal fun HappChoice(label: String, value: String, options: List<String>, onS
                         Icon(Icons.Default.KeyboardArrowDown, null, tint = c.textSecondary, modifier = Modifier.size(18.dp))
                     }
                     indicators[value]?.let { indicator ->
-                        ModeProgressBar(indicator.progress, indicator.color, Modifier.padding(top = 4.dp).fillMaxWidth())
+                        HappChoiceIndicator(indicator)
                     }
                 }
             }
-            DropdownMenu(expanded, { expanded = false }, containerColor = c.surface) {
+            DropdownMenu(
+                expanded,
+                { expanded = false },
+                modifier = if (indicators.isEmpty()) Modifier else Modifier.width(maxWidth),
+                containerColor = c.surface,
+            ) {
                 options.forEach { option ->
                     DropdownMenuItem(
                         text = {
                             Column {
                                 Text(option, fontSize = V2TextSizes.Body)
                                 indicators[option]?.let { indicator ->
-                                    ModeProgressBar(indicator.progress, indicator.color, Modifier.padding(top = 4.dp).fillMaxWidth())
+                                    HappChoiceIndicator(indicator)
                                 }
                             }
                         },
@@ -156,6 +160,16 @@ internal fun HappChoice(label: String, value: String, options: List<String>, onS
             }
         }
     }
+}
+
+@Composable
+private fun HappChoiceIndicator(indicator: ModeIndicator) {
+    Box(
+        Modifier.padding(top = 3.dp)
+            .fillMaxWidth(indicator.progress.coerceIn(0f, 1f))
+            .height(3.dp)
+            .background(indicator.color, RoundedCornerShape(2.dp)),
+    )
 }
 
 @Composable
