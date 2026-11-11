@@ -29,7 +29,8 @@ foreach ($artifact in $serverManifest.artifacts) {
     }
 }
 foreach ($license in @('CSQTT-LICENSE', 'primp-LICENSE')) {
-    $targets += @{ Entry = "assets/licenses/$license"; Relative = "assets/licenses/$license" }
+    # Source assets already contain these licenses; retain APK copies outside merged assets.
+    $targets += @{ Entry = "assets/licenses/$license"; Relative = "reference-licenses/$license" }
 }
 
 Add-Type -AssemblyName System.IO.Compression.FileSystem
