@@ -155,7 +155,7 @@ android {
     sourceSets {
         getByName("main") {
             jniLibs.directories.add("src/main/jniLibs")
-            jniLibs.srcDir(rootProject.file(".local/original250/jniLibs"))
+            jniLibs.srcDir(rootProject.file(".local/runtime16/jniLibs"))
             assets.srcDir(rootProject.file(".local/original250/assets"))
         }
     }

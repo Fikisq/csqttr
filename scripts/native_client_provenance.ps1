@@ -3,7 +3,11 @@ param(
     [Parameter(Mandatory = $true)]
     [ValidateSet("Write", "Verify")]
     [string]$Mode,
-    [string]$Root
+    [string]$Root,
+    [ValidateSet("arm64-v8a", "armeabi-v7a", "x86_64")]
+    [string[]]$Abis = @("arm64-v8a", "armeabi-v7a", "x86_64"),
+    [ValidateSet("rust-client/build_so.bat", "rust-client/build_android_wsl.sh")]
+    [string]$Producer = "rust-client/build_so.bat"
 )
 
 Set-StrictMode -Version Latest
@@ -20,7 +24,6 @@ $cargoTomlPath = Join-Path $projectRoot "rust-client\Cargo.toml"
 $cargoLockPath = Join-Path $projectRoot "rust-client\Cargo.lock"
 $marker = "CSQTT_RUST_NATIVE_PRODUCTION_V1"
 $schema = "csqtt.native-client-provenance.v3"
-$producer = "rust-client/build_so.bat"
 $transport = "rust-turn-sans-io-rfc8656-channeldata"
 $transportMarker = "CSQTT_RUST_TURN_SANS_IO_V1"
 $nativeCoreAbi = 1
@@ -55,6 +58,9 @@ $specs = @(
     }
 )
 
+$specs = @($specs | Where-Object { $_.Abi -in $Abis })
+if ($specs.Count -eq 0) { throw "At least one ABI must be selected" }
+
 function Assert-RegularFile {
     param([string]$Path, [string]$Label)
 
@@ -85,10 +91,12 @@ function Get-BuildInputHash {
     $entries = @(
         (Join-Path $projectRoot "rust-client\build_so.bat"),
         (Join-Path $projectRoot "rust-client\build_android_abis.ps1"),
+        (Join-Path $projectRoot "rust-client\build_android_wsl.sh"),
         (Join-Path $projectRoot "rust-client\Cargo.toml"),
         (Join-Path $projectRoot "rust-client\Cargo.lock"),
         (Join-Path $projectRoot "rust-client"),
         (Join-Path $projectRoot "rust-client\vendor\primp"),
+        (Join-Path $projectRoot "rust-client\vendor\gooby"),
         (Join-Path $projectRoot "scripts\find_android_sdk_ndk.bat"),
         (Join-Path $projectRoot "scripts\native_client_provenance.ps1"),
         (Join-Path $projectRoot "shared\wire_protocol.rs")
@@ -114,7 +122,9 @@ function Get-BuildInputHash {
     }
     $rootPrefix = $projectRoot.TrimEnd([char[]]@('\', '/')) + [IO.Path]::DirectorySeparatorChar
     $builder = New-Object Text.StringBuilder
-    foreach ($file in @($files | Sort-Object -Unique)) {
+    $sortedFiles = [string[]]@($files | Select-Object -Unique)
+    [Array]::Sort($sortedFiles, [StringComparer]::Ordinal)
+    foreach ($file in $sortedFiles) {
         $fullPath = [IO.Path]::GetFullPath($file)
         if (-not $fullPath.StartsWith($rootPrefix, [StringComparison]::OrdinalIgnoreCase)) {
             throw "Native build input escaped project root: $fullPath"
@@ -317,7 +327,7 @@ catch {
 
 if ($manifest.schema -ne $schema -or
     $manifest.marker -ne $marker -or
-    $manifest.producer -ne $producer -or
+    $manifest.producer -notin @("rust-client/build_so.bat", "rust-client/build_android_wsl.sh") -or
     $manifest.runtime -ne "rust" -or
     $manifest.buildSystem -ne "cargo-ndk" -or
     $manifest.profile -ne "release" -or

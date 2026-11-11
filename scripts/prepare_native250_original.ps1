@@ -10,16 +10,8 @@ $expectedApkHash = '1AFD5F1E015ADCC23B110476543AE6D0C01F85E28A74D1598AA7CD50DA0A
 if ((Get-FileHash -LiteralPath $apkPath -Algorithm SHA256).Hash -ne $expectedApkHash) {
     throw 'Original APK checksum differs from the reviewed CSQTT 2.5.0 artifact.'
 }
-$nativeManifest = Get-Content -LiteralPath "$projectRoot/app/src/main/libclient.provenance.json" -Raw | ConvertFrom-Json
 $serverManifest = Get-Content -LiteralPath "$projectRoot/app/src/main/assets/csqtt.server-provenance.json" -Raw | ConvertFrom-Json
-$nativeArtifact = @($nativeManifest.artifacts | Where-Object abi -eq 'arm64-v8a')
-if ($nativeArtifact.Count -ne 1) { throw 'Expected exactly one arm64-v8a native artifact.' }
-$targets = @(@{
-    Entry = 'lib/arm64-v8a/libclient.so'
-    Relative = 'jniLibs/arm64-v8a/libclient.so'
-    Size = $nativeArtifact[0].size
-    Hash = $nativeArtifact[0].sha256
-})
+$targets = @()
 foreach ($artifact in $serverManifest.artifacts) {
     $targets += @{
         Entry = "assets/$($artifact.assetName)"
