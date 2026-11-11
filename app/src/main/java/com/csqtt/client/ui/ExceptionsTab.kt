@@ -100,7 +100,7 @@ private object AppCache {
     var cachedList: List<AppItem>? = null
 }
 
-private enum class RoutingMode { ExcludeSelected, IncludeSelected }
+
 
 @Composable
 fun ExceptionsTab(
@@ -112,6 +112,9 @@ fun ExceptionsTab(
     serverRoutingActive: Boolean = TunnelManager.serverRoutingActive.value,
 ) {
     val context = LocalContext.current.applicationContext
+    val activeRoutingProfile by settingsStore.activeProfile.collectAsStateWithLifecycle(0)
+    val appRoutingAll by settingsStore.appRoutingAll.collectAsStateWithLifecycle(null)
+    val appPresetsUsed by settingsStore.appPresetsUsed.collectAsStateWithLifecycle(emptySet())
     val focusManager = LocalFocusManager.current
     val scope = rememberCoroutineScope()
     val tunnelRunning by TunnelManager.running.collectAsStateWithLifecycle()
@@ -355,40 +358,7 @@ fun ExceptionsTab(
         }
     }
 
-    var dialogSnapshotBlacklist by remember { mutableStateOf<Set<String>?>(null) }
-    var dialogSnapshotWhitelist by remember { mutableStateOf<Set<String>?>(null) }
-    var dialogSnapshotIsWhitelist by remember { mutableStateOf<Boolean?>(null) }
-
-    val openAppsDialog = {
-        dialogSnapshotBlacklist = blacklistSelection
-        dialogSnapshotWhitelist = whitelistSelection
-        dialogSnapshotIsWhitelist = isWhitelist
-        showAppsDialog = true
-    }
-
-    val closeAppsDialog = {
-        showAppsDialog = false
-        appSaveJob?.cancel()
-        val currentBlack = blacklistSelection
-        val currentWhite = whitelistSelection
-        val currentIsWhite = isWhitelist
-        val blackChanged = dialogSnapshotBlacklist != null && dialogSnapshotBlacklist != currentBlack
-        val whiteChanged = dialogSnapshotWhitelist != null && dialogSnapshotWhitelist != currentWhite
-        val modeChanged = dialogSnapshotIsWhitelist != null && dialogSnapshotIsWhitelist != currentIsWhite
-        if (blackChanged || whiteChanged || modeChanged) {
-            scope.launch {
-                if (blackChanged) {
-                    settingsStore.saveExcludedApps(currentBlack.sorted().joinToString(","))
-                }
-                if (whiteChanged) {
-                    settingsStore.saveWhitelistApps(currentWhite.sorted().joinToString(","))
-                }
-                TunnelManager.reloadVpn()
-            }
-        }
-    }
-
-    var appSearchQuery by rememberSaveable { mutableStateOf("") }
+    val openAppsDialog = { showAppsDialog = true }
 
     LaunchedEffect(Unit) {
         withContext(Dispatchers.IO) { settingsStore.migrateLegacyWhitelistMode() }
@@ -407,9 +377,7 @@ fun ExceptionsTab(
                 .getInstalledApplications(PackageManager.GET_META_DATA)
                 .asSequence()
                 .filter { app ->
-                    app.packageName != context.packageName &&
-                        !app.packageName.contains("vkontakte") &&
-                        !app.packageName.contains("vk.calls")
+                    app.packageName != context.packageName
                 }
                 .map { app ->
                     AppItem(
@@ -419,32 +387,12 @@ fun ExceptionsTab(
                         isSystem = (app.flags and android.content.pm.ApplicationInfo.FLAG_SYSTEM) != 0,
                     )
                 }
-                .sortedWith(compareBy<AppItem> { it.isSystem }.thenBy { it.name.lowercase() })
+                .sortedWith(compareBy<AppItem> { it.name.lowercase() }.thenBy { it.packageName })
                 .toList()
         }
         AppCache.cachedList = loadedApps
         appsList = loadedApps
         isAppsLoading = false
-    }
-
-    val appListState = rememberLazyListState()
-    val routingMode = if (isWhitelist) RoutingMode.IncludeSelected else RoutingMode.ExcludeSelected
-    val activeAppSelection = if (isWhitelist) whitelistSelection else blacklistSelection
-
-    val filteredApps = remember(appsList, appSearchQuery, activeAppSelection) {
-        val base = if (appSearchQuery.isBlank()) {
-            appsList
-        } else {
-            appsList.filter {
-                it.name.contains(appSearchQuery, ignoreCase = true) ||
-                    it.packageName.contains(appSearchQuery, ignoreCase = true)
-            }
-        }
-        base.sortedWith(
-            compareByDescending<AppItem> { it.packageName in activeAppSelection }
-                .thenBy { it.isSystem }
-                .thenBy { it.name.lowercase() }
-        )
     }
 
     fun persistAppSelections(black: Set<String>?, white: Set<String>?) {
@@ -455,14 +403,6 @@ fun ExceptionsTab(
             delay(250)
             black?.let { settingsStore.saveExcludedApps(it.sorted().joinToString(",")) }
             white?.let { settingsStore.saveWhitelistApps(it.sorted().joinToString(",")) }
-        }
-    }
-
-    fun persistAppSelection(selection: Set<String>, forWhitelist: Boolean) {
-        if (forWhitelist) {
-            persistAppSelections(black = null, white = selection)
-        } else {
-            persistAppSelections(black = selection, white = null)
         }
     }
 
@@ -524,10 +464,10 @@ fun ExceptionsTab(
                         overflow = TextOverflow.Ellipsis,
                     )
                     Text(
-                        text = if (isWhitelist) {
-                            "Белый список: ${whitelistSelection.size} в туннеле"
+                        text = if (appRoutingAll == true) { "Все приложения в туннеле" } else if (isWhitelist) {
+                            "С VPN: ${whitelistSelection.size} в туннеле"
                         } else {
-                            "Чёрный список: ${blacklistSelection.size} исключено"
+                            "Без VPN: ${blacklistSelection.size} исключено"
                         },
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -781,276 +721,30 @@ fun ExceptionsTab(
         }
     }
 
-        if (showAppsDialog) {
-            Dialog(
-                onDismissRequest = closeAppsDialog,
-                properties = DialogProperties(usePlatformDefaultWidth = false),
-            ) {
-                Surface(
-                    shape = CsqttShapes.Dialog,
-                    color = appSectionCardColor(),
-                    contentColor = MaterialTheme.colorScheme.onSurface,
-                    border = BorderStroke(1.dp, appSectionCardBorderColor()),
-                    tonalElevation = 0.dp,
-                    modifier = Modifier
-                        .fillMaxWidth(0.95f)
-                        .fillMaxHeight(0.92f),
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(horizontal = 16.dp, vertical = 14.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Outlined.Apps,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onSurface,
-                                    modifier = Modifier.size(22.dp),
-                                )
-                                Text(
-                                    text = "Список приложений",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    maxLines = 1,
-                                    softWrap = false,
-                                    overflow = TextOverflow.Ellipsis,
-                                )
-                            }
-                            IconButton(
-                                onClick = closeAppsDialog,
-                                modifier = Modifier.size(36.dp),
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Close,
-                                    contentDescription = null,
-                                )
+        if (showAppsDialog && isMigrationReady) {
+            androidx.compose.runtime.key(activeRoutingProfile) {
+                ClassicAppsRoutingDialog(
+                    apps = appsList, loading = isAppsLoading, isWhitelist = isWhitelist,
+                    blacklist = persistedBlacklist, whitelist = persistedWhitelist,
+                    presetsUsed = appPresetsUsed, allAppsMode = appRoutingAll,
+                    showSystemApps = showSystemApps,
+                    onShowSystemAppsChange = { scope.launch { settingsStore.saveShowSystemApps(it) } },
+                    onClose = { black, white, modeWhite, used, all ->
+                        showAppsDialog = false
+                        val profile = activeRoutingProfile
+                        val modeChanged = modeWhite != isWhitelist || all != (appRoutingAll ?: (!isWhitelist && persistedBlacklist.isEmpty()))
+                        val blackChanged = black.toList() != persistedBlacklist.toList()
+                        val whiteChanged = white.toList() != persistedWhitelist.toList()
+                        if (modeChanged || blackChanged || whiteChanged || used != appPresetsUsed) {
+                            scope.launch {
+                                settingsStore.saveAppRoutingSelection(black.joinToString(","), white.joinToString(","), modeWhite, used, profile, all)
+                                if (modeChanged || blackChanged || whiteChanged) TunnelManager.reloadVpn()
                             }
                         }
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        ) {
-                            if (!isWhitelist) {
-                                Button(
-                                    onClick = {},
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .height(CsqttSizes.ControlHeight),
-                                    shape = CsqttShapes.Pill,
-                                    colors = ButtonDefaults.buttonColors(
-                                        containerColor = Color(0xFF1475FD),
-                                        contentColor = Color.White,
-                                    ),
-                                    enabled = isMigrationReady,
-                                ) {
-                                    Text(
-                                        text = "Чёрный список",
-                                        fontWeight = FontWeight.SemiBold,
-                                        maxLines = 1,
-                                        softWrap = false,
-                                        overflow = TextOverflow.Ellipsis,
-                                    )
-                                }
-                            } else {
-                                OutlinedButton(
-                                    onClick = {
-                                        scope.launch {
-                                            settingsStore.saveIsWhitelist(false)
-                                        }
-                                    },
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .height(CsqttSizes.ControlHeight),
-                                    shape = CsqttShapes.Pill,
-                                    colors = ButtonDefaults.outlinedButtonColors(
-                                        containerColor = Color.Transparent,
-                                        contentColor = MaterialTheme.colorScheme.onSurface,
-                                    ),
-                                    border = BorderStroke(
-                                        1.dp,
-                                        MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
-                                    ),
-                                    enabled = isMigrationReady,
-                                ) {
-                                    Text(
-                                        text = "Чёрный список",
-                                        fontWeight = FontWeight.SemiBold,
-                                        maxLines = 1,
-                                        softWrap = false,
-                                        overflow = TextOverflow.Ellipsis,
-                                    )
-                                }
-                            }
-
-                            if (isWhitelist) {
-                                Button(
-                                    onClick = {},
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .height(CsqttSizes.ControlHeight),
-                                    shape = CsqttShapes.Pill,
-                                    colors = ButtonDefaults.buttonColors(
-                                        containerColor = Color(0xFF1475FD),
-                                        contentColor = Color.White,
-                                    ),
-                                    enabled = isMigrationReady,
-                                ) {
-                                    Text(
-                                        text = "Белый список",
-                                        fontWeight = FontWeight.SemiBold,
-                                        maxLines = 1,
-                                        softWrap = false,
-                                        overflow = TextOverflow.Ellipsis,
-                                    )
-                                }
-                            } else {
-                                OutlinedButton(
-                                    onClick = {
-                                        scope.launch {
-                                            settingsStore.saveIsWhitelist(true)
-                                        }
-                                    },
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .height(CsqttSizes.ControlHeight),
-                                    shape = CsqttShapes.Pill,
-                                    colors = ButtonDefaults.outlinedButtonColors(
-                                        containerColor = Color.Transparent,
-                                        contentColor = MaterialTheme.colorScheme.onSurface,
-                                    ),
-                                    border = BorderStroke(
-                                        1.dp,
-                                        MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
-                                    ),
-                                    enabled = isMigrationReady,
-                                ) {
-                                    Text(
-                                        text = "Белый список",
-                                        fontWeight = FontWeight.SemiBold,
-                                        maxLines = 1,
-                                        softWrap = false,
-                                        overflow = TextOverflow.Ellipsis,
-                                    )
-                                }
-                            }
-                        }
-
-                        OutlinedTextField(
-                            value = appSearchQuery,
-                            onValueChange = { appSearchQuery = it },
-                            label = {
-                                Text(
-                                    stringResource(R.string.exceptions_search_label),
-                                    maxLines = 1,
-                                    softWrap = false,
-                                    overflow = TextOverflow.Ellipsis,
-                                )
-                            },
-                            placeholder = {
-                                Text(
-                                    stringResource(R.string.exceptions_search_placeholder),
-                                    maxLines = 1,
-                                    softWrap = false,
-                                    overflow = TextOverflow.Ellipsis,
-                                )
-                            },
-                            leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = null) },
-                            singleLine = true,
-                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                            keyboardActions = KeyboardActions(onSearch = { focusManager.clearFocus() }),
-                            shape = CsqttShapes.Control,
-                            modifier = Modifier.fillMaxWidth(),
-                        )
-
-                        Text(
-                            text = stringResource(R.string.exceptions_selected_count, activeAppSelection.size),
-                            style = MaterialTheme.typography.labelLarge,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
-                            softWrap = false,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-
-                        when {
-                            !isMigrationReady || isAppsLoading -> {
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .weight(1f),
-                                    contentAlignment = Alignment.Center,
-                                ) {
-                                    CsqttLoadingState(label = stringResource(R.string.exceptions_loading))
-                                }
-                            }
-
-                            filteredApps.isEmpty() -> {
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .weight(1f),
-                                    contentAlignment = Alignment.Center,
-                                ) {
-                                    CsqttEmptyState(
-                                        title = stringResource(R.string.exceptions_empty_title),
-                                        description = stringResource(R.string.exceptions_empty_description),
-                                        icon = Icons.Outlined.Apps,
-                                    )
-                                }
-                            }
-
-                            else -> {
-                                LazyColumn(
-                                    state = appListState,
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .weight(1f),
-                                    contentPadding = PaddingValues(bottom = 8.dp),
-                                    verticalArrangement = Arrangement.spacedBy(CsqttSpacing.Xs),
-                                ) {
-                                    items(
-                                        items = filteredApps,
-                                        key = { it.packageName },
-                                        contentType = { "application" },
-                                    ) { app ->
-                                        val isSelected = app.packageName in activeAppSelection
-                                        AppRow(
-                                            app = app,
-                                            isSelected = isSelected,
-                                            onClick = {
-                                                val newSelection = if (isSelected) {
-                                                    activeAppSelection - app.packageName
-                                                } else {
-                                                    activeAppSelection + app.packageName
-                                                }
-                                                if (isWhitelist) {
-                                                    whitelistSelection = newSelection
-                                                    persistAppSelection(newSelection, forWhitelist = true)
-                                                } else {
-                                                    blacklistSelection = newSelection
-                                                    persistAppSelection(newSelection, forWhitelist = false)
-                                                }
-                                            },
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
+                    },
+                )
             }
         }
-
         if (showRoutingModeInfoDialog) {
             Dialog(
                 onDismissRequest = { showRoutingModeInfoDialog = false },
