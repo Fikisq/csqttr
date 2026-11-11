@@ -55,6 +55,7 @@ internal fun ClassicAppsRoutingDialog(
         else black = AppRoutingPresets.initial(black, "black" in used, installed, false)
         used = used + if (mode) "white" else "black"
         pendingPreset = null
+        listState.requestScrollToItem(0)
     }
 
     val filtered = remember(apps, search, showSystemApps, selection) {
