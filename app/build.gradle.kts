@@ -206,3 +206,13 @@ dependencies {
     androidTestImplementation("androidx.compose.ui:ui-test-junit4")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
 }
+
+// This worktree is for Studio Preview only. Compile/render is allowed, APKs are not.
+tasks.configureEach {
+    val packagesApk = name.startsWith("package") && !name.endsWith("Resources")
+    val launchesBuild = name.startsWith("assemble") || name.startsWith("install") ||
+        name == "bundleDebug" || name == "bundleRelease"
+    if (packagesApk || launchesBuild) {
+        doFirst { error("Макет: сборка/установка APK запрещена. Откройте Compose Preview в Android Studio.") }
+    }
+}
