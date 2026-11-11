@@ -337,7 +337,7 @@ fun FloatingToolbar(
                         title = "Дизайн",
                         selectedKey = uiDesign,
                         options = listOf(
-                            CsqttConstants.Theme.DESIGN_CLASSIC to "Классический",
+                            CsqttConstants.Theme.DESIGN_CLASSIC to stringResource(R.string.design_classic_csqtt_250),
                             CsqttConstants.Theme.DESIGN_V2 to "Новый",
                         ),
                         enabled = true,

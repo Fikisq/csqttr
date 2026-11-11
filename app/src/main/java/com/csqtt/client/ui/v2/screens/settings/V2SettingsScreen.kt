@@ -51,12 +51,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.csqtt.client.CsqttConstants
+import com.csqtt.client.R
 import com.csqtt.client.SettingsStore
 import com.csqtt.client.TunnelAuthSnapshot
 import com.csqtt.client.TunnelManager
@@ -860,12 +862,13 @@ fun V2SettingsScreen(
                 },
             )
 
+            val classicDesignLabel = stringResource(R.string.design_classic_csqtt_250)
             V2DropdownSetting(
                 title = "Дизайн",
                 value = "Новый",
-                options = listOf("Классический", "Новый"),
+                options = listOf(classicDesignLabel, "Новый"),
                 onSelected = { label ->
-                    if (label == "Классический") {
+                    if (label == classicDesignLabel) {
                         scope.launch { settingsStore.saveUiDesign(CsqttConstants.Theme.DESIGN_CLASSIC) }
                     }
                 },

@@ -6,6 +6,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.Alignment
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -14,6 +15,7 @@ import com.csqtt.client.ui.v2.design.V2Theme
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.csqtt.client.SettingsStore
 import com.csqtt.client.BatterySaver
+import com.csqtt.client.R
 import com.csqtt.client.ui.v2.components.*
 import com.csqtt.client.ui.v2.dialogs.V2ImportExportDialog
 import com.csqtt.client.ui.v2.dialogs.V2WifiNetworkListDialog
@@ -82,8 +84,9 @@ fun HappSettingsScreen(
                 }, onInfoClick = { logsHelp = true })
             }
             V2Card(contentPadding = PaddingValues(12.dp)) {
-                HappChoice("Дизайн", if (design == "classic") "Классический" else "Новый", listOf("Новый", "Классический"), {
-                    scope.launch { settingsStore.saveUiDesign(if (it == "Классический") "classic" else "v2") }
+                val classicDesignLabel = stringResource(R.string.design_classic_csqtt_250)
+                HappChoice("Дизайн", if (design == "classic") classicDesignLabel else "Новый", listOf("Новый", classicDesignLabel), {
+                    scope.launch { settingsStore.saveUiDesign(if (it == classicDesignLabel) "classic" else "v2") }
                 })
                 HappChoice("Оформление", when(theme) { "light" -> "Светлое"; "dark" -> "Тёмное"; else -> "Системное" }, listOf("Тёмное", "Светлое", "Системное"), { scope.launch { settingsStore.saveThemeMode(when(it) { "Тёмное" -> "dark"; "Светлое" -> "light"; else -> "system" }) } })
                 HappChoice("Отпечаток TLS", fingerprint, listOf("chrome", "firefox", "safari", "edge", "opera"), { scope.launch { settingsStore.saveFingerprint(it, forProfile = profile) } })
