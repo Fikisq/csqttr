@@ -408,7 +408,8 @@ async fn tcp_turn_allocation_and_data_work_with_all_gooby_presets() {
         let bundle = ConfigBundle::builtin_turn().unwrap().with_preset(preset);
         let runtime = Runtime::start(bundle, true).await.unwrap();
         check_tcp_turn_transport(Some(runtime.address().to_string().parse().unwrap())).await;
-        assert_eq!(runtime.stats().turn_allocate_requests, 1, "{preset:?}");
+        // TURN sends an initial Allocate and then retries with credentials after the challenge.
+        assert_eq!(runtime.stats().turn_allocate_requests, 2, "{preset:?}");
         runtime.shutdown().await;
     }
 }
