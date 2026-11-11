@@ -55,6 +55,9 @@ import com.csqtt.client.TunnelManager
 import com.csqtt.client.showRaisedToast
 import com.csqtt.client.ui.v2.components.V2Card
 import com.csqtt.client.ui.v2.components.V2TopBar
+import com.csqtt.client.ui.v2.components.V2AdaptiveScreen
+import com.csqtt.client.ui.v2.components.LocalV2AdaptiveMetrics
+import com.csqtt.client.ui.v2.design.V2TextSizes
 import com.csqtt.client.ui.v2.components.V2TransparentIconButton
 import com.csqtt.client.ui.v2.design.V2MonoFamily
 import com.csqtt.client.ui.v2.design.V2Palette
@@ -75,7 +78,7 @@ fun V2LogsScreen(
     var level by rememberSaveable { mutableStateOf("Все уровни") }
     var source by rememberSaveable { mutableStateOf("Все события") }
 
-    Column(
+    V2AdaptiveScreen(
         modifier = modifier
             .fillMaxSize()
             .padding(horizontal = V2Sizes.ScreenPadding),
@@ -86,7 +89,8 @@ fun V2LogsScreen(
             onSettings = onSettings,
             onVersionClick = onVersionClick,
         )
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(Modifier.fillMaxWidth().padding(vertical = LocalV2AdaptiveMetrics.current.gap / 2),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             LogFilterMenu(level, logLevels, { level = it }, Modifier.weight(1f))
             LogFilterMenu(source, logSources, { source = it }, Modifier.weight(1f))
         }
@@ -95,7 +99,7 @@ fun V2LogsScreen(
                 .weight(1f)
                 .fillMaxWidth()
                 .padding(bottom = 10.dp),
-            color = colors.bottomSurface,
+            color = colors.surface,
             contentColor = colors.textPrimary,
             shape = RoundedCornerShape(26.dp),
             borderColor = null,
@@ -111,7 +115,7 @@ fun V2LogsScreen(
 private fun LogFilterMenu(selected: String, options: List<String>, onSelect: (String) -> Unit, modifier: Modifier) {
     var expanded by remember { mutableStateOf(false) }
     Box(modifier) {
-        TextButton(onClick = { expanded = true }, modifier = Modifier.fillMaxWidth()) { Text("$selected ▾", fontSize = 13.sp) }
+        TextButton(onClick = { expanded = true }, modifier = Modifier.fillMaxWidth()) { Text("$selected ▾", fontSize = V2TextSizes.Action) }
         DropdownMenu(expanded, { expanded = false }) {
             options.forEach { item -> DropdownMenuItem(text = { Text(item) }, onClick = { onSelect(item); expanded = false }) }
         }
@@ -135,7 +139,7 @@ private fun V2LogsTerminal(levelFilter: String, sourceFilter: String) {
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
-        if (currentLogs.isEmpty()) Text("Событий пока нет", color = V2Theme.colors.textSecondary, modifier = Modifier.align(Alignment.Center), fontSize = 13.sp)
+        if (currentLogs.isEmpty()) Text("Событий пока нет", color = V2Theme.colors.textSecondary, modifier = Modifier.align(Alignment.Center), fontSize = V2TextSizes.Secondary)
         if (currentLogs.isNotEmpty()) {
             LazyColumn(
                 state = listState,
