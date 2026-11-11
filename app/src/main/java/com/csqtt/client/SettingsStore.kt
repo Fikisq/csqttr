@@ -280,6 +280,11 @@ class SettingsStore(
     private val dataStore = previewDataStore ?: appContext.dataStore
     private val runtimeValues = if (previewDataStore == null) Native250RuntimeSettings(appContext).changes
         else kotlinx.coroutines.flow.flowOf(Native250RuntimeConfig(emptyMap()))
+    val batterySaverMode = runtimeValues.map { config ->
+        config.value("battery.mode", BatterySaver.DEFAULT_MODE).takeIf { mode -> BatterySaver.MODES.any { it.first == mode } }
+            ?: BatterySaver.DEFAULT_MODE
+    }
+    val batterySaverPercent = runtimeValues.map { it.value("battery.percent", "30").toIntOrNull()?.coerceIn(1, 100) ?: 30 }
     private val secureStore = SecureStringStore(appContext)
 
     init {
