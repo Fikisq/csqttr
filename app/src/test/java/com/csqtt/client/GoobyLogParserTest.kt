@@ -48,7 +48,7 @@ class GoobyLogParserTest {
         val error = requireNotNull(GoobyLogParser.parse("[GOOBY] TURN allocation timeout"))
         assertTrue(error.isError)
         assertTrue(TunnelLogPolicy.isAllowedWhenInactiveLogging(error.key, error.isError, error.level))
-        assertEquals(LogLevel.ERROR, error.level)
+        assertEquals(LogLevel.ERR, error.level)
         val success = requireNotNull(GoobyLogParser.parse(applied))
         assertFalse(TunnelLogPolicy.isAllowedWhenInactiveLogging(success.key, success.isError, success.level))
     }
