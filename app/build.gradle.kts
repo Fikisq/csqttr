@@ -65,7 +65,7 @@ android {
         applicationId = "csqtt.quic.amurcanov"
         minSdk = 26
         targetSdk = 37
-        versionCode = if (native250UpdateExisting) 252 else 232
+        versionCode = if (native250UpdateExisting) 253 else 233
         versionName = "2.5.3"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
@@ -107,7 +107,7 @@ android {
     buildTypes {
         getByName("debug") {
             applicationIdSuffix = if (native250UpdateExisting) ".happdebug" else ".native250preview"
-            versionNameSuffix = "-classic250.2"
+            versionNameSuffix = "-classic250.3"
         }
         getByName("release") {
             isMinifyEnabled = true
