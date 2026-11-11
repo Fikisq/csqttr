@@ -83,6 +83,7 @@ import com.csqtt.client.ui.v2.components.V2CircleIconButton
 import com.csqtt.client.ui.v2.components.V2PillButton
 import com.csqtt.client.ui.v2.components.V2PillStyle
 import com.csqtt.client.ui.v2.components.V2SwitchSetting
+import com.csqtt.client.ui.v2.components.V2Switch
 import com.csqtt.client.ui.v2.components.V2TextField
 import com.csqtt.client.ui.v2.design.V2Shapes
 import com.csqtt.client.ui.v2.design.V2Sizes
@@ -98,9 +99,11 @@ internal fun V2AppsRoutingDialog(
     isWhitelist: Boolean,
     blacklist: Set<String>,
     whitelist: Set<String>,
+    showSystemApps: Boolean,
+    onShowSystemAppsChange: (Boolean) -> Unit,
     onClose: (black: Set<String>, white: Set<String>, isWhitelist: Boolean) -> Unit,
 ) {
-    val colors = V2Theme.colors
+    val colors = routingColors()
     val focusManager = LocalFocusManager.current
     val listState = rememberLazyListState()
 
@@ -112,20 +115,15 @@ internal fun V2AppsRoutingDialog(
 
     val activeSelection = if (modeIsWhitelist) whiteSelection else blackSelection
 
-    val filteredApps = remember(appsList, searchQuery, activeSelection) {
-        val base = if (searchQuery.isBlank()) {
-            appsList
-        } else {
-            appsList.filter {
-                it.name.contains(searchQuery, ignoreCase = true) ||
-                    it.packageName.contains(searchQuery, ignoreCase = true)
-            }
-        }
-        base.sortedWith(
-            compareByDescending<AppItem> { it.packageName in activeSelection }
-                .thenBy { it.isSystem }
-                .thenBy { it.name.lowercase() },
-        )
+    val selectionOrder = activeSelection.toList()
+    val filteredApps = remember(appsList, searchQuery, selectionOrder, showSystemApps) {
+        val visible = appsList.filter {
+            (showSystemApps || !it.isSystem || it.packageName in activeSelection) &&
+                (searchQuery.isBlank() || it.name.contains(searchQuery, ignoreCase = true) ||
+                    it.packageName.contains(searchQuery, ignoreCase = true))
+        }.sortedWith(compareBy<AppItem> { it.name.lowercase() }.thenBy { it.packageName })
+        val byPackage = visible.associateBy { it.packageName }
+        V2AppPresets.orderedPackages(visible.map { it.packageName }, activeSelection).mapNotNull(byPackage::get)
     }
 
     val scope = rememberCoroutineScope()
@@ -260,6 +258,37 @@ internal fun V2AppsRoutingDialog(
             )
 
             Spacer(modifier = Modifier.height(V2Spacing.Xs))
+
+            if (!allApps) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(V2Spacing.Sm)) {
+                    V2PillButton(
+                        text = "Готовый список", modifier = Modifier.weight(1f),
+                        style = V2PillStyle.Outline, height = 40.dp, horizontalPadding = 4.dp,
+                        enabled = !isAppsLoading,
+                        onClick = {
+                            val preset = V2AppPresets.merge(activeSelection, appsList.map { it.packageName }.toSet(), modeIsWhitelist)
+                            if (modeIsWhitelist) whiteSelection = preset else blackSelection = preset
+                            listState.requestScrollToItem(0)
+                        },
+                    )
+                    V2PillButton(
+                        text = "Очистить список", modifier = Modifier.weight(1f),
+                        style = V2PillStyle.Outline, height = 40.dp, horizontalPadding = 4.dp,
+                        enabled = !isAppsLoading,
+                        onClick = {
+                            if (modeIsWhitelist) whiteSelection = emptySet() else blackSelection = emptySet()
+                            listState.requestScrollToItem(0)
+                        },
+                    )
+                }
+                Row(Modifier.fillMaxWidth().heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text("Показывать системные приложения", Modifier.weight(1f), color = colors.textSecondary)
+                    V2Switch(showSystemApps, {
+                        listState.requestScrollToItem(0)
+                        onShowSystemAppsChange(it)
+                    })
+                }
+            }
 
             Text(
                 text = if (modeIsWhitelist) {

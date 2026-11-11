@@ -74,6 +74,7 @@ fun V2RoutingScreen(
 
     val serverRoutingActiveLive by TunnelManager.serverRoutingActive.collectAsStateWithLifecycle()
     val isServerRouting = serverRoutingActiveLive
+    val showSystemApps by settingsStore.showSystemApps.collectAsStateWithLifecycle(false)
 
     val savedExcluded by settingsStore.excludedApps.collectAsStateWithLifecycle(
         initialValue = SettingsStore.cachedExcludedApps ?: "",
@@ -290,17 +291,21 @@ fun V2RoutingScreen(
             isWhitelist = isWhitelist,
             blacklist = persistedBlacklist,
             whitelist = persistedWhitelist,
+            showSystemApps = showSystemApps,
+            onShowSystemAppsChange = { enabled -> scope.launch { settingsStore.saveShowSystemApps(enabled) } },
             onClose = { black, white, modeWhite ->
                 showAppsDialog = false
                 val modeChanged = modeWhite != isWhitelist
                 val blackChanged = black != persistedBlacklist
                 val whiteChanged = white != persistedWhitelist
-                if (modeChanged || blackChanged || whiteChanged) {
+                val blackOrderChanged = black.toList() != persistedBlacklist.toList()
+                val whiteOrderChanged = white.toList() != persistedWhitelist.toList()
+                if (modeChanged || blackOrderChanged || whiteOrderChanged) {
                     scope.launch {
                         if (modeChanged) settingsStore.saveIsWhitelist(modeWhite)
-                        if (blackChanged) settingsStore.saveExcludedApps(black.sorted().joinToString(","))
-                        if (whiteChanged) settingsStore.saveWhitelistApps(white.sorted().joinToString(","))
-                        TunnelManager.reloadVpn()
+                        if (blackOrderChanged) settingsStore.saveExcludedApps(black.joinToString(","))
+                        if (whiteOrderChanged) settingsStore.saveWhitelistApps(white.joinToString(","))
+                        if (modeChanged || blackChanged || whiteChanged) TunnelManager.reloadVpn()
                     }
                 }
             },
