@@ -28,4 +28,23 @@ try {
         [IO.File]::WriteAllBytes($destination, $bytes)
     }
     Write-Output "Verified debug.59.9_old runtime: $hash; UDP send 16 KiB / receive 32 KiB."
+    $serverManifest = Get-Content -LiteralPath "$projectRoot/app/src/main/assets/csqtt.server-provenance.json" -Raw | ConvertFrom-Json
+    foreach ($server in $serverManifest.artifacts) {
+        if ($server.assetName -notmatch '^csqtt-linux-[a-z0-9]+$') { throw 'Invalid server asset name.' }
+        $entry = $zip.GetEntry("assets/$($server.assetName)")
+        if ($null -eq $entry) { throw 'Missing baseline server asset.' }
+        $stream = $entry.Open(); $memory = [IO.MemoryStream]::new()
+        try { $stream.CopyTo($memory); $bytes = $memory.ToArray() }
+        finally { $stream.Dispose(); $memory.Dispose() }
+        $hash = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($bytes))
+        if ($hash -ne $server.binarySha256 -or $bytes.Length -ne $server.binarySize) { throw 'Server provenance mismatch.' }
+        $destination = "$projectRoot/.local/runtime16/assets/$($server.assetName)"
+        if (Test-Path -LiteralPath $destination) {
+            if ((Get-FileHash -LiteralPath $destination -Algorithm SHA256).Hash -ne $hash) { throw 'Preserving different server asset.' }
+        } else {
+            [IO.Directory]::CreateDirectory([IO.Path]::GetDirectoryName($destination)) | Out-Null
+            [IO.File]::WriteAllBytes($destination, $bytes)
+        }
+        Write-Output "Verified unchanged 59.9 server: $($server.assetName), $hash."
+    }
 } finally { $zip.Dispose() }

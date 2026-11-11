@@ -2,8 +2,13 @@ use crate::packet::extract_dst_ipv4;
 use std::collections::HashMap;
 use std::net::Ipv4Addr;
 
+// swg-panel: read at runtime via swgpanel::{iface, subnet_cidr, subnet_prefix} (--iface / --tun-addr); kept as the
+// stock values.
+#[allow(dead_code)]
 pub const TUN_IFACE: &str = "csqtt1";
+#[allow(dead_code)]
 pub const TUN_SUBNET: &str = "10.66.67.0/24";
+#[allow(dead_code)]
 const SUBNET_PREFIX: [u8; 3] = [10, 66, 67];
 
 pub type SessionId = u64;
@@ -30,6 +35,12 @@ const FLOW_EVICT_EVERY: u32 = 1024;
 const FLOW_IDLE_TTL: std::time::Duration = std::time::Duration::from_secs(30);
 const SMALL_UDP_MAX_LEN: usize = 300;
 const SMALL_UDP_STICKY: std::time::Duration = std::time::Duration::from_secs(1);
+// swg-panel: the small-UDP pin holds a flow on ONE stream, and VK caps each allocation at about one stream's
+// rate (~2 Mbit/s): a pinned QUIC download or nested tunnel fell from 20 to 2.1 Mbit/s. A flow keeps its pin
+// only while it fits in one stream (3/4 of TB_RATE); above that it is bulk for BULK_HOLD and rotates in bursts.
+const PIN_WINDOW: std::time::Duration = std::time::Duration::from_millis(250);
+const PIN_WINDOW_MAX_BYTES: usize = (TB_RATE_BYTES_PER_SEC as usize) * 3 / 4 / 4;
+const BULK_HOLD: std::time::Duration = std::time::Duration::from_secs(2);
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 enum FlowKey {
@@ -55,6 +66,9 @@ struct FlowState {
     last_seen: std::time::Instant,
     burst_left: usize,
     sticky_until: Option<std::time::Instant>,
+    window_start: std::time::Instant,
+    window_bytes: usize,
+    bulk_until: Option<std::time::Instant>,
 }
 
 fn transport_ports(packet: &[u8], offset: usize, proto: u8) -> (u16, u16) {
@@ -200,11 +214,13 @@ impl ClientRoute {
         let elapsed = now
             .saturating_duration_since(self.last_update[idx])
             .as_secs_f64();
+        // The clock moves only with a credit, as the client's bucket does: moving it on every call lost every interval
+        // under 100 µs, so a stream fed faster than that never refilled.
         if elapsed >= 0.0001 {
             self.tokens[idx] =
                 (self.tokens[idx] + elapsed * TB_RATE_BYTES_PER_SEC).min(TB_CAPACITY_BYTES);
+            self.last_update[idx] = now;
         }
-        self.last_update[idx] = now;
     }
 
     fn evict_flows(&mut self, now: std::time::Instant) {
@@ -274,7 +290,17 @@ impl ClientRoute {
 
         if let Some(mut state) = self.flows.get(&key).copied() {
             state.last_seen = now;
-            if small_udp {
+            if now.saturating_duration_since(state.window_start) >= PIN_WINDOW {
+                state.window_start = now;
+                state.window_bytes = 0;
+            }
+            state.window_bytes += packet.len();
+            if state.window_bytes > PIN_WINDOW_MAX_BYTES {
+                state.bulk_until = Some(now + BULK_HOLD);
+                state.sticky_until = None;
+            }
+            let bulk = state.bulk_until.is_some_and(|until| now < until);
+            if small_udp && !bulk {
                 state.sticky_until = Some(now + SMALL_UDP_STICKY);
             }
             let sticky = state.sticky_until.is_some_and(|until| now < until);
@@ -305,6 +331,9 @@ impl ClientRoute {
                 last_seen: now,
                 burst_left: FLOW_BURST_BYTES.saturating_sub(packet.len()),
                 sticky_until: small_udp.then(|| now + SMALL_UDP_STICKY),
+                window_start: now,
+                window_bytes: packet.len(),
+                bulk_until: None,
             },
         );
         self.tokens[idx] = (self.tokens[idx] - len_f).max(MAX_DEFICIT);
@@ -460,7 +489,9 @@ impl Default for RouteTable {
 
 #[inline(always)]
 pub fn route_index(ip: [u8; 4]) -> Option<usize> {
-    (ip[..3] == SUBNET_PREFIX).then_some(ip[3] as usize)
+    // swg-panel: the /24 prefix follows the instance's --tun-addr (stock: 10.66.67). One process = one
+    // subnet, so this reads a process-global set once at boot.
+    (ip[..3] == crate::swgpanel::subnet_prefix()).then_some(ip[3] as usize)
 }
 
 pub fn parse_ipv4(value: &str) -> Option<[u8; 4]> {
@@ -473,6 +504,26 @@ mod tests {
 
     fn ip(last: u8) -> [u8; 4] {
         [10, 66, 67, last]
+    }
+
+    #[test]
+    fn refill_accumulates_intervals_under_100_microseconds() {
+        let t0 = std::time::Instant::now();
+        let mut route = ClientRoute {
+            tokens: vec![0.0],
+            last_update: vec![t0],
+            ..Default::default()
+        };
+        // a packet every 50 µs for 1 ms: each interval alone is under the 100 µs step
+        for i in 1..=20u64 {
+            route.refill(0, t0 + std::time::Duration::from_micros(50 * i));
+        }
+        let expected = 0.001 * TB_RATE_BYTES_PER_SEC; // 247 bytes
+        assert!(
+            (route.tokens[0] - expected).abs() < 1.0,
+            "1 ms of 50 µs steps credits {} bytes, expected {expected}",
+            route.tokens[0]
+        );
     }
 
     #[test]
@@ -626,6 +677,42 @@ mod tests {
                 None => pinned = Some(ep.worker_id),
             }
         }
+    }
+
+    #[test]
+    fn downlink_bulk_udp_with_small_packets_is_not_pinned() {
+        // swg-panel: a QUIC-like download (1300-byte packets at ~20 Mbit/s, a small one every 200 ms) must spread.
+        let mut table = RouteTable::new();
+        for w in 1..=10u16 {
+            assert!(table.register(ip(2), w as _, w as _, w as _, w as _));
+        }
+        let start = std::time::Instant::now();
+        let (big, small) = (udp_packet(1300, 443), udp_packet(100, 443));
+        let mut per = std::collections::HashMap::new();
+        for i in 0..4000u64 {
+            let now = start + std::time::Duration::from_micros(i * 520);
+            let pkt = if i % 385 == 0 { &small } else { &big };
+            *per.entry(table.select_packet(2, now, pkt).unwrap().worker_id).or_insert(0usize) += 1;
+        }
+        let top = per.values().copied().max().unwrap();
+        assert!(per.len() == 10 && top < 4000 / 5, "a bulk flow must use every stream: {per:?}");
+    }
+
+    #[test]
+    fn downlink_game_flow_with_large_packets_stays_pinned() {
+        // swg-panel: the Steam fix stands for a flow that fits one stream (64 pkt/s, small and 1200-byte mixed).
+        let mut table = RouteTable::new();
+        for w in 1..=3u16 {
+            assert!(table.register(ip(2), w as _, w as _, w as _, w as _));
+        }
+        let start = std::time::Instant::now();
+        let (big, small) = (udp_packet(1200, 27015), udp_packet(120, 27015));
+        let mut ids = Vec::new();
+        for i in 0..320u64 {
+            let now = start + std::time::Duration::from_micros(i * 15_625);
+            ids.push(table.select_packet(2, now, if i % 2 == 0 { &small } else { &big }).unwrap().worker_id);
+        }
+        assert!(ids.iter().all(|&w| w == ids[0]), "a game flow must keep one stream: {ids:?}");
     }
 
     #[test]

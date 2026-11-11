@@ -10,7 +10,9 @@ $expectedApkHash = '1AFD5F1E015ADCC23B110476543AE6D0C01F85E28A74D1598AA7CD50DA0A
 if ((Get-FileHash -LiteralPath $apkPath -Algorithm SHA256).Hash -ne $expectedApkHash) {
     throw 'Original APK checksum differs from the reviewed CSQTT 2.5.0 artifact.'
 }
-$serverManifest = Get-Content -LiteralPath "$projectRoot/app/src/main/assets/csqtt.server-provenance.json" -Raw | ConvertFrom-Json
+$serverManifestJson = & git -C $projectRoot show 'fd936ef:app/src/main/assets/csqtt.server-provenance.json'
+if ($LASTEXITCODE -ne 0) { throw 'Original reference manifest is unavailable.' }
+$serverManifest = ($serverManifestJson -join "`n") | ConvertFrom-Json
 $targets = @()
 foreach ($artifact in $serverManifest.artifacts) {
     $targets += @{

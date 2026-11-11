@@ -312,11 +312,17 @@ impl Database {
             } else {
                 key.clone()
             };
-            if entry.ip.is_empty()
-                && let Some(next_ip) = get_next_ip(self)
-            {
-                entry.ip = next_ip;
-                repairs.push(format!("password tag={tag} ip assigned"));
+            if !ip_in_pool(&entry.ip) {
+                let foreign = !entry.ip.is_empty();
+                entry.ip.clear();
+                if let Some(next_ip) = get_next_ip(self) {
+                    entry.ip = next_ip;
+                    repairs.push(if foreign {
+                        format!("password tag={tag} ip outside this server's subnet reassigned")
+                    } else {
+                        format!("password tag={tag} ip assigned")
+                    });
+                }
             }
             if entry.sub_uuid.trim().is_empty() {
                 entry.sub_uuid = random_uuid_v4();
@@ -719,14 +725,40 @@ pub fn is_expired(entry: &PasswordEntry) -> bool {
     entry.expires_at != 0 && now() > entry.expires_at
 }
 
-pub const OWNER_TUNNEL_IP: &str = "10.66.67.2";
+// swg-panel: .2 of the instance's --tun-addr /24 (stock: 10.66.67.2).
+pub fn owner_tunnel_ip() -> String {
+    crate::swgpanel::subnet_addr(2)
+}
+
+// Is `ip` an address of THIS server's client pool (.3–.250 of its --tun-addr /24)? An address from elsewhere — a 2.1.9
+// export imported into a second server on 10.66.68, a store copied between servers — was handed out as is: the client
+// got TUNCONF 10.66.67.x, the downlink index refused it and the return path led to the other server's TUN.
+pub fn ip_in_pool(ip: &str) -> bool {
+    let Some(o) = crate::tun_device::parse_ipv4(ip) else {
+        return false;
+    };
+    [o[0], o[1], o[2]] == crate::swgpanel::subnet_prefix() && (3..=250).contains(&o[3])
+}
+
+// The address an IMPORTED client gets: its own only when it is in this server's pool and no client already has it —
+// an export merged into a server with clients (or two clients of one export on one address) gave two clients one
+// tunnel address, and each broke the other's traffic. Clients are inserted one by one, so earlier ones in the same
+// import count as taken.
+pub fn import_ip(db: &Database, ip: &str) -> String {
+    if ip_in_pool(ip) && !db.passwords.values().any(|entry| entry.ip == ip) {
+        return ip.to_owned();
+    }
+    get_next_ip(db).unwrap_or_default()
+}
 
 pub fn get_next_ip(db: &Database) -> Option<String> {
     let mut buf = String::with_capacity(16);
     for i in 3..=250u8 {
         buf.clear();
         use std::fmt::Write;
-        let _ = write!(buf, "10.66.67.{i}");
+        // swg-panel: pool base follows the instance's --tun-addr /24 (stock: 10.66.67).
+        let p = crate::swgpanel::subnet_prefix();
+        let _ = write!(buf, "{}.{}.{}.{i}", p[0], p[1], p[2]);
         let is_used = db.passwords.values().any(|d| d.ip == buf);
         if !is_used {
             return Some(buf);
@@ -737,7 +769,7 @@ pub fn get_next_ip(db: &Database) -> Option<String> {
 
 pub fn resolve_session_ip(db: &Database, session_password: &str) -> Option<String> {
     if secret_eq(session_password, &db.main_password) {
-        return Some(OWNER_TUNNEL_IP.to_owned());
+        return Some(owner_tunnel_ip());
     }
     db.passwords.get(session_password).and_then(|entry| {
         if !entry.ip.is_empty() {
@@ -1790,6 +1822,30 @@ fn write_traffic(connection: &mut Connection, traffic: &TrafficSnapshot) -> Resu
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn import_never_hands_out_a_taken_address() {
+        let mut db = Database::default();
+        let entry = |ip: &str| PasswordEntry { ip: ip.to_owned(), ..Default::default() };
+        db.passwords.insert("existing".into(), entry("10.66.67.3"));
+        // a free in-pool address is kept
+        assert_eq!(super::import_ip(&db, "10.66.67.40"), "10.66.67.40");
+        // a taken one, or one from another subnet, gets the next free address
+        assert_eq!(super::import_ip(&db, "10.66.67.3"), "10.66.67.4");
+        assert_eq!(super::import_ip(&db, "10.66.68.9"), "10.66.67.4");
+        // an earlier client of the same import counts as taken
+        db.passwords.insert("imported-1".into(), entry("10.66.67.4"));
+        assert_eq!(super::import_ip(&db, "10.66.67.4"), "10.66.67.5");
+    }
+
+    #[test]
+    fn ip_in_pool_is_this_servers_pool_only() {
+        // stock config (no --tun-addr): 10.66.67.3–.250
+        assert!(super::ip_in_pool("10.66.67.3") && super::ip_in_pool("10.66.67.250"));
+        for bad in ["", "10.66.67.1", "10.66.67.2", "10.66.67.251", "10.66.68.3", "fd66:67::3", "junk"] {
+            assert!(!super::ip_in_pool(bad), "{bad}");
+        }
+    }
+
     use super::{
         Database, DatabasePersistence, PasswordEntry, PersistenceQueue, PersistenceUpdate,
         TrafficCounters, TrafficSnapshot, load_database, save_database,
