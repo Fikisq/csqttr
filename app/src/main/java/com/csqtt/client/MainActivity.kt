@@ -761,10 +761,9 @@ private fun RowScope.NavigationItem(
     tunnelRunning: Boolean,
     onTabSelected: (Int) -> Unit,
 ) {
-    val emphasis by remember(index, visualIndex) {
+    val emphasis = remember(index, visualIndex) {
         derivedStateOf { (1f - abs(index - visualIndex.value)).coerceIn(0f, 1f) }
     }
-    val iconColor = lerp(unselectedColor, selectedColor, emphasis)
     val label = stringResource(item.labelRes)
     val colors = MaterialTheme.colorScheme
 
@@ -776,8 +775,12 @@ private fun RowScope.NavigationItem(
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Box(contentAlignment = Alignment.TopEnd) {
-            Icon(imageVector = if (emphasis > 0.55f) item.selectedIcon else item.unselectedIcon,
-                contentDescription = null, modifier = Modifier.size(22.dp), tint = iconColor)
+            Icon(imageVector = item.unselectedIcon, contentDescription = null,
+                modifier = Modifier.size(22.dp).graphicsLayer { alpha = 1f - emphasis.value },
+                tint = unselectedColor)
+            Icon(imageVector = item.selectedIcon, contentDescription = null,
+                modifier = Modifier.size(22.dp).graphicsLayer { alpha = emphasis.value },
+                tint = selectedColor)
             if (item.id == 3 && unreadErrors > 0) {
                 Badge(containerColor = if (tunnelRunning) colors.primary else CSQTTColors.warning,
                     contentColor = colors.onPrimary, modifier = Modifier.offset(x = 12.dp, y = (-8).dp)) {
@@ -786,9 +789,14 @@ private fun RowScope.NavigationItem(
             }
         }
         Spacer(Modifier.height(4.dp))
-        Text(text = label, style = MaterialTheme.typography.labelSmall,
-            fontWeight = if (emphasis > 0.55f) FontWeight.SemiBold else FontWeight.Medium,
-            color = iconColor, maxLines = 1)
+        Box(contentAlignment = Alignment.Center) {
+            Text(text = label, style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Medium, color = unselectedColor, maxLines = 1,
+                modifier = Modifier.graphicsLayer { alpha = 1f - emphasis.value })
+            Text(text = label, style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.SemiBold, color = selectedColor, maxLines = 1,
+                modifier = Modifier.graphicsLayer { alpha = emphasis.value })
+        }
     }
 }
 
