@@ -339,6 +339,7 @@ fun MainScreen(
     val infoActionsExpanded by settingsStore.infoActionsExpanded.collectAsStateWithLifecycle(initialValue = false)
     val infoProjectExpanded by settingsStore.infoProjectExpanded.collectAsStateWithLifecycle(initialValue = false)
     var selectedTab by rememberSaveable { mutableIntStateOf(initialTab) }
+    val currentSelectedTab by rememberUpdatedState(selectedTab)
     var tunnelValidationRequest by rememberSaveable { mutableIntStateOf(0) }
     val dragTargetIndex = remember { mutableIntStateOf(-1) }
     val dragProgress = remember { mutableFloatStateOf(0f) }
@@ -473,7 +474,7 @@ fun MainScreen(
                         .fillMaxSize()
                         .padding(padding)
                         .consumeWindowInsets(padding)
-                        .pointerInput(selectedTab, csqttLinkMode, participantShowLogs) {
+                        .pointerInput(csqttLinkMode, participantShowLogs) {
                         var totalDrag = 0f
                         detectHorizontalDragGestures(
                             onDragStart = {
@@ -502,7 +503,7 @@ fun MainScreen(
                                 return@detectHorizontalDragGestures
                             }
 
-                            val currentActiveIndex = activeNavItems.indexOfFirst { it.id == selectedTab }
+                            val currentActiveIndex = activeNavItems.indexOfFirst { it.id == currentSelectedTab }
                             val candidate = if (totalDrag < 0f) currentActiveIndex + 1 else currentActiveIndex - 1
                             if (candidate !in activeNavItems.indices) {
                                 dragTargetIndex.intValue = -1
