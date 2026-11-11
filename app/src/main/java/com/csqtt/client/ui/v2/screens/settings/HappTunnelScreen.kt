@@ -17,7 +17,9 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import com.csqtt.client.*
+import com.csqtt.client.ui.legacy.GOOBY_HELP
 import com.csqtt.client.ui.legacy.ModeIndicator
+import com.csqtt.client.ui.legacy.goobyIndicator
 import com.csqtt.client.ui.v2.components.*
 import com.csqtt.client.ui.v2.design.V2Theme
 import com.csqtt.client.ui.v2.design.V2Sizes
@@ -66,6 +68,7 @@ fun HappTunnelScreen(settingsStore: SettingsStore, version: String, onSettings: 
     val token by settingsStore.vkAccessToken.collectAsStateWithLifecycle("")
     val srtp by settingsStore.srtpMode.collectAsStateWithLifecycle("auto")
     val transport by settingsStore.turnTransport.collectAsStateWithLifecycle("udp")
+    val goobyMode by settingsStore.goobyMode.collectAsStateWithLifecycle(GoobyMode.OFF)
     val subnet by settingsStore.selectedTurnSubnet.collectAsStateWithLifecycle("")
     val ipLimit by settingsStore.turnSubnetIpLimit.collectAsStateWithLifecycle("ALL")
     val results by settingsStore.vkHashCheckResults.collectAsStateWithLifecycle("{}")
@@ -149,6 +152,9 @@ fun HappTunnelScreen(settingsStore: SettingsStore, version: String, onSettings: 
         "UDP" to ModeIndicator(1f, green),
         "TCP" to ModeIndicator(0.7f, yellow),
     )
+    val goobyIndicators = GoobyMode.entries.mapNotNull { mode ->
+        goobyIndicator(mode, green)?.let { mode.label to it }
+    }.toMap()
     V2AdaptiveScreen(Modifier.fillMaxSize().padding(horizontal = V2Sizes.ScreenPadding), dense = transport != "udp") {
         val layout = LocalV2AdaptiveMetrics.current
         val pill = RoundedCornerShape(50)
@@ -209,6 +215,22 @@ fun HappTunnelScreen(settingsStore: SettingsStore, version: String, onSettings: 
                 },
                     compact = true, shape = pill, indicators = transportIndicators, enabled = !busy,
                     help = "UDP — основной транспорт TURN. TCP/TLS — альтернатива, если UDP недоступен.")
+                key(editingProfile, transport) {
+                    HappChoice(
+                        label = "Gooby",
+                        value = goobyMode.label,
+                        options = GoobyMode.entries.map { it.label },
+                        onSelect = { label ->
+                            val mode = GoobyMode.entries.first { it.label == label }
+                            scope.launch { settingsStore.saveGoobyMode(mode, editingProfile) }
+                        },
+                        indicators = goobyIndicators,
+                        help = GOOBY_HELP,
+                        enabled = GoobyMode.isAvailable(transport) && !busy,
+                        compact = true,
+                        shape = pill,
+                    )
+                }
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Text("Потоки", Modifier.weight(1f), fontSize = V2TextSizes.Body)
                     HappHelp("Потоки", "Число параллельных TURN-потоков. Настройка относится к текущему профилю.")

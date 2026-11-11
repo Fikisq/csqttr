@@ -1,5 +1,7 @@
 package com.csqtt.client.ui.legacy
 
+import com.csqtt.client.GoobyMode
+
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -47,6 +49,17 @@ data class ModeIndicator(
     val progress: Float,
     val color: Color,
 )
+
+internal const val GOOBY_HELP =
+    "Gooby работает при TCP/TLS. При UDP выбранный режим сохраняется, а Gooby отключён."
+
+internal fun goobyIndicator(mode: GoobyMode, color: Color): ModeIndicator? =
+    when (mode) {
+        GoobyMode.OFF -> null
+        GoobyMode.GENTLE -> ModeIndicator(1f / 3f, color)
+        GoobyMode.CURRENT -> ModeIndicator(2f / 3f, color)
+        GoobyMode.EXTENDED -> ModeIndicator(1f, color)
+    }
 
 @Composable
 internal fun ModeProgressBar(

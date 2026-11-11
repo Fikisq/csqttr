@@ -40,6 +40,7 @@ import com.csqtt.client.SettingsStore
 import com.csqtt.client.TunnelManager
 import com.csqtt.client.TunnelAuthSnapshot
 import com.csqtt.client.CsqttConstants
+import com.csqtt.client.GoobyMode
 import com.csqtt.client.WorkerCountPolicy
 import com.csqtt.client.VkHashValidationCodec
 import com.csqtt.client.VkHashValidator
@@ -126,6 +127,8 @@ internal fun SettingsTabContent(
     var showSecretsDialog by rememberSaveable { mutableStateOf(false) }
 
     val tunnelRunning by TunnelManager.running.collectAsStateWithLifecycle()
+    val tunnelStarting by TunnelManager.starting.collectAsStateWithLifecycle()
+    val tunnelStopping by TunnelManager.stopping.collectAsStateWithLifecycle()
     var showHashModeGeneralDialog by rememberSaveable { mutableStateOf(false) }
     var showHashModeDetailDialog by rememberSaveable { mutableStateOf<String?>(null) }
     var showWorkModeGeneralDialog by rememberSaveable { mutableStateOf(false) }
@@ -141,6 +144,8 @@ internal fun SettingsTabContent(
     val turnTransport by settingsStore.turnTransport.collectAsStateWithLifecycle(
         initialValue = SettingsStore.cachedTurnTransport ?: CsqttConstants.Tunnel.DEFAULT_TURN_TRANSPORT,
     )
+    val goobyMode by settingsStore.goobyMode.collectAsStateWithLifecycle(GoobyMode.OFF)
+    var showGoobyHelp by rememberSaveable { mutableStateOf(false) }
     val tcpTransportRiskAcknowledged by settingsStore.tcpTransportRiskAcknowledged.collectAsStateWithLifecycle(
         initialValue = false,
     )
@@ -821,6 +826,20 @@ internal fun SettingsTabContent(
                     onSelected = ::requestTurnTransport,
                 )
 
+                key(activeProfile, turnTransport) {
+                    CompactDropdownSetting(
+                        title = "Gooby",
+                        selectedKey = goobyMode.storedValue,
+                        options = GoobyMode.entries.map { it.storedValue to it.label },
+                        enabled = GoobyMode.isAvailable(turnTransport) && !tunnelRunning && !tunnelStarting && !tunnelStopping,
+                        indicatorProvider = { goobyIndicator(GoobyMode.fromStored(it), Color(0xFF43A047)) },
+                        onTitleInfo = { showGoobyHelp = true },
+                        onSelected = { value ->
+                            scope.launch { settingsStore.saveGoobyMode(GoobyMode.fromStored(value), activeProfile) }
+                        },
+                    )
+                }
+
                 TunnelWorkersControl(
                     value = currentWorkers,
                     maximum = selectableMaxWorkers,
@@ -1040,6 +1059,14 @@ internal fun SettingsTabContent(
             }
             if (showWorkersInfoDialog) {
                 WorkersInfoDialog(onDismiss = { showWorkersInfoDialog = false })
+            }
+            if (showGoobyHelp) {
+                AlertDialog(
+                    onDismissRequest = { showGoobyHelp = false },
+                    title = { Text("Gooby") },
+                    text = { Text(GOOBY_HELP) },
+                    confirmButton = { TextButton(onClick = { showGoobyHelp = false }) { Text("Понятно") } },
+                )
             }
             if (showTurnTransportGeneralDialog) {
                 TurnTransportInfoDialog(mode = null, onDismiss = { showTurnTransportGeneralDialog = false })
