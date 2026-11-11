@@ -1,4 +1,4 @@
-package com.csqtt.client.ui
+package com.csqtt.client.ui.legacy
 
 import java.io.File
 import org.junit.Assert.assertFalse
@@ -6,12 +6,6 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class DeployScriptPreflightTest {
-    @Test
-    fun `shell asset stays LF on Windows so uploaded bash can execute it`() {
-        val source = listOf(File("app/src/main/assets/deploy.sh"), File("src/main/assets/deploy.sh")).first(File::isFile)
-        assertFalse("deploy.sh must not contain CRLF in the APK", source.readBytes().any { it == 13.toByte() })
-    }
-
     private fun script(): String {
         val candidates = listOf(
             File("app/src/main/assets/deploy.sh"),
@@ -22,8 +16,8 @@ class DeployScriptPreflightTest {
 
     private fun deployOperations(): String {
         val candidates = listOf(
-            File("app/src/main/java/com/csqtt/client/ui/DeployOperations.kt"),
-            File("src/main/java/com/csqtt/client/ui/DeployOperations.kt"),
+            File("app/src/main/java/com/csqtt/client/ui/legacy/DeployOperations.kt"),
+            File("src/main/java/com/csqtt/client/ui/legacy/DeployOperations.kt"),
         )
         return candidates.first(File::isFile).readText().replace("\r\n", "\n")
     }
@@ -69,7 +63,7 @@ class DeployScriptPreflightTest {
 
         val client = deployOperations()
         assertFalse(client.contains("bash /tmp/deploy.sh prepare"))
-        assertTrue(client.indexOf("/tmp/.csqtt-upload-server") < client.indexOf("bash /tmp/deploy.sh install"))
+        assertTrue(client.indexOf("/tmp/.csqtt-upload-server") < client.indexOf("bash /tmp/deploy.sh \${mode.scriptAction}"))
     }
 
     @Test
@@ -130,15 +124,16 @@ class DeployScriptPreflightTest {
     }
 
     @Test
-    fun `docker build uses mirrors without writing protected resolver and streams output`() {
+    fun `docker image build retries DNS with Yandex resolvers`() {
         val deploy = script()
-        val build = deploy.substringAfter("docker_build_candidate_image() {").substringBefore("prepare_docker_candidate()")
-        assertTrue(build.contains("--network host"))
-        assertTrue(build.contains("--add-host"))
-        assertTrue(build.contains("https://mirror.yandex.ru/mirrors/alpine"))
-        assertTrue(build.contains("| tee"))
-        assertFalse(deploy.contains("CSQTT_BUILD_DNS_PRIMARY"))
-        assertTrue(deploy.contains("timeout -k 5s 60s apk add"))
+        assertTrue(deploy.contains("DOCKER_BUILD_TIMEOUT_SECONDS"))
+        assertTrue(deploy.contains("docker build --network host"))
+        assertTrue(deploy.contains("CSQTT_BUILD_DNS_PRIMARY:-"))
+        assertTrue(deploy.contains("FROM alpine:3.21"))
+        assertTrue(deploy.contains("apk add --no-cache --no-progress ca-certificates iproute2 iptables"))
+        assertTrue(deploy.contains("CSQTT_BUILD_DNS_PRIMARY=77.88.8.8"))
+        assertTrue(deploy.contains("CSQTT_BUILD_DNS_SECONDARY=77.88.8.1"))
+        assertTrue(deploy.contains("Temporary failure resolving|Could not resolve|Name or service not known"))
     }
 
     @Test

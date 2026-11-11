@@ -1,7 +1,7 @@
 package com.csqtt.client
 
-import com.csqtt.client.ui.utils.parseCsqttLink
-import com.csqtt.client.ui.utils.peerAddress
+import com.csqtt.client.ui.legacy.utils.parseCsqttLink
+import com.csqtt.client.ui.legacy.utils.peerAddress
 import kotlinx.coroutines.flow.first
 
 data class ConnectionSource(
@@ -13,7 +13,12 @@ data class ConnectionSource(
     val tokenFromLink: Boolean,
 )
 
-suspend fun resolveConnectionSource(store: SettingsStore): ConnectionSource? {
+/** A participant's hashes: the owner's from the link minus the ones taken out, then the participant's own. */
+internal fun participantHashes(linkHashes: List<String>, removed: Set<String>, ownHashes: String): String =
+    (linkHashes.filterNot { it in removed } + ownHashes.split(Regex("[,\\s\\n]+")))
+        .map(String::trim).filter(String::isNotEmpty).distinct().joinToString(",")
+
+suspend fun resolveConnectionSource(store: SettingsStore, updateLogMask: Boolean = true): ConnectionSource? {
     val invalidHashes = VkHashValidationCodec.decode(store.vkHashCheckResults.first())
     fun activeHashes(raw: String): String {
         val rawList = raw.split(Regex("[,\\s\\n]+")).map(String::trim).filter { it.length >= 16 }.distinct()
@@ -23,27 +28,28 @@ suspend fun resolveConnectionSource(store: SettingsStore): ConnectionSource? {
 
     if (store.csqttLinkMode.first()) {
         val link = parseCsqttLink(store.csqttLink.first()) ?: return null
-        val linkHashes = activeHashes(link.hashes.joinToString(","))
+        if (updateLogMask) TunnelManager.ownerHashes = link.hashes
+        val removed = store.linkHashesRemoved.first()
         val tokenFromLink = link.vkAccessToken.isNotEmpty()
         return ConnectionSource(
             peer = link.peerAddress(),
             password = link.password,
-            hashes = if (tokenFromLink) "" else linkHashes.ifEmpty { activeHashes(store.vkHashes.first()) },
-            hashesFromLink = linkHashes.isNotEmpty(),
+            hashes = if (tokenFromLink) "" else activeHashes(participantHashes(link.hashes, removed, store.vkHashes.first())),
+            // a link with hashes hides the hash mode, so the participant's list (the owner's kept + their own) is used as
+            // is — even with every owner hash taken out — never through a stored hash mode they cannot see
+            hashesFromLink = link.hashes.isNotEmpty(),
             vkAccessToken = link.vkAccessToken,
             tokenFromLink = tokenFromLink,
         )
     }
 
+    if (updateLogMask) TunnelManager.ownerHashes = emptyList()
     val basePeer = store.peer.first()
     val passwordState = store.connectionPasswordState.first()
     val password = passwordState.value
     if (basePeer.isBlank()) return null
-    val serverPeerPort = if (store.manualPortsEnabled.first()) {
-        store.serverPeerPort.first()
-    } else {
-        CsqttConstants.Network.DEFAULT_SERVER_PEER_PORT
-    }
+    val serverPeerPort = store.serverPeerPort.first().takeIf { it in 1..65535 }
+        ?: CsqttConstants.Network.DEFAULT_SERVER_PEER_PORT
     val peer = if (basePeer.contains(':')) basePeer else "$basePeer:$serverPeerPort"
     return ConnectionSource(
         peer = peer,

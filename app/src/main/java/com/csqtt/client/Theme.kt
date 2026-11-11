@@ -23,10 +23,10 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.sp
 import androidx.core.view.WindowCompat
 import com.csqtt.client.CsqttConstants
-import com.csqtt.client.ui.design.CsqttDarkExtendedColors
-import com.csqtt.client.ui.design.CsqttLightExtendedColors
-import com.csqtt.client.ui.design.CsqttMaterialShapes
-import com.csqtt.client.ui.design.LocalCsqttExtendedColors
+import com.csqtt.client.ui.legacy.design.CsqttDarkExtendedColors
+import com.csqtt.client.ui.legacy.design.CsqttLightExtendedColors
+import com.csqtt.client.ui.legacy.design.CsqttMaterialShapes
+import com.csqtt.client.ui.legacy.design.LocalCsqttExtendedColors
 
 val CSQTTTypography = Typography(
     displayLarge = TextStyle(fontFamily = FontFamily.Default, fontWeight = FontWeight.Bold, fontSize = 57.sp, lineHeight = 64.sp),
@@ -184,7 +184,7 @@ private val ForestDarkColorScheme = darkColorScheme(
     outlineVariant = Color(0xFF48454E),
 )
 
-private val BrandLightColorScheme = lightColorScheme(
+internal val BrandLightColorScheme = lightColorScheme(
     primary = Color(0xFF1A73E8),
     onPrimary = Color(0xFFFFFFFF),
     primaryContainer = Color(0xFFE8F0FE),
@@ -208,7 +208,7 @@ private val BrandLightColorScheme = lightColorScheme(
     surfaceTint = Color.Transparent,
 )
 
-private val BrandDarkColorScheme = darkColorScheme(
+internal val BrandDarkColorScheme = darkColorScheme(
     primary = Color(0xFF1565D8),
     onPrimary = Color(0xFFFFFFFF),
     primaryContainer = Color(0xFF173B72),

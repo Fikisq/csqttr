@@ -54,7 +54,9 @@ class TunVpnService : VpnService() {
 
     // LOW_LATENCY Wi-Fi lock is active only with the screen on, so the deprecated HIGH_PERF mode is kept for the background VPN.
     @Suppress("DEPRECATION")
+    @Synchronized
     private fun acquireLocks() {
+        // «Экономия батареи» in force: no CPU wake lock (the Wi-Fi lock stays)
         if (!BatterySaver.active.value && wakeLock?.isHeld != true) {
             val pm = getSystemService(PowerManager::class.java)
             wakeLock = pm?.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "csqtt:tun_vpn_service")?.apply {
@@ -76,9 +78,10 @@ class TunVpnService : VpnService() {
         if (save) {
             runCatching { if (wakeLock?.isHeld == true) wakeLock?.release() }
             wakeLock = null
-        } else if (!stopRequested && instance === this) acquireLocks()
+        } else if (!stopRequested && !serviceDestroyed) acquireLocks()
     }
 
+    @Synchronized
     private fun releaseLocks() {
         runCatching {
             if (wakeLock?.isHeld == true) wakeLock?.release()
@@ -231,11 +234,10 @@ class TunVpnService : VpnService() {
                     } else {
                         val settingsStore = SettingsStore(applicationContext)
                         ipWhite = settingsStore.ipIsWhitelist.first()
-                        ipListStr = if (ipWhite) {
-                            settingsStore.directIpsWhite.first()
-                        } else {
-                            settingsStore.directIpsBlack.first()
-                        }
+                        // IP routing is on exactly when the list is non-empty: the UI has no off switch (saving IPs sets
+                        // ipRoutingEnabled, nothing clears it; configs from before it have none), so the list is the intent
+                        // — the same rule as the client's command line (TunnelManager) and every TunnelParams builder
+                        ipListStr = if (ipWhite) settingsStore.directIpsWhite.first() else settingsStore.directIpsBlack.first()
                     }
 
                     if (!ipWhite && ipListStr.isNotBlank()) {
@@ -299,11 +301,13 @@ class TunVpnService : VpnService() {
                     }
                     .toSet()
                 if (installedIncluded.isEmpty()) {
-                    if (serverRule == null) {
+                    if (serverRule == null || userSelected.isNotEmpty()) {
                         failVpn("Whitelist пуст: выберите хотя бы одно установленное приложение")
                         return
                     } else {
-                        Log.i(TAG, "Server whitelist has no matching installed apps; falling back to full tunnel")
+                        // An empty server package list means a device-wide domain/IP rule.
+                        // A nonempty list with no installed matches must never broaden to all apps.
+                        Log.i(TAG, "Server rule applies to all applications (no package filter)")
                         try {
                             builder.addDisallowedApplication(applicationContext.packageName)
                         } catch (e: Exception) {

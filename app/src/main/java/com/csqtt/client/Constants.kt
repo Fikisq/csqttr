@@ -14,7 +14,7 @@ object CsqttConstants {
 
     object Profiles {
         const val MIN_INDEX = 0
-        const val MAX_INDEX = 3
+        const val MAX_INDEX = 31
     }
 
     object Network {
@@ -23,6 +23,9 @@ object CsqttConstants {
         const val DEFAULT_SERVER_PEER_PORT = 46000
         const val DEFAULT_SSH_PORT = 22
         const val DEFAULT_SERVER_WEB_PORT = 46002
+        // «Рядом с 2.1.9»: the second server's own ports (deploy.sh CSQTT_INSTANCE=side)
+        const val DEFAULT_SIDE_SERVER_PEER_PORT = 46100
+        const val DEFAULT_SIDE_SERVER_WEB_PORT = 46102
     }
 
     object Tunnel {
@@ -38,7 +41,7 @@ object CsqttConstants {
         const val WORKERS_PER_GROUP = 10
         const val GROUPS_PER_VK_HASH = 1
         const val MAX_VK_HASHES = 7
-        const val DEFAULT_MAX_WORKERS = 100
+        const val DEFAULT_MAX_WORKERS = 70
         const val MAX_WORKERS = 100
     }
 
@@ -85,17 +88,17 @@ object CsqttConstants {
         const val ACTION_UPDATE = "update"
 
         const val GITHUB_RELEASES_URL =
-            "https://api.github.com/repos/amurcanov/csqtt/releases?per_page=30"
+            "https://api.github.com/repos/Afteroid/csqttr/releases?per_page=30"
         const val GITHUB_LATEST_RELEASE_URL =
-            "https://api.github.com/repos/amurcanov/csqtt/releases/latest"
+            "https://api.github.com/repos/Afteroid/csqttr/releases/latest"
         const val GITHUB_LATEST_RELEASE_WEB_URL =
-            "https://github.com/amurcanov/csqtt/releases/latest"
+            "https://github.com/Afteroid/csqttr/releases/latest"
         const val GITHUB_RELEASE_TAG_URL_PREFIX =
-            "https://github.com/amurcanov/csqtt/releases/tag/"
+            "https://github.com/Afteroid/csqttr/releases/tag/"
         const val GITHUB_TAGS_URL =
-            "https://api.github.com/repos/amurcanov/csqtt/tags?per_page=100"
+            "https://api.github.com/repos/Afteroid/csqttr/tags?per_page=100"
         const val GITHUB_TAG_TREE_URL_PREFIX =
-            "https://github.com/amurcanov/csqtt/tree/"
+            "https://github.com/Afteroid/csqttr/tree/"
     }
 
     object Notifications {
@@ -144,7 +147,7 @@ object CsqttConstants {
                 "&response_type=token" +
                 "&revoke=1" +
                 "&v=5.199"
-        const val VK_LOGIN_URL = "https://vk.ru/"
+        const val VK_LOGIN_URL = "https://m.vk.ru/login"
         const val API_METHOD_BASE_URL = "https://api.vk.ru/method/"
         const val API_VERSION = "5.199"
 
@@ -171,13 +174,17 @@ object CsqttConstants {
         const val PALETTE_INDIGO = "indigo"
         const val PALETTE_ESPRESSO = "espresso"
         const val PALETTE_FOREST = "forest"
+
+        /** The app's look: the classic interface (default) or the V2 redesign. */
+        const val DESIGN_CLASSIC = "classic"
+        const val DESIGN_V2 = "v2"
     }
 
     object Links {
-        const val RELEASES = "https://github.com/amurcanov/csqtt/releases"
-        const val ISSUES = "https://github.com/amurcanov/csqtt/issues/new"
+        const val RELEASES = "https://github.com/Afteroid/csqttr/releases"
+        const val ISSUES = "https://github.com/Afteroid/csqttr/issues/new"
         const val DEVELOPER_PROFILE = "https://github.com/amurcanov"
-        const val REPOSITORY = "https://github.com/amurcanov/csqtt"
+        const val REPOSITORY = "https://github.com/Afteroid/csqttr"
         const val TELEGRAM = "https://t.me/amurcanov_telegram"
         const val TELEGRAM_HANDLE = "t.me/amurcanov_telegram"
     }

@@ -1,4 +1,4 @@
-package com.csqtt.client.ui
+package com.csqtt.client.ui.legacy
 
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertEquals
@@ -62,6 +62,17 @@ class DeployResultPolicyTest {
             friendlyDeployError("Auth fail (public key): rejected")
                 .contains("authorized_keys"),
         )
+    }
+
+    @Test
+    fun refusedNamesThePortAndWhatToCheck() {
+        val message = friendlyDeployError(
+            "failed to connect to /1.2.3.4 (port 2222) from /10.0.0.2 (port 40512) after 30000ms: " +
+                "isConnected failed: ECONNREFUSED (Connection refused)"
+        )
+        assertTrue(message.startsWith("Порт SSH 2222 не принимает соединения"))
+        assertTrue(message.contains("Проверьте порт SSH"))
+        assertTrue(friendlyDeployError("Connection refused").startsWith("Порт SSH не принимает соединения"))
     }
 
     @Test
@@ -131,6 +142,15 @@ class DeployResultPolicyTest {
         assertEquals(ServerArchitecture.ARM64, serverArchitectureForMachine("arm64\n"))
         assertEquals(ServerArchitecture.ARMV7, serverArchitectureForMachine("armv7l\n"))
         assertEquals(ServerArchitecture.ARMV7, serverArchitectureForMachine("armhf\n"))
+    }
+
+    @Test
+    fun uninstallSucceedsOnlyWithExitZeroAndItsMarker() {
+        assertTrue(isSuccessfulUninstallResult(0, "...\nCSQTT_UNINSTALL_OK\n"))
+        assertFalse(isSuccessfulUninstallResult(1, "CSQTT_UNINSTALL_OK"))
+        assertFalse(isSuccessfulUninstallResult(0, "CSQTT удалён"))
+        assertTrue(uninstallFailureMessage("CSQTT_DEPLOY_ERROR|validation|порт занят").contains("порт занят"))
+        assertTrue(parseDeployOutputLine("CSQTT_UNINSTALL_OK") == null)   // a marker for the app, not a line for the user
     }
 
     @Test(expected = java.io.IOException::class)

@@ -723,6 +723,101 @@ async fn data_packets_preserve_channel_order_and_release_idle_pool_leases() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn udp_keepalive_tracks_idle_time_per_socket_across_reallocation() {
+    let server = UdpSocket::bind("127.0.0.1:0").await.unwrap();
+    let server_address = server.local_addr().unwrap();
+    let peer = "127.0.0.1:39007".parse().unwrap();
+    let relay = "127.0.0.1:49007".parse().unwrap();
+    let pool = PacketPool::new(64);
+
+    let connect_and_bind = || async {
+        let allocation = connect(server_address, peer, pool.clone()).await;
+        tokio::time::timeout(Duration::from_secs(3), allocation.prepare_channel())
+            .await
+            .unwrap()
+            .unwrap();
+        allocation
+    };
+    let accept_and_bind = || async {
+        let client = receive_challenged_allocate(&server, relay).await;
+        receive_create_permission(&server, client, peer).await;
+        let (wire, source) = recv_datagram(&server).await;
+        assert_eq!(source, client);
+        let request = assert_authenticated_request(&wire, CHANNEL_BIND_REQUEST);
+        server
+            .send_to(
+                &empty_authenticated_success(CHANNEL_BIND_SUCCESS, request.transaction()),
+                client,
+            )
+            .await
+            .unwrap();
+        (client, channel_number(&request))
+    };
+
+    let (old, (old_client, old_channel)) = tokio::join!(connect_and_bind(), accept_and_bind());
+    // Model a handover with both sockets briefly alive on distinct UDP tuples.
+    let (replacement, (new_client, new_channel)) =
+        tokio::join!(connect_and_bind(), accept_and_bind());
+    assert_ne!(old_client, new_client);
+
+    let send_and_expect = async |allocation: &TurnAllocation, client, channel| {
+        let payload = b"active UDP data";
+        let mut packet = pool.acquire();
+        packet.read_area()[..payload.len()].copy_from_slice(payload);
+        packet.set_read_len(payload.len()).unwrap();
+        allocation.send(packet).await.unwrap();
+        assert_eq!(
+            recv_datagram(&server).await,
+            (channel_data(channel, payload), client)
+        );
+    };
+    for _ in 0..2 {
+        tokio::time::sleep(Duration::from_secs(3)).await;
+        send_and_expect(&old, old_client, old_channel).await;
+    }
+
+    let idle_since = tokio::time::Instant::now();
+    let mut wire = [0; 64];
+    let (length, source) =
+        tokio::time::timeout(Duration::from_secs(7), server.recv_from(&mut wire))
+            .await
+            .unwrap()
+            .unwrap();
+    assert_eq!(source, new_client, "active old socket sent a redundant probe");
+    assert_eq!(&wire[..length], channel_data(new_channel, &[0xff]));
+
+    let (length, source) =
+        tokio::time::timeout(Duration::from_secs(8), server.recv_from(&mut wire))
+            .await
+            .unwrap()
+            .unwrap();
+    assert_eq!(source, old_client, "old socket did not resume idle probing");
+    assert_eq!(&wire[..length], channel_data(old_channel, &[0xff]));
+    assert!(idle_since.elapsed() >= Duration::from_secs(9));
+    send_and_expect(&replacement, new_client, new_channel).await;
+
+    let acknowledge_cleanup = async {
+        for client in [old_client, new_client] {
+            let (wire, source) = recv_datagram(&server).await;
+            assert_eq!(source, client);
+            let refresh = assert_authenticated_request(&wire, REFRESH_REQUEST);
+            assert_eq!(attribute_u32(&refresh, ATTR_LIFETIME), 0);
+            server
+                .send_to(&refresh_zero_success(refresh.transaction()), source)
+                .await
+                .unwrap();
+        }
+    };
+    tokio::join!(
+        async {
+            old.deallocate().await;
+            replacement.deallocate().await;
+        },
+        acknowledge_cleanup
+    );
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn final_allocate_errors_preserve_stun_codes() {
     for code in [486u16, 441, 437, 508] {
         let server = Arc::new(UdpSocket::bind("127.0.0.1:0").await.unwrap());

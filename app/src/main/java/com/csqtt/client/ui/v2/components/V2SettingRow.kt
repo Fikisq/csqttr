@@ -1,0 +1,398 @@
+package com.csqtt.client.ui.v2.components
+
+import com.csqtt.client.ui.v2.design.V2TextSizes
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.HelpOutline
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.ui.semantics.Role
+import kotlinx.coroutines.delay
+import com.csqtt.client.ui.v2.design.V2BodyFamily
+import com.csqtt.client.ui.v2.design.V2Shapes
+import com.csqtt.client.ui.v2.design.V2Sizes
+import com.csqtt.client.ui.v2.design.V2Theme
+
+@Composable
+fun V2SettingRow(
+    title: String,
+    modifier: Modifier = Modifier,
+    onClick: (() -> Unit)? = null,
+    enabled: Boolean = true,
+    trailing: @Composable RowScope.() -> Unit = {},
+) {
+    val colors = V2Theme.colors
+
+    V2Card(
+        modifier = modifier,
+        color = colors.bottomSurface,
+        shape = V2Shapes.Row,
+        borderColor = null,
+            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+        onClick = onClick,
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = LocalV2AdaptiveMetrics.current.rowHeight),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Text(
+                text = title,
+                modifier = Modifier.weight(1f),
+                style = MaterialTheme.typography.bodyLarge.copy(
+                    fontFamily = V2BodyFamily,
+                    fontWeight = FontWeight.Normal,
+                    fontSize = V2TextSizes.Body,
+                ),
+                color = if (enabled) colors.textPrimary else colors.textMuted,
+            )
+            trailing()
+        }
+    }
+}
+
+/** Stored values appear immediately; only a user toggle animates. */
+@Composable
+fun V2Switch(
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+) {
+    val colors = V2Theme.colors
+    val light = colors.background.luminance() > 0.5f
+    var userToggle by remember { mutableStateOf(false) }
+    LaunchedEffect(checked, userToggle) {
+        if (userToggle) { delay(300); userToggle = false }
+    }
+    val thumbOffset by animateFloatAsState(
+        targetValue = if (checked) 22f else 0f,
+        animationSpec = if (userToggle) spring(dampingRatio = 0.8f, stiffness = 500f) else androidx.compose.animation.core.snap(),
+        label = "v2-switch-thumb",
+    )
+    val trackColor by animateColorAsState(
+        animationSpec = if (userToggle) androidx.compose.animation.core.tween(180) else androidx.compose.animation.core.snap(),
+        targetValue = when {
+            !enabled && checked -> colors.accent.copy(alpha = 0.65f)
+            !enabled -> if(light) Color(0xFFE0E3E8) else colors.textSecondary.copy(alpha = 0.28f)
+            checked -> colors.accent
+            else -> if(light) Color(0xFFE0E3E8) else colors.textSecondary.copy(alpha = 0.28f)
+        },
+        label = "v2-switch-track",
+    )
+    val thumbColor by animateColorAsState(
+        animationSpec = if (userToggle) androidx.compose.animation.core.tween(180) else androidx.compose.animation.core.snap(),
+        targetValue = when {
+            !enabled && checked -> Color.White.copy(alpha = 0.85f)
+            !enabled -> colors.textMuted
+            checked -> Color.White
+            else -> if(light) Color(0xFF626B78) else colors.textSecondary
+        },
+        label = "v2-switch-thumb-color",
+    )
+
+    Box(
+        modifier = modifier
+            .width(48.dp)
+            .height(28.dp)
+            .clip(V2Shapes.Pill)
+            .background(trackColor)
+            .border(1.dp, if(checked) colors.accent else colors.textSecondary.copy(alpha = 0.6f), V2Shapes.Pill)
+            .toggleable(
+                value = checked,
+                role = Role.Switch,
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                enabled = enabled,
+            ) { userToggle = true; onCheckedChange(it) }
+            .padding(4.dp),
+        contentAlignment = Alignment.CenterStart,
+    ) {
+        Box(
+            modifier = Modifier
+                .offset(x = thumbOffset.dp)
+                .size(18.dp)
+                .clip(CircleShape)
+                .background(thumbColor),
+        )
+    }
+}
+
+@Composable
+fun V2SwitchSetting(
+    title: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    onInfoClick: (() -> Unit)? = null,
+) {
+    V2SettingRow(title = title, modifier = modifier, enabled = enabled, onClick = { if(enabled) onCheckedChange(!checked) }) {
+        if (onInfoClick != null) {
+            V2SquareIconButton(
+                icon = Icons.AutoMirrored.Filled.HelpOutline,
+                contentDescription = "Подробнее",
+                onClick = onInfoClick,
+                size = 30.dp,
+                iconSize = 16.dp,
+                shape = V2Shapes.Pill,
+                backgroundColor = Color.Transparent,
+                contentColor = V2Theme.colors.textMuted,
+            )
+        }
+        V2Switch(
+            checked = checked,
+            onCheckedChange = onCheckedChange,
+            enabled = enabled,
+        )
+    }
+}
+
+@Composable
+fun V2DropdownPill(
+    value: String,
+    options: List<String>,
+    onSelected: (String) -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    onInfo: ((String) -> Unit)? = null,
+) {
+    val colors = V2Theme.colors
+    var expanded by remember { mutableStateOf(false) }
+
+    Box(modifier = modifier) {
+        Surface(
+            modifier = Modifier
+                .height(34.dp)
+                .then(
+                    if (enabled) {
+                        Modifier.clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null,
+                        ) { expanded = true }
+                    } else {
+                        Modifier
+                    },
+                ),
+            shape = V2Shapes.Button,
+            color = colors.field,
+            contentColor = if (enabled) colors.textPrimary else colors.textMuted,
+            border = null,
+            tonalElevation = 0.dp,
+            shadowElevation = 0.dp,
+        ) {
+            Row(
+                modifier = Modifier.padding(horizontal = 14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                Text(
+                    text = value,
+                    style = MaterialTheme.typography.labelMedium.copy(
+                        fontFamily = V2BodyFamily,
+                        fontWeight = FontWeight.Normal,
+                        fontSize = V2TextSizes.Body,
+                    ),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Icon(
+                    imageVector = Icons.Filled.KeyboardArrowDown,
+                    contentDescription = null,
+                    modifier = Modifier.size(V2Sizes.IconSmall),
+                )
+            }
+        }
+
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+        ) {
+            options.forEach { option ->
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            option,
+                            style = MaterialTheme.typography.bodyMedium.copy(
+                                fontFamily = V2BodyFamily,
+                                fontWeight = FontWeight.Normal,
+                            ),
+                        )
+                    },
+                    trailingIcon = if (onInfo != null) {
+                        {
+                            IconButton(
+                                onClick = {
+                                    expanded = false
+                                    onInfo(option)
+                                },
+                                modifier = Modifier.size(32.dp),
+                            ) {
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.HelpOutline,
+                                    contentDescription = "Информация: $option",
+                                    tint = colors.textMuted,
+                                    modifier = Modifier.size(18.dp),
+                                )
+                            }
+                        }
+                    } else {
+                        null
+                    },
+                    onClick = {
+                        expanded = false
+                        onSelected(option)
+                    },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun V2DropdownSetting(
+    title: String,
+    value: String,
+    options: List<String>,
+    onSelected: (String) -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    onTitleInfo: (() -> Unit)? = null,
+    onInfo: ((String) -> Unit)? = null,
+) {
+    V2SettingRow(
+        title = title,
+        modifier = modifier,
+        enabled = enabled,
+    ) {
+        if (onTitleInfo != null) {
+            V2SquareIconButton(
+                icon = Icons.AutoMirrored.Filled.HelpOutline,
+                contentDescription = "Информация: $title",
+                onClick = onTitleInfo,
+                size = 30.dp,
+                iconSize = 16.dp,
+                shape = V2Shapes.Pill,
+                backgroundColor = Color.Transparent,
+                contentColor = V2Theme.colors.textMuted,
+            )
+        }
+        V2DropdownPill(
+            value = value,
+            options = options,
+            onSelected = onSelected,
+            enabled = enabled,
+            onInfo = onInfo,
+        )
+    }
+}
+
+@Composable
+fun V2ActionSetting(
+    title: String,
+    onAction: () -> Unit,
+    modifier: Modifier = Modifier,
+    action: String? = null,
+    enabled: Boolean = true,
+    accent: Boolean = false,
+) {
+    val colors = V2Theme.colors
+    V2SettingRow(
+        title = title,
+        onClick = onAction,
+        modifier = modifier,
+        enabled = enabled,
+    ) {
+        if (!action.isNullOrBlank()) {
+            Text(
+                text = action,
+                style = MaterialTheme.typography.labelMedium.copy(
+                    fontFamily = V2BodyFamily,
+                    fontWeight = FontWeight.Normal,
+                    fontSize = V2TextSizes.Body,
+                ),
+                color = if (accent) colors.contrast else colors.textSecondary,
+            )
+            androidx.compose.foundation.layout.Spacer(modifier = Modifier.width(4.dp))
+        }
+        Icon(
+            imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+            contentDescription = null,
+            tint = if (accent) colors.contrast else colors.textSecondary,
+            modifier = Modifier.size(V2Sizes.IconSmall),
+        )
+    }
+}
+
+@Composable
+fun V2ActionSetting(
+    title: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    accent: Boolean = false,
+) = V2ActionSetting(
+    title = title,
+    onAction = onClick,
+    modifier = modifier,
+    action = null,
+    enabled = enabled,
+    accent = accent,
+)
+
+@Composable
+fun V2Chevron(
+    modifier: Modifier = Modifier,
+    tint: androidx.compose.ui.graphics.Color? = null,
+) {
+    Icon(
+        imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+        contentDescription = null,
+        modifier = modifier.size(com.csqtt.client.ui.v2.design.V2Sizes.IconMedium),
+        tint = tint ?: com.csqtt.client.ui.v2.design.V2Theme.colors.textMuted,
+    )
+}

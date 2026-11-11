@@ -1,11 +1,14 @@
-package com.csqtt.client.ui
+package com.csqtt.client.ui.legacy
 
-import com.csqtt.client.ui.utils.encryptCsqttPayload
-import com.csqtt.client.ui.utils.formatCsqttLink
-import com.csqtt.client.ui.utils.generate16CharPassword
-import com.csqtt.client.ui.utils.parseCsqttLink
-import com.csqtt.client.ui.utils.peerAddress
+import com.csqtt.client.ui.legacy.utils.decryptCsqttPayload
+import com.csqtt.client.ui.legacy.utils.encryptCsqttPayload
+import com.csqtt.client.ui.legacy.utils.formatCsqttLink
+import com.csqtt.client.ui.legacy.utils.generate16CharPassword
+import com.csqtt.client.ui.legacy.utils.isValidTunnelPassword
+import com.csqtt.client.ui.legacy.utils.parseCsqttLink
+import com.csqtt.client.ui.legacy.utils.peerAddress
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -74,6 +77,35 @@ class CsqttLinkTest {
     }
 
     @Test
+    fun formatsAnyValidPasswordSoItParsesBack() {
+        for (pass in listOf("Пароль-туннеля", "p#ss&w=rd?x", "100%+plus;semi/slash:colon!", "a".repeat(128), "ж".repeat(64))) {
+            val link = parseCsqttLink(formatCsqttLink("203.0.113.7", 46000, pass))
+            requireNotNull(link) { pass }
+            assertEquals(pass, link.password)
+        }
+    }
+
+    @Test
+    fun aLettersAndDigitsPasswordIsWrittenAsBefore() {
+        val plain = decryptCsqttPayload(formatCsqttLink("203.0.113.7", 46000, "SecretPass123456").removePrefix("csqtt://"))
+        assertEquals("connect?v=2&host=203.0.113.7&peer=46000&password=SecretPass123456", plain)
+    }
+
+    @Test
+    fun tunnelPasswordRuleIsTheServers() {
+        assertTrue(isValidTunnelPassword("Пароль18символовЁё"))
+        assertTrue(isValidTunnelPassword("a".repeat(128)))
+        assertTrue(isValidTunnelPassword("ж".repeat(64)))
+        assertFalse(isValidTunnelPassword("a".repeat(129)))
+        assertFalse(isValidTunnelPassword("ж".repeat(65)))
+        assertFalse(isValidTunnelPassword(""))
+        assertFalse(isValidTunnelPassword("a|b"))
+        assertFalse(isValidTunnelPassword("a b"))
+        assertFalse(isValidTunnelPassword("a\tb"))
+        assertFalse(isValidTunnelPassword("a\u0000b"))
+    }
+
+    @Test
     fun generate16CharPasswordProducesValidPassword() {
         val pass = generate16CharPassword()
         assertEquals(16, pass.length)
@@ -81,12 +113,37 @@ class CsqttLinkTest {
     }
 
     @Test
-    fun rejectsLegacyUnencryptedLinks() {
-        assertNull(parseCsqttLink("csqtt://secret@203.0.113.7:46000"))
-        assertNull(parseCsqttLink("csqtt://connect?v=2&host=203.0.113.7&peer=46000&password=secret"))
+    fun parsesOpenLegacyAndV2Links() {
+        val legacy = parseCsqttLink("csqtt://secret@203.0.113.7:46000")
+        requireNotNull(legacy)
+        assertEquals("203.0.113.7", legacy.host)
+        assertEquals(46000, legacy.port)
+        assertEquals("secret", legacy.password)
+
+        val v2 = parseCsqttLink("csqtt://connect?v=2&host=203.0.113.7&peer=46000&password=secret")
+        requireNotNull(v2)
+        assertEquals("203.0.113.7", v2.host)
+        assertEquals(46000, v2.port)
+        assertEquals("secret", v2.password)
+
         val rawPayload = "connect?v=2&host=203.0.113.7&peer=46000&password=secret"
         val base64 = java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(rawPayload.toByteArray(Charsets.UTF_8))
         assertNull(parseCsqttLink("csqtt://$base64"))
+    }
+
+    @Test
+    fun parsesAndNormalizesPower() {
+        val link = parseCsqttLink(
+            enc("connect?v=2&host=203.0.113.7&peer=46000&password=secret&power=4"),
+        )
+        requireNotNull(link)
+        assertEquals(10, link.power)
+
+        val workers = parseCsqttLink(
+            enc("connect?v=2&host=203.0.113.7&peer=46000&password=secret&workers=500"),
+        )
+        requireNotNull(workers)
+        assertEquals(100, workers.power)
     }
 
     @Test
