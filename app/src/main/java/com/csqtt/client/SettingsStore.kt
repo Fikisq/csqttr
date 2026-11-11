@@ -1345,6 +1345,7 @@ class SettingsStore(
         dataStore.edit { prefs ->
             val profile = prefs[ACTIVE_PROFILE] ?: 0
             prefs[getProfileKey(IS_WHITELIST, profile)] = enabled
+            prefs[getProfileKey(APP_ROUTING_ALL, profile)] = false
             prefs[SPLIT_TUNNEL_WHITELIST_MIGRATED] = true
         }
     }
@@ -1358,6 +1359,7 @@ class SettingsStore(
                 prefs[getProfileKey(EXCLUDED_APPS, profile)] = packages
             }
             prefs[getProfileKey(IS_WHITELIST, profile)] = isWhitelist
+            prefs[getProfileKey(APP_ROUTING_ALL, profile)] = false
             prefs[SPLIT_TUNNEL_WHITELIST_MIGRATED] = true
         }
     }
@@ -1644,6 +1646,8 @@ class SettingsStore(
 
         if (includeExceptions) {
             val exc = JSONObject()
+            prefs[APP_ROUTING_ALL]?.let { exc.put("all_apps", it) }
+            exc.put("app_presets_used", prefs[APP_PRESETS_USED] ?: "")
             exc.put("excluded_apps", prefs[EXCLUDED_APPS] ?: "")
             exc.put("whitelist_apps", prefs[WHITELIST_APPS] ?: "")
             exc.put("is_whitelist", prefs[IS_WHITELIST] ?: false)
@@ -1728,6 +1732,9 @@ class SettingsStore(
                 }
                 if (includeExceptions && root.has("exceptions")) {
                     val exc = root.getJSONObject("exceptions")
+                    if (exc.has("all_apps")) mutable[APP_ROUTING_ALL] = exc.getBoolean("all_apps")
+                    else mutable.remove(APP_ROUTING_ALL)
+                    mutable[APP_PRESETS_USED] = exc.optString("app_presets_used", "black,white")
                     if (exc.has("excluded_apps")) mutable[EXCLUDED_APPS] = exc.getString("excluded_apps")
                     if (exc.has("whitelist_apps")) mutable[WHITELIST_APPS] = exc.getString("whitelist_apps")
                     if (exc.has("is_whitelist")) mutable[IS_WHITELIST] = exc.getBoolean("is_whitelist")

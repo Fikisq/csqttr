@@ -58,4 +58,22 @@ class Native250AppRoutingStoreTest {
         store.saveActiveProfile(0)
         assertNull(store.appRoutingAll.first())
     }
+
+    @Test fun configurationTransferKeepsAllModeAndOldImportsDoNotStayInAllMode() = runTest {
+        val source = store(MemoryStore(emptyPreferences()))
+        source.saveAppRoutingSelection("z.app,a.app", "w.app", false, setOf("black", "white"), 0, true)
+        val json = source.exportConfigJson(false, false, true, false)
+        val target = store(MemoryStore(emptyPreferences()))
+        assertTrue(target.importConfigJson(json, false, false, true, false))
+        assertEquals(true, target.appRoutingAll.first())
+        assertEquals("z.app,a.app", target.excludedApps.first())
+        assertEquals(setOf("black", "white"), target.appPresetsUsed.first())
+        assertTrue(target.importConfigJson("""{"exceptions":{"is_whitelist":true,"whitelist_apps":"test.app"}}""",
+            false, false, true, false))
+        assertNull(target.appRoutingAll.first())
+        assertTrue(target.isWhitelist.first())
+        target.saveAppRoutingSelection("", "test.app", false, emptySet(), 0, true)
+        target.saveIsWhitelist(true)
+        assertEquals(false, target.appRoutingAll.first())
+    }
 }
