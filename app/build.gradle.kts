@@ -64,8 +64,8 @@ android {
         applicationId = "csqtt.quic.amurcanov"
         minSdk = 26
         targetSdk = 37
-        versionCode = 230
-        versionName = "2.5.0"
+        versionCode = 231
+        versionName = "2.5.3"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -106,7 +106,7 @@ android {
     buildTypes {
         getByName("debug") {
             applicationIdSuffix = ".native250preview"
-            versionNameSuffix = "-native250-preview.1"
+            versionNameSuffix = "-classic250.1"
         }
         getByName("release") {
             isMinifyEnabled = true
