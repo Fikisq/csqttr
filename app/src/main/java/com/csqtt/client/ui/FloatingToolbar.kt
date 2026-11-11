@@ -320,6 +320,8 @@ fun FloatingToolbar(
 
                     Native250ExtraWorkersSetting(profile = activeProfile, authMode = vkAuthMode)
 
+                    Native250BatterySetting()
+
                     if (csqttLinkMode) {
                         CsqttSettingRow(
                             title = "Показывать логи",
