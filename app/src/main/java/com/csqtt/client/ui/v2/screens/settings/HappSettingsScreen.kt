@@ -33,7 +33,9 @@ fun HappSettingsScreen(
     val extra by settingsStore.extraWorkers.collectAsStateWithLifecycle(false)
     val wifi by settingsStore.autoPauseOnWifi.collectAsStateWithLifecycle(false)
     val logs by settingsStore.loggingEnabled.collectAsStateWithLifecycle(true)
-    val showLogs by settingsStore.participantShowLogs.collectAsStateWithLifecycle(false)
+    val showLogs by settingsStore.participantShowLogs.collectAsStateWithLifecycle(
+        initialValue = SettingsStore.DEFAULT_PARTICIPANT_SHOW_LOGS,
+    )
     val profile by settingsStore.activeProfile.collectAsStateWithLifecycle(0)
     val authMode by settingsStore.vkAuthMode.collectAsStateWithLifecycle("vkcalls")
     val running by com.csqtt.client.TunnelManager.running.collectAsStateWithLifecycle()

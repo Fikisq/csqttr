@@ -143,7 +143,9 @@ fun V2SettingsScreen(
     val autoPauseOnWifi by settingsStore.autoPauseOnWifi.collectAsStateWithLifecycle(initialValue = false)
     val wifiNetworkListMode by settingsStore.wifiNetworkListMode.collectAsStateWithLifecycle(initialValue = "whitelist")
     val wifiNetworkListSsids by settingsStore.wifiNetworkListSsids.collectAsStateWithLifecycle(initialValue = "")
-    val participantShowLogs by settingsStore.participantShowLogs.collectAsStateWithLifecycle(initialValue = false)
+    val participantShowLogs by settingsStore.participantShowLogs.collectAsStateWithLifecycle(
+        initialValue = SettingsStore.DEFAULT_PARTICIPANT_SHOW_LOGS,
+    )
     val extraWorkers by settingsStore.extraWorkers.collectAsStateWithLifecycle(
         initialValue = SettingsStore.cachedExtraWorkers ?: false,
     )

@@ -101,7 +101,7 @@ fun FloatingToolbar(
         initialValue = emptyMap(),
     )
     val participantShowLogs by settingsStore.participantShowLogs.collectAsStateWithLifecycle(
-        initialValue = false,
+        initialValue = SettingsStore.DEFAULT_PARTICIPANT_SHOW_LOGS,
     )
     var editingProfileIndex by rememberSaveable { mutableStateOf<Int?>(null) }
     var editingProfileName by rememberSaveable { mutableStateOf("") }

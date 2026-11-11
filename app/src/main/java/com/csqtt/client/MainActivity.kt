@@ -367,7 +367,9 @@ fun MainScreen(
     )
     val ownerMode by settingsStore.uiOwnerMode.collectAsStateWithLifecycle(false)
     val csqttLinkMode = !ownerMode // Navigation role is independent of a profile's link authentication.
-    val participantShowLogs by settingsStore.participantShowLogs.collectAsStateWithLifecycle(initialValue = false)
+    val participantShowLogs by settingsStore.participantShowLogs.collectAsStateWithLifecycle(
+        initialValue = SettingsStore.DEFAULT_PARTICIPANT_SHOW_LOGS,
+    )
     val autoPauseOnWifi by settingsStore.autoPauseOnWifi.collectAsStateWithLifecycle(initialValue = false)
     val excludedApps by settingsStore.excludedApps.collectAsStateWithLifecycle(
         initialValue = SettingsStore.cachedExcludedApps ?: ""

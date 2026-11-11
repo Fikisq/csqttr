@@ -174,6 +174,8 @@ private fun encodeSubscriptionMeta(meta: Map<String, SubscriptionMeta>): String 
 class SettingsStore(context: Context, deployScope: Boolean = false, readOnlyProfile: Int? = null) {
     private val appContext = context.applicationContext
     companion object {
+        internal const val DEFAULT_PARTICIPANT_SHOW_LOGS = true
+
         private val Context.dataStore by preferencesDataStore("settings")
         private val ACTIVE_PROFILE = intPreferencesKey("active_profile")
         private val UI_OWNER_MODE = booleanPreferencesKey("ui_owner_mode")
@@ -459,7 +461,7 @@ private val DEPLOY_LAST_INSPECTION_PANEL = booleanPreferencesKey("deploy_last_in
     }
     val participantShowLogs: Flow<Boolean> = dataStore.data.map { prefs ->
         val profile = prefs[ACTIVE_PROFILE] ?: 0
-        prefs[getProfileKey(PARTICIPANT_SHOW_LOGS, profile)] ?: false
+        prefs[getProfileKey(PARTICIPANT_SHOW_LOGS, profile)] ?: DEFAULT_PARTICIPANT_SHOW_LOGS
     }
 
     val peer: Flow<String> = dataStore.data.map { prefs ->
@@ -2692,7 +2694,10 @@ private val DEPLOY_LAST_INSPECTION_PANEL = booleanPreferencesKey("deploy_last_in
             settings.put("turn_subnet_ip_limit", prefs[getProfileKey(TURN_SUBNET_IP_LIMIT, p)] ?: "ALL")
             settings.put("logging_enabled", prefs[LOGGING_ENABLED] ?: true)
             settings.put("detailed_logs", prefs[DETAILED_LOGS] ?: false)
-            settings.put("participant_show_logs", prefs[getProfileKey(PARTICIPANT_SHOW_LOGS, p)] ?: false)
+            settings.put(
+                "participant_show_logs",
+                prefs[getProfileKey(PARTICIPANT_SHOW_LOGS, p)] ?: DEFAULT_PARTICIPANT_SHOW_LOGS,
+            )
             root.put("settings", settings)
         }
 

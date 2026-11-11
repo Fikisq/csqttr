@@ -94,7 +94,9 @@ fun CsqttV2Root(
         val deployStore = remember(context) { SettingsStore(context, deployScope = true) }
         // Keep this store's own snapshot ready, without reviving a saved form from another VPS.
         val deploySettings by deployStore.deploySettingsSnapshot.collectAsStateWithLifecycle(DeploySettingsSnapshot())
-        val participantShowLogs by settingsStore.participantShowLogs.collectAsStateWithLifecycle(false)
+        val participantShowLogs by settingsStore.participantShowLogs.collectAsStateWithLifecycle(
+            initialValue = SettingsStore.DEFAULT_PARTICIPANT_SHOW_LOGS,
+        )
         val tabs = remember(ownerMode, participantShowLogs) {
             V2Tab.entries.filter { tab ->
                 when (tab) {
