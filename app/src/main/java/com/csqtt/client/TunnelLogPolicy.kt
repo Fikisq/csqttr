@@ -6,6 +6,8 @@ object TunnelLogPolicy {
     }
 
     fun isInternalRecovery(line: String): Boolean {
+        // Gooby counters can contain 437/486; these are not TURN recovery codes.
+        if (line.trimStart().startsWith("[GOOBY]")) return false
         if (line.contains("FATAL_", ignoreCase = true)) return false
         return line.contains("GETCONF", ignoreCase = true) ||
             line.contains("[СЕТЬ][RETRY]", ignoreCase = true) ||
