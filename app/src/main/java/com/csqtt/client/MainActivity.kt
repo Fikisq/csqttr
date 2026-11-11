@@ -685,7 +685,7 @@ private fun ProxyNavigationBar(
             )
         }
     }
-    val dragVisualIndex = indicatorIndex.value
+    val visualIndex = indicatorIndex.asState()
 
     BoxWithConstraints(
         modifier = modifier
@@ -695,7 +695,6 @@ private fun ProxyNavigationBar(
     ) {
         val trackPadding = 6.dp
         val itemWidth = (maxWidth - trackPadding * 2) / navItems.size
-        val indicatorOffset = trackPadding + itemWidth * dragVisualIndex
 
         Surface(
             shape = CsqttShapes.Card,
@@ -710,15 +709,7 @@ private fun ProxyNavigationBar(
                     .fillMaxWidth()
                     .height(66.dp)
             ) {
-                Surface(
-                    shape = indicatorShape,
-                    color = indicatorColor,
-                    modifier = Modifier
-                        .offset(x = indicatorOffset)
-                        .padding(vertical = 7.dp)
-                        .width(itemWidth)
-                        .fillMaxHeight()
-                ) {}
+                NavigationIndicator(indicatorShape, indicatorColor, trackPadding, itemWidth, visualIndex)
 
                 Row(
                     modifier = Modifier
@@ -727,53 +718,72 @@ private fun ProxyNavigationBar(
                         .selectableGroup()
                 ) {
                     navItems.forEachIndexed { index, item ->
-                        val emphasis = (1f - abs(index - dragVisualIndex)).coerceIn(0f, 1f)
-                        val iconColor = lerp(unselectedColor, selectedColor, emphasis)
-                        val label = stringResource(item.labelRes)
-
-                        Column(
-                            modifier = Modifier
-                                .weight(1f)
-                                .fillMaxHeight()
-                                .clip(CsqttShapes.Control)
-                                .selectable(
-                                    selected = item.id == selectedTab,
-                                    role = Role.Tab,
-                                    onClick = { onTabSelected(item.id) },
-                                ),
-                            verticalArrangement = Arrangement.Center,
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            Box(contentAlignment = Alignment.TopEnd) {
-                                Icon(
-                                    imageVector = if (emphasis > 0.55f) item.selectedIcon else item.unselectedIcon,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(22.dp),
-                                    tint = iconColor
-                                )
-                                if (item.id == 3 && unreadErrors > 0) {
-                                    Badge(
-                                        containerColor = if (tunnelRunning) colors.primary else CSQTTColors.warning,
-                                        contentColor = colors.onPrimary,
-                                        modifier = Modifier.offset(x = 12.dp, y = (-8).dp)
-                                    ) {
-                                        Text("$unreadErrors")
-                                    }
-                                }
-                            }
-                            Spacer(Modifier.height(4.dp))
-                            Text(
-                                text = label,
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = if (emphasis > 0.55f) FontWeight.SemiBold else FontWeight.Medium,
-                                color = iconColor,
-                                maxLines = 1
-                            )
-                        }
+                        NavigationItem(item, index, selectedTab, visualIndex, selectedColor,
+                            unselectedColor, unreadErrors, tunnelRunning, onTabSelected)
                     }
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun NavigationIndicator(
+    shape: androidx.compose.ui.graphics.Shape,
+    color: Color,
+    trackPadding: androidx.compose.ui.unit.Dp,
+    itemWidth: androidx.compose.ui.unit.Dp,
+    visualIndex: State<Float>,
+) {
+    Surface(
+        shape = shape,
+        color = color,
+        modifier = Modifier
+            .offset(x = trackPadding + itemWidth * visualIndex.value)
+            .padding(vertical = 7.dp)
+            .width(itemWidth)
+            .fillMaxHeight(),
+    ) {}
+}
+
+@Composable
+private fun RowScope.NavigationItem(
+    item: NavItem,
+    index: Int,
+    selectedTab: Int,
+    visualIndex: State<Float>,
+    selectedColor: Color,
+    unselectedColor: Color,
+    unreadErrors: Int,
+    tunnelRunning: Boolean,
+    onTabSelected: (Int) -> Unit,
+) {
+    val emphasis = (1f - abs(index - visualIndex.value)).coerceIn(0f, 1f)
+    val iconColor = lerp(unselectedColor, selectedColor, emphasis)
+    val label = stringResource(item.labelRes)
+    val colors = MaterialTheme.colorScheme
+
+    Column(
+        modifier = Modifier.weight(1f).fillMaxHeight().clip(CsqttShapes.Control)
+            .selectable(selected = item.id == selectedTab, role = Role.Tab,
+                onClick = { onTabSelected(item.id) }),
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Box(contentAlignment = Alignment.TopEnd) {
+            Icon(imageVector = if (emphasis > 0.55f) item.selectedIcon else item.unselectedIcon,
+                contentDescription = null, modifier = Modifier.size(22.dp), tint = iconColor)
+            if (item.id == 3 && unreadErrors > 0) {
+                Badge(containerColor = if (tunnelRunning) colors.primary else CSQTTColors.warning,
+                    contentColor = colors.onPrimary, modifier = Modifier.offset(x = 12.dp, y = (-8).dp)) {
+                    Text("$unreadErrors")
+                }
+            }
+        }
+        Spacer(Modifier.height(4.dp))
+        Text(text = label, style = MaterialTheme.typography.labelSmall,
+            fontWeight = if (emphasis > 0.55f) FontWeight.SemiBold else FontWeight.Medium,
+            color = iconColor, maxLines = 1)
     }
 }
 
