@@ -350,8 +350,9 @@ fun MainScreen(
     var pendingRelease by remember { mutableStateOf<AppReleaseInfo?>(null) }
     val currentVersion = remember { "v${BuildConfig.VERSION_NAME.removePrefix("v")}" }
     val safeBottomInset = with(density) { WindowInsets.safeDrawing.getBottom(density).toDp() }
-    val imeVisible by remember(density) {
-        derivedStateOf { WindowInsets.ime.getBottom(density) > 0 }
+    val imeInsets = WindowInsets.ime
+    val imeVisible by remember(density, imeInsets) {
+        derivedStateOf { imeInsets.getBottom(density) > 0 }
     }
     val navToolbarHeight = 66.dp
     val navToolbarBottomMargin = 10.dp
