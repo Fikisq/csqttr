@@ -1,7 +1,11 @@
 package com.csqtt.client.ui
 
 import android.content.res.Configuration
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.runtime.*
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.datastore.core.DataStore
@@ -40,8 +44,11 @@ private fun Native250StudioScreen(settings: Boolean) {
     var theme by remember { mutableStateOf(CsqttConstants.Theme.MODE_DARK) }
     CompositionLocalProvider(LocalNative250StudioValues provides values) {
         CSQTTTheme(themeMode = theme) {
-            MainScreen(settingsStore = store, themeMode = theme, onThemeChange = { theme = it },
-                initialTab = 1, initiallyShowSettings = settings)
+            // Match MainActivity's root Surface, including its inherited content colour.
+            Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+                MainScreen(settingsStore = store, themeMode = theme, onThemeChange = { theme = it },
+                    initialTab = 1, initiallyShowSettings = settings)
+            }
         }
     }
 }
