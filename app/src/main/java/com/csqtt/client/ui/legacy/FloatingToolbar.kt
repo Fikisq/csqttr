@@ -85,12 +85,6 @@ fun FloatingToolbar(
     var showAutoPauseInfo by rememberSaveable { mutableStateOf(false) }
     var showWifiNetworkListDialog by rememberSaveable { mutableStateOf(false) }
     var showBatterySaverInfo by rememberSaveable { mutableStateOf(false) }
-    val wifiNetworkListMode by settingsStore.wifiNetworkListMode.collectAsStateWithLifecycle(
-        initialValue = "whitelist",
-    )
-    val wifiNetworkListSsids by settingsStore.wifiNetworkListSsids.collectAsStateWithLifecycle(
-        initialValue = "",
-    )
     val batterySaverMode by settingsStore.batterySaverMode.collectAsStateWithLifecycle(
         initialValue = BatterySaver.DEFAULT_MODE,
     )
@@ -353,10 +347,8 @@ fun FloatingToolbar(
                         infoContentDescription = "Как работает автопауза при Wi-Fi",
                     )
 
-                    val modeLabel = if (wifiNetworkListMode == "blacklist") "Чёрный список" else "Белый список"
-                    val networkCount = com.csqtt.client.decodeWifiSsids(wifiNetworkListSsids).size
                     QuickSettingsOutlineButton(
-                        text = "Wi-Fi списки · $modeLabel · $networkCount",
+                        text = "Настройки автопаузы",
                         onClick = { showWifiNetworkListDialog = true },
                     )
 

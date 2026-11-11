@@ -1,12 +1,15 @@
 package com.csqtt.client
 
-internal enum class WifiNetworkListMode(val storedValue: String) {
-    WHITELIST("whitelist"),
-    BLACKLIST("blacklist");
+import org.json.JSONObject
+
+internal enum class WifiNetworkListMode(val storedValue: String, val label: String) {
+    ALL("all", "На любом Wi-Fi"),
+    BLACKLIST("blacklist", "Только в выбранных сетях"),
+    WHITELIST("whitelist", "Во всех, кроме выбранных");
 
     companion object {
         fun fromStored(value: String?): WifiNetworkListMode =
-            entries.firstOrNull { it.storedValue == value } ?: WHITELIST
+            entries.firstOrNull { it.storedValue == value } ?: ALL
     }
 }
 
@@ -34,14 +37,28 @@ internal fun encodeWifiSsids(ssids: Collection<String>): String =
         .sortedWith(String.CASE_INSENSITIVE_ORDER)
         .joinToString("\n")
 
-/**
- * Whether the Wi-Fi auto-pause gate should pause the VPN for the current Wi-Fi.
- *
- * The existing "Автопауза при Wi-Fi" switch remains the master switch. The default
- * mode is a whitelist with an empty list, which intentionally preserves the old
- * behaviour: when auto-pause is enabled, every Wi-Fi pauses the tunnel until the
- * user adds allowed SSIDs.
- */
+internal fun validWifiSsid(raw: String?): String? = normalizeWifiSsid(raw)?.takeIf {
+    it.none { char -> char == '\n' || char == '\r' || char == '\u0000' } &&
+        it.toByteArray(Charsets.UTF_8).size <= 32
+}
+
+internal data class SavedWifiNetworks(
+    val saved: Set<String> = emptySet(),
+    val selected: Set<String> = emptySet(),
+) {
+    companion object {
+        fun fromClassic(raw: String?): SavedWifiNetworks = runCatching {
+            val json = JSONObject(raw.orEmpty())
+            fun names(key: String): Set<String> {
+                val values = json.optJSONArray(key) ?: return emptySet()
+                return (0 until values.length()).mapNotNull { validWifiSsid(values.opt(it) as? String) }.toSet()
+            }
+            val saved = names("saved")
+            SavedWifiNetworks(saved, names("selected").intersect(saved))
+        }.getOrDefault(SavedWifiNetworks())
+    }
+}
+
 internal fun shouldPauseForWifiNetwork(
     enabled: Boolean,
     wifiConnected: Boolean,
@@ -56,6 +73,7 @@ internal fun shouldPauseForWifiNetwork(
     val listed = ssid != null && normalizedConfigured.any { it.equals(ssid, ignoreCase = false) }
 
     return when (mode) {
+        WifiNetworkListMode.ALL -> true
         WifiNetworkListMode.WHITELIST -> !listed
         WifiNetworkListMode.BLACKLIST -> listed
     }

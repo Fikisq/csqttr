@@ -109,7 +109,7 @@ class TunnelService : Service() {
     @Volatile
     private var autoPauseOnWifiEnabled = false
     @Volatile
-    private var wifiNetworkListMode = WifiNetworkListMode.WHITELIST
+    private var wifiNetworkListMode = WifiNetworkListMode.ALL
     @Volatile
     private var wifiNetworkListSsids: Set<String> = emptySet()
     @Volatile

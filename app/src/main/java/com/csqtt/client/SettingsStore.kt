@@ -293,6 +293,7 @@ private val DEPLOY_LAST_INSPECTION_PANEL = booleanPreferencesKey("deploy_last_in
         private val AUTO_PAUSE_ON_WIFI = booleanPreferencesKey("auto_pause_on_wifi")
         private val WIFI_NETWORK_LIST_MODE = stringPreferencesKey("wifi_network_list_mode")
         private val WIFI_NETWORK_LIST_SSIDS = stringPreferencesKey("wifi_network_list_ssids")
+        private val WIFI_SAVED_SSIDS = stringPreferencesKey("wifi_saved_ssids")
         private val DOMAIN_ROUTING_ENABLED = booleanPreferencesKey("domain_routing_enabled")
         private val DOMAIN_IS_WHITELIST = booleanPreferencesKey("domain_is_whitelist")
         private val EXCLUDE_RU_ZONES_ENABLED = booleanPreferencesKey("exclude_ru_zones_enabled")
@@ -441,8 +442,11 @@ private val DEPLOY_LAST_INSPECTION_PANEL = booleanPreferencesKey("deploy_last_in
     suspend fun saveBatterySaverPercent(percent: Int) { appContext.dataStore.edit { it[BATTERY_SAVER_PERCENT] = percent.coerceIn(5, 95) } }
     suspend fun saveUiOwnerMode(owner: Boolean) { appContext.dataStore.edit { it[UI_OWNER_MODE] = owner } }
     private val secureStore = SecureStringStore(appContext)
-    private val classicGoobyPreferences by lazy {
+    private val classicPreferences by lazy {
         appContext.getSharedPreferences("native250_ui_preview", Context.MODE_PRIVATE).all
+    }
+    private val classicWifiNetworks by lazy {
+        SavedWifiNetworks.fromClassic(classicPreferences["wifi.networks"] as? String)
     }
 
     val activeProfile: Flow<Int> = dataStore.data.map {
@@ -647,7 +651,7 @@ private val DEPLOY_LAST_INSPECTION_PANEL = booleanPreferencesKey("deploy_last_in
     private fun readGoobyMode(prefs: Preferences, profile: Int): GoobyMode {
         prefs[getProfileKey(GOOBY_MODE, profile)]?.let { return GoobyMode.fromStored(it) }
         if (prefs[getProfileKey(PROFILE_REMOVED, profile)] == true) return GoobyMode.OFF
-        (classicGoobyPreferences["gooby.$profile"] as? String)?.let { return GoobyMode.fromStored(it) }
+        (classicPreferences["gooby.$profile"] as? String)?.let { return GoobyMode.fromStored(it) }
         return GoobyMode.fromLegacy(
             prefs[getProfileKey(LEGACY_GOOBY_ENABLED, profile)] ?: false,
             prefs[getProfileKey(LEGACY_GOOBY_STRATEGY, profile)],
@@ -655,7 +659,7 @@ private val DEPLOY_LAST_INSPECTION_PANEL = booleanPreferencesKey("deploy_last_in
     }
 
     private suspend fun migrateGoobyModes() {
-        val classic = classicGoobyPreferences
+        val classic = classicPreferences
         appContext.dataStore.edit { prefs ->
             for (profile in CsqttConstants.Profiles.MIN_INDEX..CsqttConstants.Profiles.MAX_INDEX) {
                 val key = getProfileKey(GOOBY_MODE, profile)
@@ -1325,13 +1329,31 @@ private val DEPLOY_LAST_INSPECTION_PANEL = booleanPreferencesKey("deploy_last_in
         prefs[TCP_TRANSPORT_RISK_ACKNOWLEDGED] ?: false
     }
     val autoPauseOnWifi: Flow<Boolean> = dataStore.data.map { prefs ->
-        prefs[AUTO_PAUSE_ON_WIFI] ?: false
+        wifiAutoPauseEnabled(prefs)
     }
     val wifiNetworkListMode: Flow<String> = dataStore.data.map { prefs ->
-        WifiNetworkListMode.fromStored(prefs[WIFI_NETWORK_LIST_MODE]).storedValue
+        readWifiNetworkListMode(prefs).storedValue
+    }.distinctUntilChanged()
+    internal val savedWifiNetworks: Flow<SavedWifiNetworks> =
+        dataStore.data.map(::readSavedWifiNetworks).distinctUntilChanged()
+    val wifiNetworkListSsids: Flow<String> =
+        savedWifiNetworks.map { encodeWifiSsids(it.selected) }.distinctUntilChanged()
+
+    private fun wifiAutoPauseEnabled(prefs: Preferences): Boolean =
+        prefs[AUTO_PAUSE_ON_WIFI] ?: ((classicPreferences["wifi.enabled"] as? String) == "true")
+
+    private fun readWifiNetworkListMode(prefs: Preferences): WifiNetworkListMode =
+        WifiNetworkListMode.fromStored(prefs[WIFI_NETWORK_LIST_MODE] ?: (classicPreferences["wifi.rule"] as? String))
+
+    private fun readSavedWifiNetworks(prefs: Preferences): SavedWifiNetworks {
+        val selected = prefs[WIFI_NETWORK_LIST_SSIDS]?.let(::decodeWifiSsids) ?: classicWifiNetworks.selected
+        val saved = prefs[WIFI_SAVED_SSIDS]?.let(::decodeWifiSsids) ?: classicWifiNetworks.saved
+        return SavedWifiNetworks(saved + selected, selected)
     }
-    val wifiNetworkListSsids: Flow<String> = dataStore.data.map { prefs ->
-        prefs[WIFI_NETWORK_LIST_SSIDS] ?: ""
+
+    private fun writeSavedWifiNetworks(prefs: MutablePreferences, networks: SavedWifiNetworks) {
+        prefs[WIFI_SAVED_SSIDS] = encodeWifiSsids(networks.saved)
+        prefs[WIFI_NETWORK_LIST_SSIDS] = encodeWifiSsids(networks.selected.intersect(networks.saved))
     }
     suspend fun isBatteryOptimizationPromptHandled(): Boolean =
         dataStore.data.first()[BATTERY_OPTIMIZATION_PROMPT_HANDLED] ?: false
@@ -2200,14 +2222,32 @@ private val DEPLOY_LAST_INSPECTION_PANEL = booleanPreferencesKey("deploy_last_in
         }
     }
 
-    suspend fun saveWifiNetworkListSsids(ssids: Collection<String>) {
+    internal suspend fun rememberWifiNetwork(raw: String) {
+        val ssid = validWifiSsid(raw) ?: return
         dataStore.edit { prefs ->
-            prefs[WIFI_NETWORK_LIST_SSIDS] = encodeWifiSsids(ssids)
+            val networks = readSavedWifiNetworks(prefs)
+            if (ssid in networks.saved) return@edit
+            val selected = if (readWifiNetworkListMode(prefs) == WifiNetworkListMode.ALL) networks.selected
+                else networks.selected + ssid
+            writeSavedWifiNetworks(prefs, SavedWifiNetworks(networks.saved + ssid, selected))
         }
     }
 
-    suspend fun saveWifiNetworkListSsids(raw: String) {
-        saveWifiNetworkListSsids(decodeWifiSsids(raw))
+    internal suspend fun setWifiNetworkSelected(ssid: String, selected: Boolean) {
+        dataStore.edit { prefs ->
+            val networks = readSavedWifiNetworks(prefs)
+            if (ssid !in networks.saved || !wifiAutoPauseEnabled(prefs) ||
+                readWifiNetworkListMode(prefs) == WifiNetworkListMode.ALL) return@edit
+            val selection = if (selected) networks.selected + ssid else networks.selected - ssid
+            writeSavedWifiNetworks(prefs, networks.copy(selected = selection))
+        }
+    }
+
+    internal suspend fun forgetWifiNetwork(ssid: String) {
+        dataStore.edit { prefs ->
+            val networks = readSavedWifiNetworks(prefs)
+            writeSavedWifiNetworks(prefs, SavedWifiNetworks(networks.saved - ssid, networks.selected - ssid))
+        }
     }
 
 
@@ -2731,9 +2771,11 @@ private val DEPLOY_LAST_INSPECTION_PANEL = booleanPreferencesKey("deploy_last_in
             settings.put("battery_saver_percent", prefs[BATTERY_SAVER_PERCENT] ?: BatterySaver.DEFAULT_PERCENT)
             settings.put("is_dynamic_color", prefs[IS_DYNAMIC_COLOR] ?: false)
             settings.put("theme_palette", prefs[THEME_PALETTE] ?: "pure_black")
-            settings.put("auto_pause_on_wifi", prefs[AUTO_PAUSE_ON_WIFI] ?: false)
-            settings.put("wifi_network_list_mode", WifiNetworkListMode.fromStored(prefs[WIFI_NETWORK_LIST_MODE]).storedValue)
-            settings.put("wifi_network_list_ssids", prefs[WIFI_NETWORK_LIST_SSIDS] ?: "")
+            settings.put("auto_pause_on_wifi", wifiAutoPauseEnabled(prefs))
+            val wifiNetworks = readSavedWifiNetworks(prefs)
+            settings.put("wifi_network_list_mode", readWifiNetworkListMode(prefs).storedValue)
+            settings.put("wifi_network_list_ssids", encodeWifiSsids(wifiNetworks.selected))
+            settings.put("wifi_saved_ssids", encodeWifiSsids(wifiNetworks.saved))
             settings.put("selected_fingerprint", prefs[getProfileKey(SELECTED_FINGERPRINT, p)] ?: "chrome")
             settings.put("selected_turn_subnet", prefs[getProfileKey(SELECTED_TURN_SUBNET, p)] ?: "")
             settings.put("turn_subnet_ip_limit", prefs[getProfileKey(TURN_SUBNET_IP_LIMIT, p)] ?: "ALL")
@@ -2839,6 +2881,7 @@ private val DEPLOY_LAST_INSPECTION_PANEL = booleanPreferencesKey("deploy_last_in
                     if (s.has("auto_pause_on_wifi")) mutable[AUTO_PAUSE_ON_WIFI] = s.getBoolean("auto_pause_on_wifi")
                     if (s.has("wifi_network_list_mode")) mutable[WIFI_NETWORK_LIST_MODE] = WifiNetworkListMode.fromStored(s.getString("wifi_network_list_mode")).storedValue
                     if (s.has("wifi_network_list_ssids")) mutable[WIFI_NETWORK_LIST_SSIDS] = encodeWifiSsids(decodeWifiSsids(s.getString("wifi_network_list_ssids")))
+                    if (s.has("wifi_saved_ssids")) mutable[WIFI_SAVED_SSIDS] = encodeWifiSsids(decodeWifiSsids(s.getString("wifi_saved_ssids")))
                     if (s.has("selected_fingerprint")) mutable[getProfileKey(SELECTED_FINGERPRINT, p)] = s.getString("selected_fingerprint")
                     if (s.has("selected_turn_subnet")) mutable[getProfileKey(SELECTED_TURN_SUBNET, p)] = s.getString("selected_turn_subnet")
                     if (s.has("turn_subnet_ip_limit")) mutable[getProfileKey(TURN_SUBNET_IP_LIMIT, p)] = s.getString("turn_subnet_ip_limit")

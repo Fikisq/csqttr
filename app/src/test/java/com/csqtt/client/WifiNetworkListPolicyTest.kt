@@ -8,6 +8,15 @@ import org.junit.Test
 
 class WifiNetworkListPolicyTest {
     @Test
+    fun allWifiPausesEvenWhenTheCurrentSsidIsUnknown() {
+        val mode = WifiNetworkListMode.fromStored("all")
+        assertEquals(WifiNetworkListMode.ALL, mode)
+        assertTrue(shouldPauseForWifiNetwork(true, true, "Home", mode, setOf("Home")))
+        assertTrue(shouldPauseForWifiNetwork(true, true, null, mode, emptySet()))
+        assertFalse(shouldPauseForWifiNetwork(true, false, null, mode, emptySet()))
+    }
+
+    @Test
     fun normalizeWifiSsid_removesAndroidQuotesAndUnknownValue() {
         assertEquals("Home", normalizeWifiSsid("\"Home\""))
         assertEquals("Home", normalizeWifiSsid(" Home "))
