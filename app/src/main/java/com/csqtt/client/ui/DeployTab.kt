@@ -310,6 +310,7 @@ internal fun DeployTab(
         val deployCertificate = if (savedSshKeysMode) savedSshCertificate else ""
         val deployPassword = if (savedSshKeysMode) "" else sshPassword
         val effectiveMainPass = savedMainPass
+        val deployProfile = savedSettings.profile
         scope.launch {
             settingsStore.saveDeploy(host)
             settingsStore.saveDeploySecrets(effectiveMainPass, sshLogin, sshPassword, savedWebLogin, savedWebPassword)
@@ -318,6 +319,7 @@ internal fun DeployTab(
         DeployManager.startDeploy()
         DeployManager.scope.launch {
             try {
+                val passwordProfile = settingsStore.deployConnectionProfile(deployProfile)
                 context.startForegroundService(Intent(context, TunnelService::class.java).apply { action = "DEPLOY_START" })
                 val success = performDeploy(
                     context = context,
@@ -339,7 +341,7 @@ internal fun DeployTab(
                 )
                 if (success) {
                     passwordToSynchronizeAfterDeploy(success, effectiveMainPass)?.let { mainPassword ->
-                        settingsStore.saveConnectionPassword(mainPassword)
+                        settingsStore.saveConnectionPassword(mainPassword, passwordProfile)
                         TunnelManager.addDeployInfoLog("Пароль подключения синхронизирован с паролем сервера")
                     }
                     showDeployToast(context, "Установка успешно завершена")

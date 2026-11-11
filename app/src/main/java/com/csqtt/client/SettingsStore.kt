@@ -1044,9 +1044,19 @@ class SettingsStore(
         }
     }
 
-    suspend fun saveConnectionPassword(password: String) {
+    internal suspend fun deployConnectionProfile(deployProfile: Int): Int {
+        val suffix = if (deployProfile == 0) "" else "_$deployProfile"
+        val target = dataStore.data.first()[intPreferencesKey("deploy_connection_profile$suffix")] ?: deployProfile
+        require(target in CsqttConstants.Profiles.MIN_INDEX..CsqttConstants.Profiles.MAX_INDEX) {
+            "Связанный профиль недоступен в классическом интерфейсе"
+        }
+        return target
+    }
+
+    suspend fun saveConnectionPassword(password: String, targetProfile: Int? = null) {
+        require(targetProfile == null || targetProfile in CsqttConstants.Profiles.MIN_INDEX..CsqttConstants.Profiles.MAX_INDEX)
         dataStore.edit { prefs ->
-            val profile = prefs[ACTIVE_PROFILE] ?: 0
+            val profile = targetProfile ?: prefs[ACTIVE_PROFILE] ?: 0
             val localKey = getProfileKey(CONNECTION_PASSWORD_LOCAL, profile)
             val legacyKey = getProfileKey(CONNECTION_PASSWORD, profile)
             val encryptedKey = getProfileKey(CONNECTION_PASSWORD_ENCRYPTED, profile)
