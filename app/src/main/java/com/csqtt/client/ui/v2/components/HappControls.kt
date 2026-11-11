@@ -32,6 +32,8 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.csqtt.client.ui.legacy.tunnel.ModeIndicator
+import com.csqtt.client.ui.legacy.tunnel.ModeProgressBar
 import com.csqtt.client.ui.v2.design.V2Theme
 
 @Composable
@@ -115,7 +117,7 @@ internal fun HappHelp(title: String, text: String) {
 
 @Composable
 internal fun HappChoice(label: String, value: String, options: List<String>, onSelect: (String) -> Unit,
-    modifier: Modifier = Modifier, tone: Color? = null, help: String? = null, enabled: Boolean = true, compact: Boolean = false,
+    modifier: Modifier = Modifier, indicators: Map<String, ModeIndicator> = emptyMap(), help: String? = null, enabled: Boolean = true, compact: Boolean = false,
     valueMaxLines: Int = 1, labelContent: (@Composable () -> Unit)? = null,
     shape: androidx.compose.ui.graphics.Shape = RoundedCornerShape(14.dp)) {
     val c = V2Theme.colors
@@ -132,11 +134,25 @@ internal fun HappChoice(label: String, value: String, options: List<String>, onS
                         Text(value, modifier = Modifier.weight(1f), fontSize = V2TextSizes.Body, maxLines = valueMaxLines, overflow = TextOverflow.Ellipsis, color = c.textPrimary)
                         Icon(Icons.Default.KeyboardArrowDown, null, tint = c.textSecondary, modifier = Modifier.size(18.dp))
                     }
-                    if (tone != null) Box(Modifier.padding(top = 4.dp).fillMaxWidth().height(3.dp).background(tone, RoundedCornerShape(2.dp)))
+                    indicators[value]?.let { indicator ->
+                        ModeProgressBar(indicator.progress, indicator.color, Modifier.padding(top = 4.dp).fillMaxWidth())
+                    }
                 }
             }
             DropdownMenu(expanded, { expanded = false }, containerColor = c.surface) {
-                options.forEach { option -> DropdownMenuItem(text = { Text(option, fontSize = V2TextSizes.Body) }, onClick = { expanded = false; onSelect(option) }) }
+                options.forEach { option ->
+                    DropdownMenuItem(
+                        text = {
+                            Column {
+                                Text(option, fontSize = V2TextSizes.Body)
+                                indicators[option]?.let { indicator ->
+                                    ModeProgressBar(indicator.progress, indicator.color, Modifier.padding(top = 4.dp).fillMaxWidth())
+                                }
+                            }
+                        },
+                        onClick = { expanded = false; onSelect(option) },
+                    )
+                }
             }
         }
     }
