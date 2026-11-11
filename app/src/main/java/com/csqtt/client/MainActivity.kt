@@ -299,7 +299,10 @@ fun MainScreen(
     activeFingerprint: String = CsqttConstants.Tunnel.DEFAULT_FINGERPRINT,
     onFingerprintChange: (String) -> Unit = {},
     onVkAuthRequested: () -> Unit = {},
+    initialTab: Int = 0,
+    initiallyShowSettings: Boolean = false,
 ) {
+    val studioPreview = androidx.compose.ui.platform.LocalInspectionMode.current
     val unreadErrors by TunnelManager.unreadErrorCount.collectAsStateWithLifecycle()
     val tunnelRunning by TunnelManager.running.collectAsStateWithLifecycle()
     val tunnelAutoPausedForWifi by TunnelManager.autoPausedForWifi.collectAsStateWithLifecycle()
@@ -312,7 +315,7 @@ fun MainScreen(
         initialValue = DeploySettingsSnapshot()
     )
     val tunnelAuthSettings by settingsStore.tunnelAuthSnapshot.collectAsStateWithLifecycle(
-        initialValue = TunnelAuthSnapshot()
+        initialValue = TunnelAuthSnapshot(profile = if (studioPreview) 0 else -1)
     )
     val csqttLinkMode = tunnelAuthSettings.csqttLinkMode
     val participantShowLogs by settingsStore.participantShowLogs.collectAsStateWithLifecycle(initialValue = false)
@@ -329,7 +332,7 @@ fun MainScreen(
     )
     val infoActionsExpanded by settingsStore.infoActionsExpanded.collectAsStateWithLifecycle(initialValue = false)
     val infoProjectExpanded by settingsStore.infoProjectExpanded.collectAsStateWithLifecycle(initialValue = false)
-    var selectedTab by rememberSaveable { mutableIntStateOf(0) }
+    var selectedTab by rememberSaveable { mutableIntStateOf(initialTab) }
     var tunnelValidationRequest by rememberSaveable { mutableIntStateOf(0) }
     val dragTargetIndex = remember { mutableIntStateOf(-1) }
     val dragProgress = remember { mutableFloatStateOf(0f) }
@@ -378,6 +381,7 @@ fun MainScreen(
     }
 
     LaunchedEffect(updateCheckIntervalHours) {
+        if (studioPreview) return@LaunchedEffect
         if (updateCheckIntervalHours == UPDATE_CHECK_NEVER) return@LaunchedEffect
 
         val intervalMillis = updateIntervalHoursToMillis(updateCheckIntervalHours)
@@ -433,6 +437,7 @@ fun MainScreen(
         CompositionLocalProvider(
             LocalCsqttHeaderActions provides {
                 FloatingToolbar(
+                    initiallyExpanded = initiallyShowSettings,
                     settingsStore = settingsStore,
                     csqttLinkMode = csqttLinkMode,
                     activeProfile = activeProfile,

@@ -58,7 +58,10 @@ internal data class TunnelAuthSnapshot(
         get() = profile >= 0
 }
 
-class SettingsStore(context: Context) {
+class SettingsStore(
+    context: Context,
+    previewDataStore: androidx.datastore.core.DataStore<Preferences>? = null,
+) {
     private val appContext = context.applicationContext
     companion object {
         private val Context.dataStore by preferencesDataStore("settings")
@@ -274,18 +277,18 @@ class SettingsStore(context: Context) {
         }
     }
 
-    private val dataStore = appContext.dataStore
+    private val dataStore = previewDataStore ?: appContext.dataStore
     private val secureStore = SecureStringStore(appContext)
 
     init {
-        if (migrationsStarted.compareAndSet(false, true)) {
+        if (previewDataStore == null && migrationsStarted.compareAndSet(false, true)) {
             CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
                 migrateConnectionPasswordsToLocalStorage()
                 migrateSecretsToKeystore()
                 migrateLegacyWhitelistMode()
             }
         }
-        if (uiCacheStarted.compareAndSet(false, true)) {
+        if (previewDataStore == null && uiCacheStarted.compareAndSet(false, true)) {
             CoroutineScope(SupervisorJob() + Dispatchers.Default).launch {
                 launch {
                     dataStore.edit { prefs ->

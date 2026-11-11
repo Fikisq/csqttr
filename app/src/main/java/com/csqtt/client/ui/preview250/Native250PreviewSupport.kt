@@ -24,9 +24,16 @@ import com.csqtt.client.ui.design.CsqttSizes
 
 internal data class Native250PreviewValue(val value: String, val set: (String) -> Unit)
 
+/** Preview state shared by nested dialogs, without disk or Android preferences. */
+internal val LocalNative250StudioValues = staticCompositionLocalOf<androidx.compose.runtime.snapshots.SnapshotStateMap<String, String>?> { null }
+
 /** UI-only choices: never write SettingsStore or control the original tunnel. */
 @Composable
 internal fun rememberNative250Preference(key: String, default: String): Native250PreviewValue {
+    val studioValues = LocalNative250StudioValues.current
+    if (studioValues != null) {
+        return Native250PreviewValue(studioValues[key] ?: default) { studioValues[key] = it }
+    }
     val context = LocalContext.current.applicationContext
     val preferences = remember(context) {
         context.getSharedPreferences("native250_ui_preview", Context.MODE_PRIVATE)

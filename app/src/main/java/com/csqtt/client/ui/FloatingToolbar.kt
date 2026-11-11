@@ -58,7 +58,8 @@ fun FloatingToolbar(
     onFingerprintChange: (String) -> Unit,
     autoPauseOnWifi: Boolean,
     onAutoPauseOnWifiChange: (Boolean) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    initiallyExpanded: Boolean = false,
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -73,7 +74,7 @@ fun FloatingToolbar(
     val turnSubnetIpLimit by settingsStore.turnSubnetIpLimit.collectAsStateWithLifecycle(
         initialValue = "ALL",
     )
-    var isExpanded by rememberSaveable { mutableStateOf(false) }
+    var isExpanded by rememberSaveable { mutableStateOf(initiallyExpanded) }
     var showQrScanner by rememberSaveable { mutableStateOf(false) }
     var showSupportDeveloperDialog by rememberSaveable { mutableStateOf(false) }
     var showImportExportDialog by rememberSaveable { mutableStateOf(false) }
