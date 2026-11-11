@@ -565,12 +565,20 @@ class SettingsStore(
     }
     val vkAccessToken: Flow<String> = dataStore.data.map { prefs ->
         val profile = prefs[ACTIVE_PROFILE] ?: 0
-        readSecret(prefs, VK_ACCESS_TOKEN_ENCRYPTED, VK_ACCESS_TOKEN, profile)
+        readNative250VkAccount(prefs, profile).first
     }.onIo()
     val vkAccessTokenUserId: Flow<String> = dataStore.data.map { prefs ->
         val profile = prefs[ACTIVE_PROFILE] ?: 0
-        prefs[getProfileKey(VK_ACCESS_TOKEN_USER_ID, profile)] ?: ""
-    }
+        readNative250VkAccount(prefs, profile).second
+    }.onIo()
+
+    private fun readNative250VkAccount(prefs: Preferences, profile: Int): Pair<String, String> = native250VkAccount(
+        readSecret(prefs, VK_ACCESS_TOKEN_ENCRYPTED, VK_ACCESS_TOKEN, profile),
+        prefs[getProfileKey(VK_ACCESS_TOKEN_USER_ID, profile)].orEmpty(),
+        readSecret(prefs, stringPreferencesKey("vk_account_token_encrypted"), stringPreferencesKey("vk_account_token"), 0),
+        prefs[stringPreferencesKey("vk_account_user_id")].orEmpty(),
+        prefs[booleanPreferencesKey("native250_vk_account_disabled_$profile")] == true,
+    )
 
     val isWhitelist: Flow<Boolean> = dataStore.data.map { prefs ->
         val profile = prefs[ACTIVE_PROFILE] ?: 0
@@ -1243,6 +1251,7 @@ class SettingsStore(
     suspend fun saveVkAccessToken(token: String, userId: String) {
         dataStore.edit { prefs ->
             val profile = prefs[ACTIVE_PROFILE] ?: 0
+            prefs.remove(booleanPreferencesKey("native250_vk_account_disabled_$profile"))
             prefs.putSecret(VK_ACCESS_TOKEN_ENCRYPTED, VK_ACCESS_TOKEN, token, profile)
             prefs[getProfileKey(VK_ACCESS_TOKEN_USER_ID, profile)] = userId
         }
@@ -1251,6 +1260,7 @@ class SettingsStore(
     suspend fun clearVkAccessToken() {
         dataStore.edit { prefs ->
             val profile = prefs[ACTIVE_PROFILE] ?: 0
+            prefs[booleanPreferencesKey("native250_vk_account_disabled_$profile")] = true
             prefs.remove(getProfileKey(VK_ACCESS_TOKEN_ENCRYPTED, profile))
             prefs.remove(getProfileKey(VK_ACCESS_TOKEN, profile))
             prefs.remove(getProfileKey(VK_ACCESS_TOKEN_USER_ID, profile))
