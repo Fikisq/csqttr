@@ -483,7 +483,7 @@ internal fun V2DeployScreen(
                     settingsStore.saveDeployProfileDraft(savedSettings.copy(serverName = serverName, ip = host.trim(),
                         sshLogin = sshLogin, sshPassword = sshPassword, sshPort = ports.ssh.toString(),
                         serverPeerPort = ports.peer, serverWebPort = ports.web, mainPassword = mainPassDraft,
-                        sshKeysMode = sshKeysMode, dockerInstall = dockerInstall,
+                        sshKeysMode = sshKeysMode, dockerInstall = dockerInstall, manualPortsEnabled = manualPorts,
                         webLogin = panelLoginDraft, webPassword = panelPasswordDraft))
                 }
                 addingServer = true
@@ -552,7 +552,7 @@ internal fun V2DeployScreen(
         return savedSettings.copy(serverName = serverName, ip = host.trim(), mainPassword = mainPassDraft,
             sshLogin = sshLogin, sshPassword = sshPassword, sshPort = ports.ssh.toString(),
             serverPeerPort = ports.peer, serverWebPort = ports.web, sshKeysMode = sshKeysMode,
-            dockerInstall = dockerInstall, manualPortsEnabled = true,
+            dockerInstall = dockerInstall, manualPortsEnabled = manualPorts,
             webLogin = panelLoginDraft, webPassword = panelPasswordDraft)
     }
     suspend fun persistServerDraft() { settingsStore.saveDeployProfileDraft(serverDraft()) }
@@ -585,7 +585,7 @@ internal fun V2DeployScreen(
             showDeployToast("VPS и профиль подключения сохранены")
         }
     }
-    LaunchedEffect(savedSettings.profile, serverName, host, sshLogin, sshPassword, sshPort, peerPort, webPort, dockerInstall, sshKeysMode, mainPassDraft, panelLoginDraft, panelPasswordDraft) {
+    LaunchedEffect(savedSettings.profile, serverName, host, sshLogin, sshPassword, sshPort, peerPort, webPort, manualPorts, dockerInstall, sshKeysMode, mainPassDraft, panelLoginDraft, panelPasswordDraft) {
         if (!savedSettings.isLoaded || actionsBusy || addingServer) return@LaunchedEffect
         delay(500)
         if (portsValid) persistServerDraft()
@@ -816,7 +816,7 @@ internal fun V2DeployScreen(
             val ports = resolveServerPorts(true, sshPort, peerPort, webPort)
             checkPlan = mode to planDeploy(
                 inventory = inventory,
-                manualPorts = CheckPorts(ports.ssh, ports.peer, ports.web),
+                manualPorts = if (manualPorts) CheckPorts(ports.ssh, ports.peer, ports.web) else null,
                 profilePeerPort = ports.peer,
                 dockerInstall = dockerInstall,
                 appVersion = BuildConfig.VERSION_NAME.removePrefix("v"),
@@ -1022,14 +1022,11 @@ internal fun V2DeployScreen(
     V2AdaptiveScreen(modifier.fillMaxSize().padding(horizontal = V2Sizes.ScreenPadding), dense = true) {
         val layout = LocalV2AdaptiveMetrics.current
         V2TopBar(version = version, title = "Деплой", onSettings = onSettings)
-        V2AdaptiveForm(Modifier.weight(1f).fillMaxWidth(), fieldRows = 3, controlRows = 3,
+        V2AdaptiveForm(Modifier.weight(1f).fillMaxWidth(), fieldRows = if (manualPorts) 3 else 2, controlRows = 4,
             extraHeight = 80.dp + if (isDeploying) 48.dp else if (actionsBusy) 32.dp else 0.dp) { form ->
         val formLayout = LocalV2AdaptiveMetrics.current
         val pill = RoundedCornerShape(50)
-        BoxWithConstraints(Modifier.fillMaxSize()) {
-        val progressSpace = if (isDeploying) 60.dp else if (actionsBusy) 44.dp else 0.dp
-        val cardMinimum = (maxHeight - form.profileHeight - 12.dp - progressSpace).coerceAtLeast(0.dp)
-        Column(Modifier.fillMaxWidth().imePadding().verticalScroll(rememberScrollState()).testTag("deploy-settings"), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Column(Modifier.fillMaxWidth().imePadding().verticalScroll(rememberScrollState()).testTag("deploy-settings"), verticalArrangement = Arrangement.spacedBy(form.gap)) {
             HappProfileHeader(
                 title = serverTitle,
                 subtitle = if (host.isBlank()) "Сервер не настроен" else "$host:${sshPort.ifBlank { "22" }}",
@@ -1046,17 +1043,19 @@ internal fun V2DeployScreen(
                         Icon(Icons.Default.Add, "Добавить VPS", tint = colors.textPrimary, modifier = Modifier.size(22.dp))
                     }
             }
-            V2Card(modifier = Modifier.testTag("deploy-card"), shape = RoundedCornerShape(28.dp), contentPadding = PaddingValues(start = 14.dp, end = 14.dp, top = 12.dp, bottom = 8.dp), color = colors.surface,
-                contentModifier = Modifier.heightIn(min = cardMinimum), verticalArrangement = Arrangement.SpaceBetween) {
+            V2Card(modifier = Modifier.testTag("deploy-card"), shape = RoundedCornerShape(28.dp), contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp), color = colors.surface,
+                verticalArrangement = Arrangement.spacedBy(form.innerGap)) {
                 Column {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     HappField("Адрес сервера", host, { value -> val split = splitPastedHostPort(host, value); host = split?.first ?: value; if (split != null) sshPort = split.second }, Modifier.weight(1f), enabled = !actionsBusy, compact = true, shape = pill, floatingLabel = true, maxFieldHeight = 44.dp)
                     HappField("Порт SSH", sshPort, { sshPort = it.filter(Char::isDigit).take(5) }, Modifier.weight(1f), number = true, enabled = !actionsBusy, compact = true, shape = pill, floatingLabel = true, maxFieldHeight = 44.dp)
                 }
-                Spacer(Modifier.height(8.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    HappField("Порт туннеля", peerPort, { peerPort = it.filter(Char::isDigit).take(5); manualPorts = true }, Modifier.weight(1f), number = true, enabled = !actionsBusy, compact = true, shape = pill, floatingLabel = true, maxFieldHeight = 44.dp)
-                    HappField("Порт WEB", webPort, { webPort = it.filter(Char::isDigit).take(5); manualPorts = true }, Modifier.weight(1f), number = true, enabled = !actionsBusy, compact = true, shape = pill, floatingLabel = true, maxFieldHeight = 44.dp)
+                DeployFormToggle("Ручные порты", manualPorts, { manualPorts = it }, enabled = !actionsBusy)
+                if (manualPorts) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        HappField("Порт туннеля", peerPort, { peerPort = it.filter(Char::isDigit).take(5) }, Modifier.weight(1f), number = true, enabled = !actionsBusy, compact = true, shape = pill, floatingLabel = true, maxFieldHeight = 44.dp)
+                        HappField("Порт WEB", webPort, { webPort = it.filter(Char::isDigit).take(5) }, Modifier.weight(1f), number = true, enabled = !actionsBusy, compact = true, shape = pill, floatingLabel = true, maxFieldHeight = 44.dp)
+                    }
                 }
                 Spacer(Modifier.height(8.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Bottom) {
@@ -1107,7 +1106,6 @@ internal fun V2DeployScreen(
             } else if (actionsBusy) {
                 Text(if(isInspecting) "Проверка VPS по SSH…" else "Операция выполняется · подробности в логах", color = colors.textSecondary, fontSize = V2TextSizes.Secondary)
             }
-        }
         }
         }
         Row(Modifier.fillMaxWidth().testTag("deploy-actions").padding(top = 6.dp, bottom = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {

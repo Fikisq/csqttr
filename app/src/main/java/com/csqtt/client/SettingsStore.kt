@@ -1918,7 +1918,7 @@ private val DEPLOY_LAST_INSPECTION_PANEL = booleanPreferencesKey("deploy_last_in
             prefs[getProfileKey(DEPLOY_SSH_PORT, profile)] = draft.sshPort
             prefs[getProfileKey(SERVER_PEER_PORT, profile)] = draft.serverPeerPort
             prefs[getProfileKey(SERVER_WEB_PORT, profile)] = draft.serverWebPort
-            prefs[getProfileKey(MANUAL_PORTS_ENABLED, profile)] = true
+            prefs[getProfileKey(MANUAL_PORTS_ENABLED, profile)] = draft.manualPortsEnabled
             prefs[getProfileKey(SSH_KEYS_MODE, profile)] = draft.sshKeysMode
             prefs[getProfileKey(DOCKER_INSTALL, profile)] = draft.dockerInstall
         }
