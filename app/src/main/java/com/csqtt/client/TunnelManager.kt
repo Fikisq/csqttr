@@ -1327,17 +1327,17 @@ object TunnelManager {
                         lastDiagnostic = lineTrim.take(240)
                     }
 
+                    GoobyLogParser.parse(lineTrim)?.let { event ->
+                        if (event.isError) lastDiagnostic = event.message.take(240)
+                        updateProcessLog(identity, event.key, event.message, event.priority, event.isError, event.level)
+                        return@forEachLine
+                    }
+
                     if (!isLoggingEnabled && !isCritical) {
                         return@forEachLine
                     }
 
                     if (TunnelLogPolicy.isInternalRecovery(lineTrim)) {
-                        return@forEachLine
-                    }
-
-                    GoobyLogParser.parse(lineTrim)?.let { event ->
-                        if (event.isError) lastDiagnostic = event.message.take(240)
-                        updateProcessLog(identity, event.key, event.message, event.priority, event.isError, event.level)
                         return@forEachLine
                     }
 
