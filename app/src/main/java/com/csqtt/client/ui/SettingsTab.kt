@@ -417,13 +417,6 @@ internal fun SettingsTabContent(
         }
     }
 
-    LaunchedEffect(initialized, currentWorkers, savedWorkersPerHash) {
-        val savedWorkers = savedWorkersPerHash
-        if (initialized && savedWorkers != null && currentWorkers.toInt() != savedWorkers) {
-            scope.launch { settingsStore.saveWorkersPerHash(currentWorkers.toInt()) }
-        }
-    }
-
     val scrollState = rememberScrollState()
 
     val isPeerValid = peerInput.isNotBlank() && !peerInput.contains(":")
