@@ -9,6 +9,10 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.ui.platform.testTag
+import com.csqtt.client.ui.v2.components.V2AdaptiveScreen
+import com.csqtt.client.ui.v2.components.LocalV2AdaptiveMetrics
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -182,11 +186,12 @@ fun V2RoutingScreen(
         }
     }
 
-    Column(
+    V2AdaptiveScreen(
         modifier = modifier
             .fillMaxSize()
             .padding(horizontal = V2Sizes.ScreenPadding),
     ) {
+        val layout = LocalV2AdaptiveMetrics.current
         V2TopBar(
             version = version,
             title = "Роутинг",
@@ -197,11 +202,11 @@ fun V2RoutingScreen(
             modifier = Modifier
                 .weight(1f)
                 .verticalScroll(rememberScrollState())
-                .padding(bottom = V2Spacing.Xxl),
-            verticalArrangement = Arrangement.spacedBy(V2Spacing.Sm),
+                .padding(bottom = layout.gap),
+            verticalArrangement = Arrangement.spacedBy(layout.gap),
         ) {
             if (isServerRouting) {
-                V2Card {
+                V2Card(color = colors.surface) {
                     Text(
                         text = "Маршрутизация синхронизирована с сервером",
                         style = MaterialTheme.typography.titleMedium,
@@ -243,6 +248,7 @@ fun V2RoutingScreen(
                 )
                 V2Card(
                     onClick = { showRulesTransferDialog = true },
+                    color = colors.surface,
                     contentPadding = PaddingValues(
                         horizontal = V2Spacing.Lg,
                         vertical = V2Spacing.Md,
@@ -251,7 +257,7 @@ fun V2RoutingScreen(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(V2Sizes.RowHeight - 16.dp),
+                            .heightIn(min = ((layout.height - 56.dp - layout.gap * 4) / 4 - V2Spacing.Md * 2).coerceIn(48.dp, 180.dp)),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
@@ -386,10 +392,15 @@ private fun V2RoutingCard(
     countLabel: String,
     onClick: () -> Unit,
 ) {
-    val colors = V2Theme.colors
+    val colors = routingColors()
+    val layout = LocalV2AdaptiveMetrics.current
     V2Card(
+        modifier = Modifier.testTag("routing-card-$badge"),
         onClick = onClick,
+        color = colors.surface,
         contentPadding = PaddingValues(V2Spacing.Md),
+        contentModifier = Modifier.heightIn(min = ((layout.height - 56.dp - layout.gap * 4) / 4).coerceIn(96.dp, 208.dp)),
+        verticalArrangement = Arrangement.Center,
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -406,15 +417,15 @@ private fun V2RoutingCard(
                 Text(
                     text = badge,
                     style = MaterialTheme.typography.labelSmall,
-                    fontWeight = FontWeight.ExtraBold,
+                    fontWeight = FontWeight.Normal,
                     color = colors.onContrast,
                 )
             }
             Text(
                 text = title,
-                style = MaterialTheme.typography.titleLarge,
+                style = MaterialTheme.typography.titleMedium,
                 color = colors.textPrimary,
-                maxLines = 1,
+                maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f),
             )
