@@ -316,13 +316,7 @@ fun FloatingToolbar(
                         onSelected = onThemeChange,
                     )
 
-                    CsqttSettingRow(
-                        title = "Автопауза при Wi-Fi",
-                        checked = autoPauseOnWifi,
-                        onCheckedChange = onAutoPauseOnWifiChange,
-                        onInfoClick = { showAutoPauseInfo = true },
-                        infoContentDescription = "Как работает автопауза при Wi-Fi",
-                    )
+                    Native250WifiSetting()
 
                     if (csqttLinkMode) {
                         CsqttSettingRow(
