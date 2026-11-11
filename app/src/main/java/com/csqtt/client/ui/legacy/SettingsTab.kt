@@ -854,16 +854,6 @@ internal fun SettingsTabContent(
                     fixedWorkers = effectiveServerWorkers,
                 )
 
-                if (effectiveVkAuthMode != CsqttConstants.VkAuth.MODE_AUTO_JS) {
-                    CsqttSettingRow(
-                        title = "Экстра потоки",
-                        description = "До ${CsqttConstants.Tunnel.MAX_WORKERS} потоков вместо ${CsqttConstants.Tunnel.DEFAULT_MAX_WORKERS}",
-                        checked = extraWorkers,
-                        enabled = !tunnelRunning,
-                        onCheckedChange = { checked -> scope.launch { settingsStore.saveExtraWorkers(checked) } },
-                    )
-                }
-
                 AnimatedVisibility(
                     visible = vkAuthMode == CsqttConstants.VkAuth.MODE_CAPTCHA,
                     enter = fadeIn() + expandVertically(),

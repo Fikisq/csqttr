@@ -68,6 +68,7 @@ fun FloatingToolbar(
         initialValue = CsqttConstants.VkAuth.MODE_CALLS,
     )
     val tunnelRunning by TunnelManager.running.collectAsStateWithLifecycle()
+    val extraWorkers by settingsStore.extraWorkers.collectAsStateWithLifecycle(false)
     val selectedTurnSubnet by settingsStore.selectedTurnSubnet.collectAsStateWithLifecycle(
         initialValue = "",
     )
@@ -357,6 +358,16 @@ fun FloatingToolbar(
                     QuickSettingsOutlineButton(
                         text = "Wi-Fi списки · $modeLabel · $networkCount",
                         onClick = { showWifiNetworkListDialog = true },
+                    )
+
+                    CsqttSettingRow(
+                        title = "Экстра потоки",
+                        description = "До ${CsqttConstants.Tunnel.MAX_WORKERS} потоков вместо ${CsqttConstants.Tunnel.DEFAULT_MAX_WORKERS}",
+                        checked = extraWorkers,
+                        enabled = !tunnelRunning && vkAuthMode != CsqttConstants.VkAuth.MODE_AUTO_JS,
+                        onCheckedChange = { enabled ->
+                            scope.launch { settingsStore.saveExtraWorkers(enabled, forProfile = activeProfile) }
+                        },
                     )
 
                     CompactDropdownSetting(
