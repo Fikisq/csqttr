@@ -91,6 +91,8 @@ class Native250DeploymentCheckTest {
     @Test fun verifyPasswordAfterUiDeployment() = runBlocking(Dispatchers.IO) {
         val expected = JSONObject(File(directory, "deploy-expectations.json").readText())
         val store = SettingsStore(context)
+        val originalProfile = store.activeProfile.first()
+        try {
         val config = selected(store)
         assertEquals(expected.getInt("deployProfile"), config.profile)
         val linked = store.deployConnectionProfile(config.profile)
@@ -99,6 +101,7 @@ class Native250DeploymentCheckTest {
         val auth = store.tunnelAuthSnapshot.first { it.profile == linked }
         assertTrue("Deploy password was not synchronized into the linked tunnel",
             digest(auth.connectionPassword) == expected.getString("expectedPasswordSha256"))
+        assertTrue("Current deploy and tunnel passwords differ", auth.connectionPassword == config.mainPassword)
         connect(config).use { ssh ->
             ssh.startSession().use { session ->
                 session.exec("docker inspect --format '{{.State.Running}}' csqtt; sha256sum /usr/local/bin/csqtt").use { command ->
@@ -110,6 +113,8 @@ class Native250DeploymentCheckTest {
                 }
             }
         }
-        store.saveActiveProfile(expected.getInt("originalProfile"))
+        } finally {
+            store.saveActiveProfile(originalProfile)
+        }
     }
 }
