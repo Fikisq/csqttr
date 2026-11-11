@@ -1,0 +1,9 @@
+/.gradle/
+/.kotlin/
+/.idea/
+/.local/
+/build/
+/app/build/
+/local.properties
+*.apk
+*.aab
