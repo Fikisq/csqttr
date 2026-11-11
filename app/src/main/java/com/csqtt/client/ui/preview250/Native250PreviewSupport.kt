@@ -2,6 +2,7 @@ package com.csqtt.client.ui
 
 import android.content.Context
 import android.content.SharedPreferences
+import com.csqtt.client.Native250RuntimeSettings
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -27,7 +28,7 @@ internal data class Native250PreviewValue(val value: String, val set: (String) -
 /** Preview state shared by nested dialogs, without disk or Android preferences. */
 internal val LocalNative250StudioValues = staticCompositionLocalOf<androidx.compose.runtime.snapshots.SnapshotStateMap<String, String>?> { null }
 
-/** UI-only choices: never write SettingsStore or control the original tunnel. */
+/** Persistent choices shared with runtime services; Studio Preview stays in memory. */
 @Composable
 internal fun rememberNative250Preference(key: String, default: String): Native250PreviewValue {
     val studioValues = LocalNative250StudioValues.current
@@ -36,7 +37,7 @@ internal fun rememberNative250Preference(key: String, default: String): Native25
     }
     val context = LocalContext.current.applicationContext
     val preferences = remember(context) {
-        context.getSharedPreferences("native250_ui_preview", Context.MODE_PRIVATE)
+        context.getSharedPreferences(Native250RuntimeSettings.PREFERENCES, Context.MODE_PRIVATE)
     }
     var value by remember(preferences, key) {
         mutableStateOf(preferences.getString(key, default) ?: default)
