@@ -14,6 +14,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
@@ -441,7 +442,7 @@ private val DEPLOY_LAST_INSPECTION_PANEL = booleanPreferencesKey("deploy_last_in
     suspend fun saveUiOwnerMode(owner: Boolean) { appContext.dataStore.edit { it[UI_OWNER_MODE] = owner } }
     private val secureStore = SecureStringStore(appContext)
     private val classicGoobyPreferences by lazy {
-        appContext.getSharedPreferences("native250_ui_preview", Context.MODE_PRIVATE)
+        appContext.getSharedPreferences("native250_ui_preview", Context.MODE_PRIVATE).all
     }
 
     val activeProfile: Flow<Int> = dataStore.data.map {
@@ -646,7 +647,7 @@ private val DEPLOY_LAST_INSPECTION_PANEL = booleanPreferencesKey("deploy_last_in
     private fun readGoobyMode(prefs: Preferences, profile: Int): GoobyMode {
         prefs[getProfileKey(GOOBY_MODE, profile)]?.let { return GoobyMode.fromStored(it) }
         if (prefs[getProfileKey(PROFILE_REMOVED, profile)] == true) return GoobyMode.OFF
-        (classicGoobyPreferences.all["gooby.$profile"] as? String)?.let { return GoobyMode.fromStored(it) }
+        (classicGoobyPreferences["gooby.$profile"] as? String)?.let { return GoobyMode.fromStored(it) }
         return GoobyMode.fromLegacy(
             prefs[getProfileKey(LEGACY_GOOBY_ENABLED, profile)] ?: false,
             prefs[getProfileKey(LEGACY_GOOBY_STRATEGY, profile)],
@@ -654,8 +655,8 @@ private val DEPLOY_LAST_INSPECTION_PANEL = booleanPreferencesKey("deploy_last_in
     }
 
     private suspend fun migrateGoobyModes() {
-        val classic = classicGoobyPreferences.all
-        dataStore.edit { prefs ->
+        val classic = classicGoobyPreferences
+        appContext.dataStore.edit { prefs ->
             for (profile in CsqttConstants.Profiles.MIN_INDEX..CsqttConstants.Profiles.MAX_INDEX) {
                 val key = getProfileKey(GOOBY_MODE, profile)
                 if (prefs[key] == null && (classic.containsKey("gooby.$profile") ||
