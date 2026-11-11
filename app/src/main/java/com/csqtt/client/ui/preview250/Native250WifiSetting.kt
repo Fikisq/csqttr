@@ -1,7 +1,17 @@
 package com.csqtt.client.ui
 
 import android.content.Context
-import android.net.wifi.WifiManager
+import android.Manifest
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.net.Uri
+import android.os.Build
+import android.provider.Settings
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
+import com.csqtt.client.currentWifiSsid
+import com.csqtt.client.hasWifiSsidPermission
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.selection.selectable
@@ -55,6 +65,9 @@ private fun Native250WifiDialog(onDismiss: () -> Unit) {
     val canSelect = enabled.value.toBoolean() && activeRule != "all"
     val context = LocalContext.current.applicationContext
     var current by remember { mutableStateOf(readNative250WifiName(context)) }
+    val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
+        current = readNative250WifiName(context)
+    }
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { current = readNative250WifiName(context) }
     var showAdd by rememberSaveable { mutableStateOf(false) }
     var input by rememberSaveable { mutableStateOf("") }
@@ -79,6 +92,13 @@ private fun Native250WifiDialog(onDismiss: () -> Unit) {
         val currentName = current
         if (currentName == null) {
             Text("Имя сети недоступно", style = MaterialTheme.typography.bodyMedium)
+            Native250OutlineButton("Разрешить доступ к имени сети", onClick = {
+                if (!hasWifiSsidPermission(context)) {
+                    permission.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
+                } else {
+                    context.startActivity(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                }
+            })
         } else {
             Native250WifiRow(currentName, currentName in networks.selected, canSelect && currentName in networks.saved,
                 onSelect = { storedNetworks.set(networks.select(currentName, it).encode()) })
@@ -88,6 +108,14 @@ private fun Native250WifiDialog(onDismiss: () -> Unit) {
             )
         }
         Text("Сохранённые сети", style = MaterialTheme.typography.titleSmall)
+        if (activeRule != "all" && Build.VERSION.SDK_INT >= 29 && hasWifiSsidPermission(context) &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_BACKGROUND_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            Text("Для распознавания сети в фоне разрешите геолокацию «Всегда» в настройках приложения. Координаты не запрашиваются.", style = MaterialTheme.typography.bodySmall)
+            Native250OutlineButton("Доступ в фоне", onClick = {
+                context.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                    Uri.parse("package:${context.packageName}")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            })
+        }
         if (networks.saved.isEmpty()) Text("Нет сохранённых сетей", style = MaterialTheme.typography.bodySmall)
         networks.saved.sorted().forEach { name ->
             key(name) {
@@ -139,11 +167,7 @@ private fun Native250WifiRow(name: String, checked: Boolean, enabled: Boolean, o
     }
 }
 
-@Suppress("DEPRECATION")
-private fun readNative250WifiName(context: Context): String? = runCatching {
-    val wifi = context.getSystemService(Context.WIFI_SERVICE) as? WifiManager
-    wifi?.connectionInfo?.ssid?.let(::native250Ssid)
-}.getOrNull()
+private fun readNative250WifiName(context: Context): String? = currentWifiSsid(context)?.let(::native250Ssid)
 
 @Composable
 private fun Native250OutlineButton(label: String, onClick: () -> Unit) {
