@@ -352,14 +352,12 @@ fun FloatingToolbar(
                         infoContentDescription = "Как работает автопауза при Wi-Fi",
                     )
 
-                    OutlinedButton(
+                    val modeLabel = if (wifiNetworkListMode == "blacklist") "Чёрный список" else "Белый список"
+                    val networkCount = com.csqtt.client.decodeWifiSsids(wifiNetworkListSsids).size
+                    QuickSettingsOutlineButton(
+                        text = "Wi-Fi списки · $modeLabel · $networkCount",
                         onClick = { showWifiNetworkListDialog = true },
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        val modeLabel = if (wifiNetworkListMode == "blacklist") "Чёрный список" else "Белый список"
-                        val count = com.csqtt.client.decodeWifiSsids(wifiNetworkListSsids).size
-                        Text("Wi-Fi списки · $modeLabel · $count")
-                    }
+                    )
 
                     CompactDropdownSetting(
                         title = BatterySaver.TITLE,
@@ -395,31 +393,10 @@ fun FloatingToolbar(
                     }
 
                     if (!csqttLinkMode) {
-                        OutlinedButton(
+                        QuickSettingsOutlineButton(
+                            text = "Выбор TURN подсетей",
                             onClick = { showTurnSubnetsDialog = true },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(CsqttSizes.ControlHeight),
-                            shape = CsqttShapes.Pill,
-                            colors = ButtonDefaults.outlinedButtonColors(
-                                containerColor = Color.Transparent,
-                                contentColor = MaterialTheme.colorScheme.onSurface,
-                            ),
-                            border = BorderStroke(
-                                1.dp,
-                                MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
-                            ),
-                            contentPadding = PaddingValues(horizontal = 16.dp),
-                        ) {
-                            Text(
-                                text = "Выбор TURN подсетей",
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = FontWeight.Medium,
-                                maxLines = 1,
-                                softWrap = false,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                        }
+                        )
                     }
                 }
             }
@@ -552,5 +529,29 @@ fun FloatingToolbar(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun QuickSettingsOutlineButton(text: String, onClick: () -> Unit) {
+    OutlinedButton(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth().height(CsqttSizes.ControlHeight),
+        shape = CsqttShapes.Pill,
+        colors = ButtonDefaults.outlinedButtonColors(
+            containerColor = Color.Transparent,
+            contentColor = MaterialTheme.colorScheme.onSurface,
+        ),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+        contentPadding = PaddingValues(horizontal = 16.dp),
+    ) {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.Medium,
+            maxLines = 1,
+            softWrap = false,
+            overflow = TextOverflow.Ellipsis,
+        )
     }
 }
