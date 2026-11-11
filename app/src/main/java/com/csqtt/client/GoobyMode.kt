@@ -1,6 +1,6 @@
 package com.csqtt.client
 
-internal enum class GoobyMode(val storedValue: String, val label: String) {
+enum class GoobyMode(val storedValue: String, val label: String) {
     OFF("off", "Выкл"),
     GENTLE("gentle", "Лёгкая"),
     CURRENT("current", "Средняя"),

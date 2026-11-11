@@ -50,6 +50,7 @@ import com.csqtt.client.ConnectionSource
 import com.csqtt.client.ConnectionStartBlocker
 import com.csqtt.client.ConnectionStartPolicy
 import com.csqtt.client.CsqttConstants
+import com.csqtt.client.GoobyMode
 import com.csqtt.client.R
 import com.csqtt.client.SettingsStore
 import com.csqtt.client.StoredSecretState
@@ -90,6 +91,7 @@ internal fun ConnectionTab(
     val workersPerHash by settingsStore.workersPerHash.collectAsStateWithLifecycle(initialValue = 18)
     val sni by settingsStore.sni.collectAsStateWithLifecycle(initialValue = "")
     val turnTransport by settingsStore.turnTransport.collectAsStateWithLifecycle(initialValue = CsqttConstants.Tunnel.DEFAULT_TURN_TRANSPORT)
+    val goobyMode by settingsStore.goobyMode.collectAsStateWithLifecycle(GoobyMode.OFF)
     val srtpMode by settingsStore.srtpMode.collectAsStateWithLifecycle(initialValue = SettingsStore.cachedSrtpMode ?: CsqttConstants.SrtpMode.DEFAULT)
     val customTurnIps by settingsStore.customTurnIps.collectAsStateWithLifecycle(initialValue = "")
     val manualPortsEnabled by settingsStore.manualPortsEnabled.collectAsStateWithLifecycle(initialValue = false)
@@ -171,6 +173,7 @@ internal fun ConnectionTab(
             putExtra("client_ids", activeClientIds)
             putExtra("obfs_mode", CsqttConstants.Tunnel.DEFAULT_OBFS_MODE)
             putExtra("turn_transport", turnTransport)
+            putExtra(GoobyMode.EXTRA, goobyMode.storedValue)
             putExtra("srtp_mode", srtpMode)
             putExtra("custom_turn_ips", customTurnIps)
             putExtra("generation_id", generationId)

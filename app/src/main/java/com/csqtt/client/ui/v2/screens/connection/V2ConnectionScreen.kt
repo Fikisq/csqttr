@@ -67,6 +67,7 @@ import com.csqtt.client.ConnectionSource
 import com.csqtt.client.ConnectionStartBlocker
 import com.csqtt.client.ConnectionStartPolicy
 import com.csqtt.client.CsqttConstants
+import com.csqtt.client.GoobyMode
 import com.csqtt.client.R
 import com.csqtt.client.SettingsStore
 import com.csqtt.client.StoredSecretState
@@ -285,6 +286,7 @@ fun V2ConnectionScreen(
                 putExtra("client_ids", settingsStore.activeClientIds.first())
                 putExtra("obfs_mode", CsqttConstants.Tunnel.DEFAULT_OBFS_MODE)
                 putExtra("turn_transport", settingsStore.turnTransport.first())
+                putExtra(GoobyMode.EXTRA, settingsStore.goobyMode.first().storedValue)
                 putExtra("srtp_mode", settingsStore.srtpMode.first())
                 putExtra("custom_turn_ips", settingsStore.customTurnIps.first())
                 putExtra("generation_id", nextGen)

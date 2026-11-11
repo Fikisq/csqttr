@@ -279,6 +279,7 @@ class TunnelService : Service() {
                             turnTransport = intent.getStringExtra("turn_transport")
                                 ?.takeIf { it == CsqttConstants.Tunnel.TURN_TRANSPORT_TCP_TLS }
                                 ?: CsqttConstants.Tunnel.DEFAULT_TURN_TRANSPORT,
+                            goobyMode = GoobyMode.fromStored(intent.getStringExtra(GoobyMode.EXTRA)),
                             srtpMode = sanitizeSrtpMode(intent.getStringExtra("srtp_mode")),
                             customTurnIps = intent.getStringExtra("custom_turn_ips") ?: "",
                             generationId = genId,
@@ -495,6 +496,7 @@ class TunnelService : Service() {
                     connectionPassword = source.password,
                     obfsMode = store.obfsMode.first(),
                     turnTransport = store.turnTransport.first(),
+                    goobyMode = store.goobyMode.first(),
                     srtpMode = sanitizeSrtpMode(store.srtpMode.first()),
                     customTurnIps = store.customTurnIps.first(),
                     vkAuthMode = vkAuthMode,

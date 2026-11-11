@@ -1125,6 +1125,7 @@ object TunnelManager {
         cmd.add(params.obfsMode)
         cmd.add("-turn-transport")
         cmd.add(params.turnTransport)
+        cmd.addAll(params.goobyMode.arguments(params.turnTransport))
         cmd.add("-srtp-mode")
         cmd.add(params.srtpMode)
         if (params.customTurnIps.isNotBlank()) {
@@ -1350,6 +1351,11 @@ object TunnelManager {
                     }
 
                     if (TunnelLogPolicy.isInternalRecovery(lineTrim)) {
+                        return@forEachLine
+                    }
+
+                    if (lineTrim.startsWith("[GOOBY]")) {
+                        updateProcessLog(identity, "gooby", lineTrim, 20, false, LogLevel.LOG)
                         return@forEachLine
                     }
 
@@ -2153,4 +2159,5 @@ data class TunnelParams(
     val ipRoutingEnabled: Boolean = false,
     val ipIsWhitelist: Boolean = false,
     val directIps: String = "",
+    val goobyMode: GoobyMode = GoobyMode.OFF,
 )
