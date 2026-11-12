@@ -97,8 +97,12 @@ fun CsqttV2Theme(
     themePalette: String? = V2DarkPalette.ORIGINAL,
     content: @Composable () -> Unit,
 ) {
-    val colors = if (darkTheme) v2DarkColorsForPalette(themePalette)
-        else if (themePalette == V2DarkPalette.ORIGINAL) V2ClassicLightColors else V2LightColors
+    val colors = when {
+        darkTheme -> v2DarkColorsForPalette(themePalette)
+        themePalette == V2DarkPalette.ORIGINAL -> V2ClassicLightColors
+        themePalette == V2DarkPalette.HISTORICAL -> V2HistoricalLightColors
+        else -> V2LightColors
+    }
     val colorScheme = remember(darkTheme, colors) { v2ColorScheme(colors, darkTheme) }
     val view = LocalView.current
     val activity = view.context.findActivity()

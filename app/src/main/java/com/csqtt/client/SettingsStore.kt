@@ -446,8 +446,13 @@ private val DEPLOY_LAST_INSPECTION_PANEL = booleanPreferencesKey("deploy_last_in
         dataStore.edit { it[UI_SCALE] = percent }
     }
 
-    val uiDesign: Flow<String> = appContext.dataStore.data.map { if (it[UI_DESIGN] == "classic") "classic" else "v2" }
-    suspend fun saveUiDesign(design: String) { require(design in listOf("classic", "v2")); appContext.dataStore.edit { it[UI_DESIGN] = design } }
+    val uiDesign: Flow<String> = appContext.dataStore.data.map {
+        it[UI_DESIGN]?.takeIf(CsqttConstants.Theme.DESIGNS::contains) ?: CsqttConstants.Theme.DESIGN_V2
+    }
+    suspend fun saveUiDesign(design: String) {
+        require(design in CsqttConstants.Theme.DESIGNS)
+        appContext.dataStore.edit { it[UI_DESIGN] = design }
+    }
     val batterySaverMode: Flow<String> = appContext.dataStore.data.map { prefs -> prefs[BATTERY_SAVER_MODE]?.takeIf { mode -> BatterySaver.MODES.any { it.first == mode } } ?: BatterySaver.DEFAULT_MODE }
     val batterySaverPercent: Flow<Int> = appContext.dataStore.data.map { (it[BATTERY_SAVER_PERCENT] ?: BatterySaver.DEFAULT_PERCENT).coerceIn(5, 95) }
     suspend fun saveBatterySaverMode(mode: String) { require(BatterySaver.MODES.any { it.first == mode }); appContext.dataStore.edit { it[BATTERY_SAVER_MODE] = mode } }
@@ -2778,7 +2783,7 @@ private val DEPLOY_LAST_INSPECTION_PANEL = booleanPreferencesKey("deploy_last_in
         if (includeSettings) {
             val settings = JSONObject()
             settings.put("theme_mode", prefs[THEME_MODE] ?: "system")
-            settings.put("ui_design", prefs[UI_DESIGN] ?: "v2")
+            settings.put("ui_design", prefs[UI_DESIGN] ?: CsqttConstants.Theme.DESIGN_V2)
             settings.put("ui_scale_percent", uiScaleOrDefault(prefs[UI_SCALE]))
             settings.put("battery_saver_mode", prefs[BATTERY_SAVER_MODE] ?: BatterySaver.DEFAULT_MODE)
             settings.put("battery_saver_percent", prefs[BATTERY_SAVER_PERCENT] ?: BatterySaver.DEFAULT_PERCENT)
@@ -2886,7 +2891,7 @@ private val DEPLOY_LAST_INSPECTION_PANEL = booleanPreferencesKey("deploy_last_in
                 if (includeSettings && root.has("settings")) {
                     val s = root.getJSONObject("settings")
                     if (s.has("theme_mode")) mutable[THEME_MODE] = s.getString("theme_mode")
-                    s.optString("ui_design").takeIf { it in listOf("classic", "v2") }?.let { mutable[UI_DESIGN] = it }
+                    s.optString("ui_design").takeIf(CsqttConstants.Theme.DESIGNS::contains)?.let { mutable[UI_DESIGN] = it }
                     if (s.has("ui_scale_percent")) mutable[UI_SCALE] = uiScaleOrDefault(s.optInt("ui_scale_percent", 100))
                     s.optString("battery_saver_mode").takeIf { mode -> BatterySaver.MODES.any { it.first == mode } }?.let { mutable[BATTERY_SAVER_MODE] = it }
                     if (s.has("battery_saver_percent")) mutable[BATTERY_SAVER_PERCENT] = s.getInt("battery_saver_percent").coerceIn(5, 95)

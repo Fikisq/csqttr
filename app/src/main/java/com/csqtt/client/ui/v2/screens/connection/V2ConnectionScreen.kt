@@ -106,6 +106,7 @@ fun V2ConnectionScreen(
     profilePickerRequest: Int = 0,
     onVersionClick: (() -> Unit)? = null,
     onOpenResourceMonitor: () -> Unit = {},
+    historicalPalette: Boolean = false,
 ) {
     val context = LocalContext.current.applicationContext
     val scope = rememberCoroutineScope()
@@ -380,11 +381,15 @@ fun V2ConnectionScreen(
     val powerInk = when {
         isStarting || tunnelStopping || autoPausedForWifi || profileChecking -> colors.warning
         tunnelRunning -> colors.success
+        historicalPalette -> colors.onAccent
         darkSurface -> androidx.compose.ui.graphics.Color(0xFF78ADF5)
         else -> colors.accent
     }
-    val powerOutline = if (!activeVisual && !profileChecking && darkSurface)
-        androidx.compose.ui.graphics.Color(0xFF3567AA) else powerInk
+    val powerOutline = when {
+        historicalPalette && !activeVisual && !profileChecking -> colors.accent.copy(alpha = 0.65f)
+        !activeVisual && !profileChecking && darkSurface -> androidx.compose.ui.graphics.Color(0xFF3567AA)
+        else -> powerInk
+    }
 
     V2AdaptiveScreen(modifier.fillMaxSize().padding(horizontal = V2Sizes.ScreenPadding)) {
         val layout = LocalV2AdaptiveMetrics.current
@@ -393,10 +398,10 @@ fun V2ConnectionScreen(
         })
         Column(Modifier.fillMaxWidth().padding(top = layout.gap, bottom = layout.gap * 2), horizontalAlignment = Alignment.CenterHorizontally) {
             androidx.compose.material3.Surface(shape = androidx.compose.foundation.shape.CircleShape,
-                color = powerOutline.copy(alpha = 0.07f), modifier = Modifier.size(layout.powerSize)) {
+                color = if (historicalPalette) colors.accentSoft else powerOutline.copy(alpha = 0.07f), modifier = Modifier.size(layout.powerSize)) {
                 Box(contentAlignment = Alignment.Center) {
             androidx.compose.material3.Surface(onClick = { toggleTunnel() }, enabled = canToggle, shape = androidx.compose.foundation.shape.CircleShape,
-                color = colors.surface,
+                color = if (historicalPalette) colors.flower else colors.surface,
                 border = androidx.compose.foundation.BorderStroke(2.dp, powerOutline), modifier = Modifier.size(layout.powerSize - 14.dp)) {
                 Column(verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
                     val buttonText = powerInk

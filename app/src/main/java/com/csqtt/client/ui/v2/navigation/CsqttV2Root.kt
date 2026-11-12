@@ -49,6 +49,7 @@ import com.csqtt.client.updateIntervalHoursToMillis
 import com.csqtt.client.ui.v2.components.V2BottomBar
 import com.csqtt.client.ui.v2.components.V2Tab
 import com.csqtt.client.ui.v2.design.CsqttV2Theme
+import com.csqtt.client.ui.v2.design.V2DarkPalette
 import com.csqtt.client.ui.v2.design.V2Theme
 import com.csqtt.client.ui.v2.design.V2Transitions
 import com.csqtt.client.ui.v2.dialogs.V2AppUpdateDialog
@@ -76,6 +77,7 @@ fun CsqttV2Root(
     settingsStore: SettingsStore,
     onVkAuthRequested: () -> Unit = {},
     modifier: Modifier = Modifier,
+    historicalPalette: Boolean = false,
 ) {
     val themeMode by settingsStore.themeMode.collectAsStateWithLifecycle(initialValue = CsqttConstants.Theme.MODE_SYSTEM)
     val isSystemDark = isSystemInDarkTheme()
@@ -86,6 +88,7 @@ fun CsqttV2Root(
     }
     CsqttV2Theme(
         darkTheme = isDark,
+        themePalette = if (historicalPalette) V2DarkPalette.HISTORICAL else V2DarkPalette.ORIGINAL,
     ) {
         val colors = V2Theme.colors
         val context = LocalContext.current.applicationContext
@@ -270,6 +273,7 @@ fun CsqttV2Root(
                                             onVersionClick = { showVersionSheet = true },
                                             onOpenResourceMonitor = { showResourceSheet = true },
                                             profilePickerRequest = profilePickerRequest,
+                                            historicalPalette = historicalPalette,
                                             onInvalidConfiguration = {
                                                 selectedTabName = V2Tab.Tunnel.name
                                             },

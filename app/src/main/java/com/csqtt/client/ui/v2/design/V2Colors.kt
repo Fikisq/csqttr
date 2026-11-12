@@ -193,6 +193,7 @@ internal val V2ClassicOriginalColors = V2NordicSlateColors.copy(
 object V2DarkPalette {
     const val ORIGINAL = "classic_original"
     const val SOFT = "classic_soft"
+    const val HISTORICAL = "nordic_slate"
     const val ORIGINAL_LABEL = "Оригинальная"
     const val SOFT_LABEL = "Мягкая"
 
@@ -205,7 +206,7 @@ fun v2DarkColorsForPalette(palette: String?): V2Colors = when (palette) {
     "muted_denim" -> V2MutedDenimColors
     "steel_blue" -> V2SteelBlueColors
     "default", "pure_black" -> V2DarkColors
-    "nordic_slate" -> V2NordicSlateColors
+    V2DarkPalette.HISTORICAL -> V2NordicSlateColors
     else -> V2NordicSlateColors
 }
 
@@ -236,6 +237,21 @@ internal val V2LightColors = V2Colors(
     warning = Color(0xFFB7791F),
     error = Color(0xFFCC2638),
     version = Color(0xFF5F5E93),
+)
+
+internal val V2HistoricalLightColors = V2LightColors.copy(
+    background = Color(0xFFE5E8EE),
+    surface = Color(0xFFF0F2F6),
+    surfaceElevated = Color(0xFFD6DBE4),
+    field = Color(0xFFE1E5ED),
+    outline = Color(0xFFC0C0CB),
+    textSecondary = Color(0xFF444958),
+    textMuted = Color(0xFF575B68),
+    hero = Color(0xFFD9D9E4),
+    heroRow = Color(0xFFC9C9D6),
+    navSelected = Color(0xFFDCDCE5),
+    bottomSurface = Color(0xFFE8E8EE),
+    error = Color(0xFFC54545),
 )
 
 internal val V2ClassicLightColors = V2LightColors.copy(

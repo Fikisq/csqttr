@@ -82,6 +82,7 @@ import com.csqtt.client.ui.legacy.design.CsqttShapes
 import com.csqtt.client.ui.legacy.dialogs.VkAuthDialog
 import com.csqtt.client.ui.v2.dialogs.V2VkAuthDialog
 import com.csqtt.client.ui.legacy.utils.parseCsqttLink
+import com.csqtt.client.ui.v2.design.V2DarkPalette
 import com.csqtt.client.ui.v2.navigation.CsqttV2Root
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -153,12 +154,19 @@ class MainActivity : ComponentActivity() {
             val chosenTheme by appSettingsStore.themeMode.collectAsStateWithLifecycle("system")
             val uiScalePercent by appSettingsStore.uiScalePercent.collectAsStateWithLifecycle(100)
             val dark = when (chosenTheme) { "dark" -> true; "light" -> false; else -> androidx.compose.foundation.isSystemInDarkTheme() }
+            val historicalPalette = design == CsqttConstants.Theme.DESIGN_OLD
+            val v2Palette = if (historicalPalette) V2DarkPalette.HISTORICAL else V2DarkPalette.ORIGINAL
+            val uiFamily = when (design) {
+                null -> "loading"
+                CsqttConstants.Theme.DESIGN_CLASSIC -> CsqttConstants.Theme.DESIGN_CLASSIC
+                else -> CsqttConstants.Theme.DESIGN_V2
+            }
             if (renderUi) {
-                uiStateHolder.SaveableStateProvider("main_ui_${design ?: "loading"}") {
+                uiStateHolder.SaveableStateProvider("main_ui_$uiFamily") {
             val settingsStore = remember { appSettingsStore }
             if (design == null) {
                 // Wait for the stored choice instead of briefly drawing the other design.
-            } else if (design == "v2") {
+            } else if (design != CsqttConstants.Theme.DESIGN_CLASSIC) {
                 val baseDensity = LocalDensity.current
                 val scaledDensity = remember(baseDensity, uiScalePercent) {
                     Density(baseDensity.density * uiScalePercent / 100f, baseDensity.fontScale)
@@ -167,6 +175,7 @@ class MainActivity : ComponentActivity() {
                     CsqttV2Root(
                         settingsStore = settingsStore,
                         onVkAuthRequested = { showVkAuthDialog = true },
+                        historicalPalette = historicalPalette,
                     )
                 }
             } else {
@@ -235,13 +244,13 @@ class MainActivity : ComponentActivity() {
                     }
                 if (design == "classic") CSQTTTheme(themeMode = chosenTheme) {
                     com.csqtt.client.ui.legacy.dialogs.VkAuthDialog(onToken, onDismiss = { showVkAuthDialog = false })
-                } else com.csqtt.client.ui.v2.design.CsqttV2Theme(darkTheme = dark) {
+                } else com.csqtt.client.ui.v2.design.CsqttV2Theme(darkTheme = dark, themePalette = v2Palette) {
                     VkAuthDialog(onToken, onDismiss = { showVkAuthDialog = false })
                 }
             }
             val pendingLink = pendingDeepLink
-            if (pendingLink != null && design == "v2") {
-                com.csqtt.client.ui.v2.design.CsqttV2Theme(darkTheme = dark) {
+            if (pendingLink != null && uiFamily == CsqttConstants.Theme.DESIGN_V2) {
+                com.csqtt.client.ui.v2.design.CsqttV2Theme(darkTheme = dark, themePalette = v2Palette) {
                 com.csqtt.client.ui.v2.dialogs.V2BrowserImportDialog(
                     rawLink = pendingLink,
                     settingsStore = remember { appSettingsStore },

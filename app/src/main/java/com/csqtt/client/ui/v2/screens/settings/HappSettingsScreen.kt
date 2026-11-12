@@ -15,6 +15,7 @@ import com.csqtt.client.ui.v2.design.V2Theme
 import com.csqtt.client.ui.v2.design.V2Sizes
 import com.csqtt.client.ui.v2.design.V2TextSizes
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.csqtt.client.CsqttConstants
 import com.csqtt.client.SettingsStore
 import com.csqtt.client.BatterySaver
 import com.csqtt.client.R
@@ -87,10 +88,13 @@ fun HappSettingsScreen(
                 HappChoice("Масштаб интерфейса", "$uiScalePercent%", SettingsStore.UI_SCALE_CHOICES.map { "$it%" }, { label ->
                     scope.launch { settingsStore.saveUiScalePercent(label.removeSuffix("%").toInt()) }
                 })
-                val classicDesignLabel = stringResource(R.string.design_classic_csqtt_250)
-                val v2DesignLabel = stringResource(R.string.design_csqttr_253)
-                HappChoice("Дизайн", if (design == "classic") classicDesignLabel else v2DesignLabel, listOf(v2DesignLabel, classicDesignLabel), {
-                    scope.launch { settingsStore.saveUiDesign(if (it == classicDesignLabel) "classic" else "v2") }
+                val designs = mapOf(
+                    CsqttConstants.Theme.DESIGN_V2 to stringResource(R.string.design_csqttr_253),
+                    CsqttConstants.Theme.DESIGN_CLASSIC to stringResource(R.string.design_classic_csqtt_250),
+                    CsqttConstants.Theme.DESIGN_OLD to stringResource(R.string.design_historical),
+                )
+                HappChoice("Дизайн", designs.getValue(design), designs.values.toList(), { label ->
+                    scope.launch { settingsStore.saveUiDesign(designs.entries.first { it.value == label }.key) }
                 })
                 HappChoice("Оформление", when(theme) { "light" -> "Светлое"; "dark" -> "Тёмное"; else -> "Системное" }, listOf("Тёмное", "Светлое", "Системное"), { scope.launch { settingsStore.saveThemeMode(when(it) { "Тёмное" -> "dark"; "Светлое" -> "light"; else -> "system" }) } })
                 HappChoice("Отпечаток TLS", fingerprint, listOf("chrome", "firefox", "safari", "edge", "opera"), { scope.launch { settingsStore.saveFingerprint(it, forProfile = profile) } })
