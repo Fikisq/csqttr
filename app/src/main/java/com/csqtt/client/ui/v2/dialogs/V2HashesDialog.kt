@@ -27,9 +27,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.outlined.ContentPaste
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -48,6 +46,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -176,29 +176,24 @@ internal fun V2HashesDialog(
                     val hash = if (showOwnerHashes) value else hashes[index]
                     val short = hash.isNotBlank() && hash.length < 16
                     val status = results[hash]
-                    val invalid = status == VkHashValidationStatus.Invalid
+                    val outline = when (status) {
+                        VkHashValidationStatus.Valid -> colors.success
+                        VkHashValidationStatus.Invalid -> colors.error
+                        null -> if (short) colors.error else colors.outline
+                    }
                     Column {
                         Surface(shape = RoundedCornerShape(14.dp), color = colors.field) {
                             Column(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp)) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                Text(
+                                    "Хеш ${index + 1}",
+                                    color = colors.textSecondary,
+                                    fontSize = 12.sp,
                                     modifier = Modifier.padding(bottom = 4.dp),
-                                ) {
-                                    Text("Хеш ${index + 1}", color = colors.textSecondary, fontSize = 12.sp)
-                                    if (status == VkHashValidationStatus.Valid || invalid) {
-                                        Icon(
-                                            if (invalid) Icons.Default.Error else Icons.Default.CheckCircle,
-                                            if (invalid) "Хеш ${index + 1}: недействителен" else "Хеш ${index + 1}: активен",
-                                            tint = if (invalid) colors.error else colors.success,
-                                            modifier = Modifier.size(12.dp),
-                                        )
-                                    }
-                                }
+                                )
                                 Surface(
                                     shape = RoundedCornerShape(11.dp),
                                     color = colors.surface,
-                                    border = BorderStroke(1.dp, colors.outline),
+                                    border = BorderStroke(if (status == null) 1.dp else 2.dp, outline),
                                 ) {
                                     Row(
                                         Modifier.fillMaxWidth().height(38.dp).padding(start = 10.dp, end = 2.dp),
@@ -206,7 +201,16 @@ internal fun V2HashesDialog(
                                     ) {
                                         BasicTextField(
                                             value = value, onValueChange = { updateHash(index, it) },
-                                            enabled = !isChecking, readOnly = showOwnerHashes, singleLine = true, modifier = Modifier.weight(1f),
+                                            enabled = !isChecking,
+                                            readOnly = showOwnerHashes,
+                                            singleLine = true,
+                                            modifier = Modifier.weight(1f).semantics {
+                                                when (status) {
+                                                    VkHashValidationStatus.Valid -> stateDescription = "Хеш активен"
+                                                    VkHashValidationStatus.Invalid -> stateDescription = "Хеш недействителен"
+                                                    null -> Unit
+                                                }
+                                            },
                                             textStyle = MaterialTheme.typography.bodyMedium.copy(color = colors.textPrimary, fontSize = 13.sp, fontFamily = FontFamily.Monospace),
                                             decorationBox = { input -> Box(contentAlignment = Alignment.CenterStart) {
                                                 if (value.isEmpty()) Text("Ссылка VK или хеш · от 16 знаков", color = colors.textMuted, fontSize = 12.sp, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
@@ -226,7 +230,7 @@ internal fun V2HashesDialog(
                                 }
                             }
                         }
-                        if (short || invalid) Text(if (short) "Минимум 16 символов" else "Хеш недействителен", color = colors.error, fontSize = 11.sp, modifier = Modifier.padding(start = 10.dp, top = 2.dp))
+                        if (short) Text("Минимум 16 символов", color = colors.error, fontSize = 11.sp, modifier = Modifier.padding(start = 10.dp, top = 2.dp))
                     }
                 }
             }

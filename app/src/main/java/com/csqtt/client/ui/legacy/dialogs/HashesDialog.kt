@@ -4,7 +4,6 @@ import android.content.ClipboardManager
 import androidx.compose.foundation.BorderStroke
 import com.csqtt.client.ui.legacy.appSectionCardBorderColor
 import com.csqtt.client.ui.legacy.appSectionCardColor
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -19,7 +18,10 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -71,7 +73,7 @@ internal fun HashesDialog(
     val showOwnerHashes = group == ManualHashGroup.Owner
     val visibleFields = if (showOwnerHashes) List(6) { ownerHashes.getOrElse(it) { "" } } else fields
     val activeHashes = (if (showOwnerHashes) ownerHashes else hashes).filter { it.length >= 16 }.distinct()
-    val validBorder = if (isSystemInDarkTheme()) Color(0xFF66BB6A) else Color(0xFF2E7D32)
+    val validBorder = if (appSectionCardColor().luminance() < 0.5f) Color(0xFF66BB6A) else Color(0xFF2E7D32)
 
     fun updateHash(index: Int, raw: String) {
         val input = raw.filterNot(Char::isWhitespace)
@@ -249,7 +251,13 @@ internal fun HashesDialog(
                                 }
                             }
                         } },
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier.fillMaxWidth().semantics {
+                            when (status) {
+                                VkHashValidationStatus.Valid -> stateDescription = "Хеш активен"
+                                VkHashValidationStatus.Invalid -> stateDescription = "Хеш недействителен"
+                                null -> Unit
+                            }
+                        },
                         shape = CsqttShapes.Control,
                         colors = fieldColors,
                     )
