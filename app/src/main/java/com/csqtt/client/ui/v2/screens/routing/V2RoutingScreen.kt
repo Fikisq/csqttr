@@ -353,9 +353,11 @@ fun V2RoutingScreen(
     }
 }
 
-private fun appsCountLabel(isWhitelist: Boolean, blacklistSize: Int, whitelistSize: Int): String =
-    if (isWhitelist) "Белый список: $whitelistSize в туннеле"
-    else "Чёрный список: $blacklistSize исключено"
+internal fun appsCountLabel(isWhitelist: Boolean, blacklistSize: Int, whitelistSize: Int): String = when {
+    isWhitelist -> "С VPN: $whitelistSize в туннеле"
+    blacklistSize > 0 -> "Без VPN: $blacklistSize исключено"
+    else -> "Все с VPN"
+}
 
 private fun domainsCountLabel(
     isWhitelist: Boolean,
