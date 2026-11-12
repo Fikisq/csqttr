@@ -446,6 +446,7 @@ internal fun SettingsTabContent(
     val passwordRequiredError = showRequiredFieldErrors && !participantMode && connectionPassword.isBlank()
     if (showHashesDialog) {
         HashesDialog(
+            onManageVkAccounts = onVkAuthRequested,
             ownerHashes = if (participantMode) linkHashes else emptyList(),
             removedOwnerHashes = linkHashesRemoved,
             onRemovedOwnerHashesChange = { removed -> scope.launch { settingsStore.saveLinkHashesRemoved(removed) } },
