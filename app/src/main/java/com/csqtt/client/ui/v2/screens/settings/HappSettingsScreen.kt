@@ -64,9 +64,9 @@ fun HappSettingsScreen(
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     listOf(false to "Участник", true to "Владелец").forEach { (value, label) ->
                         Surface(onClick = { scope.launch { settingsStore.saveUiOwnerMode(value) } }, modifier = Modifier.weight(1f),
-                            shape = RoundedCornerShape(14.dp), color = if(owner == value) V2Theme.colors.accentSoft else V2Theme.colors.field) {
+                            shape = RoundedCornerShape(14.dp), color = if (owner == value) V2Theme.colors.accent else V2Theme.colors.field) {
                             Box(Modifier.padding(vertical = 12.dp), contentAlignment = Alignment.Center) {
-                                Text(label, fontSize = V2TextSizes.Action, color = if(owner == value) V2Theme.colors.accent else V2Theme.colors.textSecondary)
+                                Text(label, fontSize = V2TextSizes.Action, color = if (owner == value) V2Theme.colors.onAccent else V2Theme.colors.textSecondary)
                             }
                         }
                     }
