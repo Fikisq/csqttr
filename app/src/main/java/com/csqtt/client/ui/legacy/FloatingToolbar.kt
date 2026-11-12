@@ -202,7 +202,24 @@ fun FloatingToolbar(
     if (showImportExportDialog) {
         ImportExportDialog(
             settingsStore = settingsStore,
-            onDismissRequest = { showImportExportDialog = false }
+            onDismissRequest = { showImportExportDialog = false },
+            profileSelector = {
+            CompactDropdownSetting(
+                title = "Профиль",
+                selectedKey = activeProfile.toString(),
+                options = (CsqttConstants.Profiles.MIN_INDEX..CsqttConstants.Profiles.MAX_INDEX)
+                    .map { profile -> profile.toString() to (profileNames[profile] ?: "Профиль $profile") },
+                enabled = true,
+                onSelected = { profile ->
+                    profile.toIntOrNull()?.let(onActiveProfileChange)
+                },
+                onItemEdit = { key ->
+                    val p = key.toIntOrNull() ?: 0
+                    editingProfileIndex = p
+                    editingProfileName = profileNames[p] ?: "Профиль $p"
+                },
+            )
+            },
         )
     }
 
@@ -395,23 +412,6 @@ fun FloatingToolbar(
                         enabled = batterySaverMode == BatterySaver.MODE_LEVEL,
                         onSelected = { key ->
                             key.toIntOrNull()?.let { percent -> scope.launch { settingsStore.saveBatterySaverPercent(percent) } }
-                        },
-                    )
-
-                    // participants switch profiles too (one per link), as in V2
-                    CompactDropdownSetting(
-                        title = "Профиль конфигурации",
-                        selectedKey = activeProfile.toString(),
-                        options = (CsqttConstants.Profiles.MIN_INDEX..CsqttConstants.Profiles.MAX_INDEX)
-                            .map { profile -> profile.toString() to (profileNames[profile] ?: "Профиль $profile") },
-                        enabled = true,
-                        onSelected = { profile ->
-                            profile.toIntOrNull()?.let(onActiveProfileChange)
-                        },
-                        onItemEdit = { key ->
-                            val p = key.toIntOrNull() ?: 0
-                            editingProfileIndex = p
-                            editingProfileName = profileNames[p] ?: "Профиль $p"
                         },
                     )
 
