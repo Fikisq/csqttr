@@ -123,8 +123,10 @@ fun CsqttV2Root(
             tabs.firstOrNull { it.name == selectedTabName } ?: tabs.first()
         }
 
+        LaunchedEffect(tabs) {
+            if (tabs.none { it.name == selectedTabName }) selectedTabName = tabs.first().name
+        }
         LaunchedEffect(selectedTab) {
-            selectedTabName = selectedTab.name
             if (selectedTab == V2Tab.Logs) TunnelManager.clearUnreadErrors()
         }
 
