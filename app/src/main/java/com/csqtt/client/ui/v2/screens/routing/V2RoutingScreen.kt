@@ -2,24 +2,22 @@ package com.csqtt.client.ui.v2.screens.routing
 
 import android.content.Context
 import android.content.pm.PackageManager
-import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.ui.platform.testTag
 import com.csqtt.client.ui.v2.components.V2AdaptiveScreen
 import com.csqtt.client.ui.v2.components.LocalV2AdaptiveMetrics
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.SwapVert
+import androidx.compose.material.icons.outlined.Apps
+import androidx.compose.material.icons.outlined.Language
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -30,22 +28,23 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.painter.Painter
+import androidx.compose.ui.graphics.vector.rememberVectorPainter
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.graphics.drawable.toBitmap
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.csqtt.client.R
 import com.csqtt.client.SettingsStore
 import com.csqtt.client.TunnelManager
 import com.csqtt.client.ui.legacy.AppItem
 import com.csqtt.client.ui.v2.components.V2Card
-import com.csqtt.client.ui.v2.components.V2Chevron
+import com.csqtt.client.ui.v2.components.V2PillButton
+import com.csqtt.client.ui.v2.components.V2PillStyle
 import com.csqtt.client.ui.v2.components.V2TopBar
 import com.csqtt.client.ui.v2.design.V2Shapes
 import com.csqtt.client.ui.v2.design.V2Sizes
@@ -220,24 +219,20 @@ fun V2RoutingScreen(
                 }
             } else {
                 V2RoutingCard(
-                    badge = "APP",
+                    tag = "APP",
                     title = "Маршрутизация приложений",
                     countLabel = appsCountLabel(
                         isWhitelist = isWhitelist,
                         blacklistSize = persistedBlacklist.size,
                         whitelistSize = persistedWhitelist.size,
                     ),
+                    action = "Список приложений",
+                    icon = rememberVectorPainter(Icons.Outlined.Apps),
                     onClick = { showAppsDialog = true },
                 )
                 V2RoutingCard(
-                    badge = "IP",
-                    title = "Маршрутизация по ip",
-                    countLabel = "Настроено ${directIpsList.size} ip",
-                    onClick = { showIpsDialog = true },
-                )
-                V2RoutingCard(
-                    badge = "DM",
-                    title = "Маршрутизация по доменам",
+                    tag = "DM",
+                    title = "Маршрутизация доменов",
                     countLabel = domainsCountLabel(
                         isWhitelist = domainIsWhitelist,
                         listSize = directDomainsList.size,
@@ -245,41 +240,30 @@ fun V2RoutingScreen(
                         templateSize = templateDomains.size,
                         customCount = directDomainsList.count { !templateDomains.contains(it) },
                     ),
+                    action = "Список доменов",
+                    icon = rememberVectorPainter(Icons.Outlined.Language),
                     onClick = { showDomainsDialog = true },
                 )
-                V2Card(
+                V2RoutingCard(
+                    tag = "IP",
+                    title = "Маршрутизация адресов",
+                    countLabel = if (ipIsWhitelist) {
+                        "Белый список: ${directIpsList.size} в туннеле"
+                    } else {
+                        "Чёрный список: ${directIpsList.size} исключено"
+                    },
+                    action = "Список адресов",
+                    icon = painterResource(R.drawable.ic_ip),
+                    onClick = { showIpsDialog = true },
+                )
+                V2RoutingCard(
+                    tag = "transfer",
+                    title = "Импорт и экспорт правил",
+                    countLabel = "Резервное копирование и перенос настроек",
+                    action = "Импорт / экспорт",
+                    icon = rememberVectorPainter(Icons.Default.SwapVert),
                     onClick = { showRulesTransferDialog = true },
-                    color = colors.surface,
-                    contentPadding = PaddingValues(
-                        horizontal = V2Spacing.Lg,
-                        vertical = V2Spacing.Md,
-                    ),
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(min = ((layout.height - 56.dp - layout.gap * 4) / 4 - V2Spacing.Md * 2).coerceIn(48.dp, 180.dp)),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "Импорт и экспорт правил",
-                                style = MaterialTheme.typography.titleMedium,
-                                color = colors.textPrimary,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                            Text(
-                                text = "Резервное копирование и перенос настроек",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = colors.textMuted,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                        }
-                        V2Chevron()
-                    }
-                }
+                )
             }
         }
     }
@@ -370,11 +354,8 @@ fun V2RoutingScreen(
 }
 
 private fun appsCountLabel(isWhitelist: Boolean, blacklistSize: Int, whitelistSize: Int): String =
-    if (isWhitelist) {
-        "В туннеле $whitelistSize прил."
-    } else {
-        "Настроено $blacklistSize прил."
-    }
+    if (isWhitelist) "Белый список: $whitelistSize в туннеле"
+    else "Чёрный список: $blacklistSize исключено"
 
 private fun domainsCountLabel(
     isWhitelist: Boolean,
@@ -383,72 +364,52 @@ private fun domainsCountLabel(
     templateSize: Int,
     customCount: Int,
 ): String = when {
-    isWhitelist -> "В туннеле $listSize доменов"
-    listSize == 0 -> "Настроено 0 доменов"
-    templateDomainsEnabled && customCount > 0 -> "Настроено ${templateSize + customCount} доменов"
-    templateDomainsEnabled -> "Настроено $listSize доменов (RU)"
-    else -> "Настроено $listSize доменов"
+    isWhitelist -> "Белый список: $listSize в туннеле"
+    listSize == 0 -> "Чёрный список: 0 доменов исключено"
+    templateDomainsEnabled && customCount > 0 -> "Исключено: $templateSize готовых + $customCount своих"
+    templateDomainsEnabled -> "Исключено: $listSize (Готовый список RU)"
+    else -> "Чёрный список: $listSize исключено"
 }
 
 @Composable
 private fun V2RoutingCard(
-    badge: String,
+    tag: String,
     title: String,
     countLabel: String,
+    action: String,
+    icon: Painter,
     onClick: () -> Unit,
 ) {
     val colors = routingColors()
     val layout = LocalV2AdaptiveMetrics.current
     V2Card(
-        modifier = Modifier.testTag("routing-card-$badge"),
-        onClick = onClick,
+        modifier = Modifier.testTag("routing-card-$tag"),
         color = colors.surface,
-        contentPadding = PaddingValues(V2Spacing.Md),
-        contentModifier = Modifier.heightIn(min = ((layout.height - 56.dp - layout.gap * 4) / 4).coerceIn(96.dp, 208.dp)),
-        verticalArrangement = Arrangement.Center,
+        contentPadding = PaddingValues(V2Spacing.Lg),
+        verticalArrangement = Arrangement.spacedBy(V2Spacing.Md),
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(V2Spacing.Md),
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(42.dp)
-                    .clip(V2Shapes.Pill)
-                    .background(colors.contrast),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    text = badge,
-                    style = MaterialTheme.typography.labelSmall,
-                    fontWeight = FontWeight.Normal,
-                    color = colors.onContrast,
-                )
-            }
+        Column(verticalArrangement = Arrangement.spacedBy(V2Spacing.Xs)) {
             Text(
                 text = title,
                 style = MaterialTheme.typography.titleMedium,
                 color = colors.textPrimary,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f),
             )
-            V2Chevron()
-        }
-        Spacer(modifier = Modifier.height(V2Spacing.Xs))
-        Box(
-            modifier = Modifier
-                .clip(V2Shapes.Pill)
-                .background(colors.surfaceElevated)
-                .padding(horizontal = 12.dp, vertical = 6.dp),
-        ) {
             Text(
                 text = countLabel,
-                style = MaterialTheme.typography.labelMedium,
+                style = MaterialTheme.typography.bodySmall,
                 color = colors.textSecondary,
             )
         }
+        V2PillButton(
+            text = action,
+            onClick = onClick,
+            modifier = Modifier.fillMaxWidth().border(1.dp, colors.outline, V2Shapes.Pill),
+            iconPainter = icon,
+            style = V2PillStyle.Outline,
+            height = layout.buttonHeight.coerceAtLeast(48.dp),
+            shape = V2Shapes.Pill,
+            maxLines = 2,
+        )
     }
 }
 
