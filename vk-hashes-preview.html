@@ -134,8 +134,9 @@ const board = document.querySelector("#board");
 const scenario = document.querySelector("#scenario");
 const demoAccounts = ["Личный аккаунт", "Второй аккаунт"];
 let accounts = [];
+let activeAccount = "";
 const modes = [["owner", "От владельца"], ["manual", "Свои хеши"], ["vk", "Аккаунт VK"]];
-const fresh = () => ({ owner:[true, true], hashes:[], account:"", mode:"owner", open:true, showAccounts:false, status:"" });
+const fresh = () => ({ owner:[true, true], hashes:[], mode:"owner", open:true, showAccounts:false, status:"" });
 
 const views = [...board.querySelectorAll(".example")].map(example => {
   example.append(document.querySelector("#screen").content.cloneNode(true));
@@ -166,16 +167,16 @@ function accountFields(view) {
   const list = accounts.length && state.showAccounts
     ? '<div class="account-list">' + accounts.map((name, i) =>
       '<label class="account"><input type="radio" name="account-' + key + '" data-account="' + i +
-      '"' + (state.account === name ? ' checked' : '') + '>' + name + '</label>'
+      '"' + (activeAccount === name ? ' checked' : '') + '>' + name + '</label>'
     ).join("") + '</div>' : "";
   const action = accounts.length
     ? '<button type="button" data-action="accounts" aria-expanded="' + state.showAccounts + '">' +
-      (state.account || 'Выбрать аккаунт VK') + (state.showAccounts ? ' ▴' : ' ▾') + '</button>'
+      (activeAccount || 'Выбрать аккаунт VK') + (state.showAccounts ? ' ▴' : ' ▾') + '</button>'
     : "";
   const add = '<button type="button" class="' + (accounts.length ? 'text-button' : 'primary') + '" data-action="login">' +
     (accounts.length ? '+ Добавить аккаунт' : 'Войти в VK') + '</button>';
   return '<fieldset><legend>Аккаунт VK</legend><div class="account-cta">' + action + list + add +
-    '<p class="note">Добавленные аккаунты доступны в других профилях. Выбор действует для этого профиля.</p></div></fieldset>';
+    '<p class="note">Активный аккаунт VK общий для ваших профилей.</p></div></fieldset>';
 }
 
 function render(view) {
@@ -187,10 +188,10 @@ function render(view) {
   example.querySelector(".scrim").hidden = !state.open;
   example.querySelector('[data-action="open"]').textContent = "Хеши владельца: " + ownerCount +
     (state.hashes.length ? " · свои: " + state.hashes.length : "") +
-    (state.account ? " · VK подключён" : "");
+    (activeAccount ? " · VK подключён" : "");
   if (key === "source" && state.mode !== "owner") {
     example.querySelector('[data-action="open"]').textContent = state.mode === "manual"
-      ? "Свои хеши: " + state.hashes.length : "Аккаунт VK: " + (state.account || "выбрать");
+      ? "Свои хеши: " + state.hashes.length : "Аккаунт VK: " + (activeAccount || "выбрать");
   }
   const segments = '<div class="modes" role="group" aria-label="Источник хешей">' + modes.map(([mode, label]) =>
     '<button type="button" data-action="mode" data-mode="' + mode + '" aria-pressed="' + (state.mode === mode) + '">' + label + '</button>'
@@ -203,6 +204,7 @@ function render(view) {
 
 function setScenario() {
   accounts = scenario.value === "saved" ? [...demoAccounts] : [];
+  activeAccount = accounts[0] || "";
   views.forEach(view => { view.state = fresh(); render(view); });
 }
 
@@ -216,7 +218,7 @@ for (const view of views) {
       case "open": state.open = true; break;
       case "close": state.open = false; break;
       case "apply":
-        if (view.key === "source" && state.mode === "vk" && !state.account) {
+        if (view.key === "source" && state.mode === "vk" && !activeAccount) {
           state.status = "Выберите аккаунт VK для этого профиля.";
         } else if (view.key === "source" && state.mode === "manual" && !state.hashes.length) {
           state.status = "Добавьте хотя бы одну ссылку VK.";
@@ -241,7 +243,7 @@ for (const view of views) {
       case "login": {
         const name = demoAccounts.find(item => !accounts.includes(item)) || "Аккаунт " + (accounts.length + 1);
         accounts.push(name);
-        state.account = name;
+        activeAccount = name;
         state.showAccounts = true;
         state.status = "Демонстрационный аккаунт добавлен.";
         views.forEach(render);
@@ -262,9 +264,9 @@ for (const view of views) {
     const {state} = view;
     const {account} = event.target.dataset;
     if (account === undefined) return;
-    state.account = accounts[Number(account)];
+    activeAccount = accounts[Number(account)];
     state.status = "";
-    render(view);
+    views.forEach(render);
     view.example.querySelector('[data-account="' + account + '"]')?.focus();
   });
 }
