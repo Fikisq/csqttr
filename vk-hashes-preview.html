@@ -1,0 +1,269 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CSQTTR · VK в окне хешей</title>
+<style>
+* { box-sizing: border-box; }
+:root { color-scheme: dark; font-family: Roboto, "Segoe UI", sans-serif; color: #eaf0f8; background: #0e1219; }
+body { margin: 0; }
+header { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 16px; padding: 20px max(18px, calc((100vw - 1150px) / 2)); background: #151b25; border-bottom: 1px solid #2a3546; }
+h1 { font-size: 23px; margin: 0 0 5px; font-weight: 650; }
+header p { margin: 0; color: #aab7c9; font-size: 13px; }
+.controls { display: flex; flex-wrap: wrap; align-items: end; gap: 10px; }
+.controls label { display: grid; gap: 4px; color: #bac7d8; font-size: 12px; }
+button, select, input { font: inherit; }
+.controls select { color: #f4f7fc; background: #212b3b; border: 1px solid #3a4a61; border-radius: 8px; padding: 7px 9px; }
+.controls input { width: 100px; accent-color: #74a5f5; }
+:focus-visible { outline: 2px solid #5a97f3; outline-offset: 3px; }
+.viewport { width: 100%; min-height: calc(100vh - 106px); overflow: auto; padding: 20px 16px 32px; }
+.board { --scale: .88; display: flex; gap: 26px; width: max-content; margin: 0 auto; align-items: start; zoom: var(--scale); }
+.example { width: 385px; }
+.example h2 { margin: 0 0 4px; font-size: 17px; }
+.example > p { margin: 0 0 11px; color: #aab7c9; font-size: 13px; }
+.phone {
+  --bg:#101216; --surface:#191c22; --field:#242830; --line:#343942; --fg:#f1f3f7;
+  --muted:#aeb3bd; --accent:#1769e2; --on:#fff; --soft:#15345c; --radius:16px;
+  position: relative; isolation: isolate; height: 710px; overflow: hidden;
+  border: 1px solid var(--line); border-radius: 29px; background: var(--bg); color: var(--fg);
+  box-shadow: 0 18px 45px #0005; color-scheme: dark;
+}
+[data-design="classic"] .phone { --bg:#0b0b0c; --surface:#161618; --field:#222225; --line:#37373c; --fg:#f4f4f5; --muted:#babac2; --accent:#1565d8; --soft:#162d55; --radius:20px; }
+[data-design="old"] .phone { --bg:#0b0d10; --surface:#1c222c; --field:#252e3b; --line:#39475b; --fg:#edf2f9; --muted:#b3bfd0; --accent:#3a69a0; --soft:#263b55; }
+[data-theme="light"] .phone {
+  --bg:#fdfdfe; --surface:#fff; --field:#f2f2f4; --line:#d9dce2; --fg:#161a21; --muted:#4f5868;
+  --accent:#125ecb; --soft:#dfebfb; color-scheme: light;
+}
+[data-theme="light"][data-design="classic"] .phone { --bg:#f7f7f8; --surface:#fbfbfc; --field:#eeeef0; --line:#d7d7db; --fg:#1b1b1d; --muted:#555561; --accent:#145ec5; --soft:#e2ecfb; }
+[data-theme="light"][data-design="old"] .phone { --bg:#eef2f7; --surface:#f7f9fc; --field:#e6ebf3; --line:#cbd4e2; --fg:#192332; --muted:#455468; --accent:#345d92; --soft:#dbe7f8; }
+.status { height: 30px; padding: 7px 17px 0; font-size: 12px; display: flex; justify-content: space-between; }
+.app { padding: 12px 16px; }
+.app h3 { margin: 0 0 14px; font-size: 17px; }
+.summary { display: grid; gap: 9px; padding: 12px; background: var(--field); border-radius: var(--radius); }
+.summary div { display: flex; justify-content: space-between; gap: 6px; font-size: 12px; }
+.summary span { color: var(--muted); }
+.summary button { justify-self: start; }
+.nav { position: absolute; inset: auto 0 17px; display: flex; justify-content: space-around; color: var(--muted); font-size: 11px; }
+.nav strong { color: var(--fg); }
+.scrim { position: absolute; inset: 30px 0 0; background: #0007; }
+.sheet { position: absolute; inset: auto 0 0; padding: 9px 15px 18px; background: var(--surface); border-radius: 24px 24px 0 0; border-top: 1px solid var(--line); min-height: 462px; max-height: 620px; display: flex; flex-direction: column; }
+[data-design="classic"] .sheet { inset: 117px 12px auto; min-height: 0; border: 1px solid var(--line); border-radius: 26px; padding-top: 15px; }
+[data-design="classic"] .handle { display: none; }
+.handle { width: 34px; height: 4px; border-radius: 4px; background: var(--line); margin: 0 auto 10px; }
+.sheet-title { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.sheet-title h3 { margin: 0; font-size: 18px; }
+.sheet-content { margin: 12px 0 16px; display: grid; gap: 11px; overflow: auto; min-height: 0; }
+fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
+legend, .field-label { font-size: 12px; font-weight: 650; margin-bottom: 5px; color: var(--muted); }
+.source-list, .account-list { display: grid; gap: 5px; }
+.hash-row, .account { display: flex; align-items: center; gap: 9px; border-radius: 11px; padding: 7px 10px; min-height: 40px; background: var(--field); font-size: 13px; }
+.hash-row input, .account input { accent-color: var(--accent); width: 16px; height: 16px; margin: 0; }
+.hash-row small { margin-left: auto; color: var(--muted); }
+.hash-actions, .actions, .modes { display: flex; gap: 7px; align-items: center; }
+.actions { justify-content: space-between; }
+.modes > button, .hash-actions input { flex: 1; min-width: 0; }
+.modes > button { padding-inline: 5px; }
+button { cursor: pointer; }
+.phone button { color: var(--fg); border: 1px solid var(--line); background: var(--field); border-radius: var(--radius); padding: 8px 11px; min-height: 35px; font-size: 12px; font-weight: 650; }
+.phone button.primary, .phone button[aria-pressed="true"] { background: var(--accent); color: var(--on); border-color: var(--accent); }
+.phone button.text-button { background: transparent; border-color: transparent; }
+.phone button.close { border-radius: 50%; width: 34px; padding: 0; font-size: 20px; }
+.phone input[type="text"] { min-height: 35px; background: var(--field); border: 1px solid var(--line); border-radius: 11px; color: var(--fg); font-size: 12px; padding: 7px 9px; width: 100%; }
+.phone input::placeholder { color: var(--muted); }
+.note { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.35; }
+.account-cta { display: grid; gap: 6px; }
+.feedback { color: var(--muted); font-size: 12px; min-height: 1.2em; margin: 8px 0 0; }
+[hidden] { display: none !important; }
+@media (max-width: 540px) { header { align-items: start; } .controls { gap: 7px; } .viewport { padding-inline: 10px; } }
+</style>
+</head>
+<body>
+<header>
+  <div><h1>Хеши владельца и аккаунт VK</h1><p>Два интерактивных макета с демонстрационными данными</p></div>
+  <div class="controls">
+    <label>Оформление<select id="design"><option value="classic">CSQTT 2.5.0</option><option value="modern" selected>CSQTTR 2.5.3</option><option value="old">Старый</option></select></label>
+    <label>Тема<select id="theme"><option value="dark">Тёмная</option><option value="light">Светлая</option></select></label>
+    <label>Аккаунты<select id="scenario"><option value="empty">Без аккаунта</option><option value="saved">Два сохранённых</option></select></label>
+    <label>Масштаб <output id="zoom-value">88%</output><input type="range" id="zoom" min="55" max="125" value="88"></label>
+  </div>
+</header>
+<main class="viewport">
+  <div class="board" id="board" data-design="modern" data-theme="dark">
+    <article class="example" data-variant="inline">
+      <h2>А. Вход VK в окне хешей</h2>
+      <p>Хеши владельца и свои ссылки видны сразу.</p>
+    </article>
+    <article class="example" data-variant="source">
+      <h2>Б. Выбор источника хешей</h2>
+      <p>Три режима в одном окне.</p>
+    </article>
+  </div>
+</main>
+<template id="screen">
+  <div class="phone">
+    <div class="status" aria-hidden="true"><span>12:00</span><span>▮▮ ◢ ▰</span></div>
+    <div class="app">
+      <h3>Туннель</h3>
+      <div class="summary">
+        <div><span>Профиль</span><strong>Тестовый</strong></div>
+        <div><span>IP и порт</span><strong>203.0.113.25:54321</strong></div>
+        <div><span>Пароль туннеля</span><strong>••••••••••••</strong></div>
+        <button type="button" data-action="open">Хеши владельца: 2</button>
+      </div>
+    </div>
+    <div class="nav" aria-hidden="true"><span>Подкл.</span><strong>Туннель</strong><span>Деплой</span><span>Логи</span><span>Маршрут</span></div>
+    <div class="scrim"></div>
+    <section class="sheet">
+      <div class="handle"></div>
+      <div class="sheet-title">
+        <h3>Ссылки VK звонков</h3>
+        <button type="button" class="close" data-action="close" aria-label="Закрыть">×</button>
+      </div>
+      <div class="sheet-content"></div>
+      <div class="actions">
+        <button type="button" class="text-button" data-action="reset">Сбросить</button>
+        <button type="button" class="primary" data-action="apply">Готово</button>
+      </div>
+    </section>
+  </div>
+</template>
+<script>
+const board = document.querySelector("#board");
+const scenario = document.querySelector("#scenario");
+const demoAccounts = ["Личный аккаунт", "Второй аккаунт"];
+let accounts = [];
+const modes = [["owner", "От владельца"], ["manual", "Свои хеши"], ["vk", "Аккаунт VK"]];
+const fresh = () => ({ owner:[true, true], hashes:[], account:"", mode:"owner", open:true, showAccounts:false, status:"" });
+
+const views = [...board.querySelectorAll(".example")].map(example => {
+  example.append(document.querySelector("#screen").content.cloneNode(true));
+  return { example, key:example.dataset.variant, state:fresh() };
+});
+
+function ownerFields(state) {
+  return '<fieldset><legend>От владельца сервера</legend><div class="source-list">' +
+    state.owner.map((enabled, index) =>
+      '<label class="hash-row"><input type="checkbox" data-owner="' + index + '"' +
+      (enabled ? ' checked' : '') + '>От владельца ' + (index + 1) + '<small>Хеш скрыт</small></label>'
+    ).join("") + '</div></fieldset>';
+}
+
+function manualFields(state) {
+  const rows = state.hashes.map((_, index) =>
+    '<div class="hash-actions"><div class="hash-row">Своя ссылка ' + (index + 1) +
+    '</div><button type="button" data-action="remove" data-index="' + index + '">Убрать</button></div>'
+  ).join("");
+  return '<fieldset><legend>Свои ссылки VK звонков</legend><div class="source-list">' + rows +
+    '<div class="hash-actions"><input type="text" aria-label="Своя ссылка VK звонка" placeholder="Ссылка на звонок VK">' +
+    '<button type="button" data-action="manual">Добавить</button></div></div></fieldset>';
+}
+
+function accountFields(view) {
+  const {state, key} = view;
+  const list = accounts.length && state.showAccounts
+    ? '<div class="account-list">' + accounts.map((name, i) =>
+      '<label class="account"><input type="radio" name="account-' + key + '" data-account="' + i +
+      '"' + (state.account === name ? ' checked' : '') + '>' + name + '</label>'
+    ).join("") + '</div>' : "";
+  const action = accounts.length
+    ? '<button type="button" data-action="accounts" aria-expanded="' + state.showAccounts + '">' +
+      (state.account || 'Выбрать аккаунт VK') + (state.showAccounts ? ' ▴' : ' ▾') + '</button>'
+    : "";
+  const add = '<button type="button" class="' + (accounts.length ? 'text-button' : 'primary') + '" data-action="login">' +
+    (accounts.length ? '+ Добавить аккаунт' : 'Войти в VK') + '</button>';
+  return '<fieldset><legend>Аккаунт VK</legend><div class="account-cta">' + action + list + add +
+    '<p class="note">Добавленные аккаунты доступны в других профилях. Выбор действует для этого профиля.</p></div></fieldset>';
+}
+
+function render(view) {
+  const {example, state, key} = view;
+  const ownerCount = state.owner.filter(Boolean).length;
+  example.querySelector(".sheet").hidden = !state.open;
+  example.querySelector(".scrim").hidden = !state.open;
+  example.querySelector('[data-action="open"]').textContent = "Хеши владельца: " + ownerCount +
+    (state.hashes.length ? " · свои: " + state.hashes.length : "") +
+    (state.account ? " · VK подключён" : "");
+  if (key === "source" && state.mode !== "owner") {
+    example.querySelector('[data-action="open"]').textContent = state.mode === "manual"
+      ? "Свои хеши: " + state.hashes.length : "Аккаунт VK: " + (state.account || "выбрать");
+  }
+  const segments = '<div class="modes" role="group" aria-label="Источник хешей">' + modes.map(([mode, label]) =>
+    '<button type="button" data-action="mode" data-mode="' + mode + '" aria-pressed="' + (state.mode === mode) + '">' + label + '</button>'
+  ).join("") + '</div>';
+  const content = key === "inline" ? ownerFields(state) + manualFields(state) + accountFields(view) :
+    segments + (state.mode === "owner" ? ownerFields(state) : state.mode === "manual" ? manualFields(state) : accountFields(view));
+  example.querySelector(".sheet-content").innerHTML = content + '<p class="feedback" aria-live="polite"></p>';
+  example.querySelector(".feedback").textContent = state.status;
+}
+
+function setScenario() {
+  accounts = scenario.value === "saved" ? [...demoAccounts] : [];
+  views.forEach(view => { view.state = fresh(); render(view); });
+}
+
+for (const view of views) {
+  view.example.addEventListener("click", event => {
+    const button = event.target.closest("button[data-action]");
+    if (!button) return;
+    const state = view.state;
+    state.status = "";
+    switch (button.dataset.action) {
+      case "open": state.open = true; break;
+      case "close": state.open = false; break;
+      case "apply":
+        if (view.key === "source" && state.mode === "vk" && !state.account) {
+          state.status = "Выберите аккаунт VK для этого профиля.";
+        } else if (view.key === "source" && state.mode === "manual" && !state.hashes.length) {
+          state.status = "Добавьте хотя бы одну ссылку VK.";
+        } else {
+          state.open = false;
+        }
+        break;
+      case "reset": view.state = fresh(); break;
+      case "mode": state.mode = button.dataset.mode; break;
+      case "accounts": state.showAccounts = !state.showAccounts; break;
+      case "login": {
+        const name = demoAccounts.find(item => !accounts.includes(item)) || "Аккаунт " + (accounts.length + 1);
+        accounts.push(name);
+        state.account = name;
+        state.showAccounts = true;
+        state.status = "Демонстрационный аккаунт добавлен.";
+        views.forEach(render);
+        return;
+      }
+      case "manual": {
+        const field = view.example.querySelector('input[type="text"]');
+        if (!field.value.trim()) { field.focus(); return; }
+        state.hashes.push(true);
+        state.status = "Своя ссылка добавлена.";
+        break;
+      }
+      case "remove": state.hashes.splice(Number(button.dataset.index), 1); break;
+    }
+    render(view);
+  });
+  view.example.addEventListener("change", event => {
+    const {state} = view;
+    const {owner, account} = event.target.dataset;
+    if (owner !== undefined) { state.owner[Number(owner)] = event.target.checked; }
+    else if (account !== undefined) { state.account = accounts[Number(account)]; }
+    else return;
+    state.status = "";
+    render(view);
+    const attribute = owner !== undefined ? "owner" : "account";
+    view.example.querySelector('[data-' + attribute + '="' + (owner ?? account) + '"]')?.focus();
+  });
+}
+
+document.querySelector("#design").addEventListener("change", event => { board.dataset.design = event.target.value; });
+document.querySelector("#theme").addEventListener("change", event => { board.dataset.theme = event.target.value; });
+document.querySelector("#zoom").addEventListener("input", event => {
+  board.style.setProperty("--scale", Number(event.target.value) / 100);
+  document.querySelector("#zoom-value").value = event.target.value + "%";
+});
+scenario.addEventListener("change", setScenario);
+setScenario();
+</script>
+</body>
+</html>
