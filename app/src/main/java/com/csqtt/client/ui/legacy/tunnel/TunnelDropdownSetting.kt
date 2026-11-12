@@ -152,25 +152,28 @@ internal fun CompactDropdownSetting(
                 ),
             ) {
                 Column(
-                    modifier = Modifier.weight(1f).padding(start = 5.dp),
+                    modifier = Modifier.fillMaxWidth().padding(start = 5.dp),
                     verticalArrangement = Arrangement.Center,
                 ) {
-                    Text(
-                        text = selectedLabel,
-                        maxLines = 1,
-                        softWrap = false,
-                        overflow = TextOverflow.Ellipsis,
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = selectedLabel,
+                            modifier = Modifier.weight(1f),
+                            maxLines = 1,
+                            softWrap = false,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        Icon(Icons.Default.ArrowDropDown, contentDescription = null, modifier = Modifier.size(20.dp))
+                    }
                     if (currentIndicator != null) {
                         Spacer(Modifier.height(2.dp))
                         ModeProgressBar(
                             progress = currentIndicator.progress,
                             color = currentIndicator.color,
-                            modifier = Modifier.fillMaxWidth(0.9f),
+                            modifier = Modifier.fillMaxWidth(),
                         )
                     }
                 }
-                Icon(Icons.Default.ArrowDropDown, contentDescription = null, modifier = Modifier.size(20.dp))
             }
             DropdownMenu(
                 expanded = expanded,
@@ -195,7 +198,7 @@ internal fun CompactDropdownSetting(
                                     ModeProgressBar(
                                         progress = itemIndicator.progress,
                                         color = itemIndicator.color,
-                                        modifier = Modifier.fillMaxWidth(0.85f),
+                                        modifier = Modifier.fillMaxWidth(),
                                     )
                                 }
                             }

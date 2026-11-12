@@ -767,8 +767,8 @@ internal fun SettingsTabContent(
                     enabled = true,
                     indicatorProvider = { mode ->
                         when (mode) {
-                            CsqttConstants.VkAuth.MODE_CAPTCHA -> ModeIndicator(progress = 0.30f, color = Color(0xFFE53935))
-                            CsqttConstants.VkAuth.MODE_CALLS -> ModeIndicator(progress = 0.78f, color = Color(0xFF43A047))
+                            CsqttConstants.VkAuth.MODE_CAPTCHA -> ModeIndicator(progress = 1f, color = Color(0xFFE53935))
+                            CsqttConstants.VkAuth.MODE_CALLS -> ModeIndicator(progress = 1f, color = Color(0xFF43A047))
                             CsqttConstants.VkAuth.MODE_AUTO_JS -> ModeIndicator(progress = 1.0f, color = Color(0xFF1475FD))
                             else -> null
                         }
@@ -789,7 +789,7 @@ internal fun SettingsTabContent(
                     enabled = true,
                     indicatorProvider = { mode ->
                         when (mode) {
-                            CsqttConstants.SrtpMode.WRAP -> ModeIndicator(progress = 0.5f, color = Color(0xFF43A047))
+                            CsqttConstants.SrtpMode.WRAP -> ModeIndicator(progress = 1f, color = Color(0xFF43A047))
                             CsqttConstants.SrtpMode.DTLS -> ModeIndicator(progress = 1.0f, color = Color(0xFF43A047))
                             CsqttConstants.SrtpMode.AUTO -> ModeIndicator(progress = 1.0f, color = Color(0xFF1475FD))
                             else -> null
@@ -815,7 +815,7 @@ internal fun SettingsTabContent(
                                 color = Color(0xFF1475FD),
                             )
                             CsqttConstants.Tunnel.TURN_TRANSPORT_TCP_TLS -> ModeIndicator(
-                                progress = 0.70f,
+                                progress = 1f,
                                 color = Color(0xFF43A047),
                             )
                             else -> null
@@ -1303,7 +1303,7 @@ private fun VkHashModeControls(
         enabled = true,
         indicatorProvider = { mode ->
             when (mode) {
-                CsqttConstants.VkAutoHash.MODE_MANUAL -> ModeIndicator(progress = 0.78f, color = Color(0xFF43A047))
+                CsqttConstants.VkAutoHash.MODE_MANUAL -> ModeIndicator(progress = 1f, color = Color(0xFF43A047))
                 CsqttConstants.VkAutoHash.MODE_AUTO_API -> ModeIndicator(progress = 1.0f, color = Color(0xFF1475FD))
                 CsqttConstants.VkAutoHash.MODE_AUTO_JS -> ModeIndicator(progress = 1.0f, color = Color(0xFF1475FD))
                 else -> null
