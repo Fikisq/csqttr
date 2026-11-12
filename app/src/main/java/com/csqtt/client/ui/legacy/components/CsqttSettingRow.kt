@@ -33,6 +33,7 @@ fun CsqttSettingRow(
     enabled: Boolean = true,
     onInfoClick: (() -> Unit)? = null,
     infoContentDescription: String = "Подробнее",
+    titleMaxLines: Int = 1,
 ) {
     val interactionModifier = if (onCheckedChange == null) {
         Modifier
@@ -65,9 +66,9 @@ fun CsqttSettingRow(
                     text = title,
                     style = MaterialTheme.typography.bodyLarge,
                     color = if (enabled) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f),
-                    maxLines = 1,
+                    maxLines = titleMaxLines,
                     overflow = TextOverflow.Ellipsis,
-                    softWrap = false,
+                    softWrap = titleMaxLines > 1,
                 )
                 if (onInfoClick != null) {
                     IconButton(

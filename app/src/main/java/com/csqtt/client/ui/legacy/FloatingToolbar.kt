@@ -2,6 +2,7 @@ package com.csqtt.client.ui.legacy
 
 import kotlinx.coroutines.launch
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.*
@@ -15,6 +16,7 @@ import com.csqtt.client.SettingsStore
 import com.csqtt.client.BatterySaver
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -312,7 +314,7 @@ fun FloatingToolbar(
                     )
 
                     val wifiStatus = if (autoPauseOnWifi) "Включена" else "Выключена"
-                    QuickSettingsOutlineButton("Автопауза Wi-Fi · $wifiStatus") {
+                    QuickSettingsActionRow("Автопауза Wi-Fi", detail = wifiStatus) {
                         showWifiNetworkListDialog = true
                     }
 
@@ -323,6 +325,7 @@ fun FloatingToolbar(
                             scope.launch { settingsStore.saveParticipantShowLogs(checked, forProfile = activeProfile) }
                         },
                         onInfoClick = { showLogsInfo = true },
+                        titleMaxLines = 2,
                     )
 
                     CompactDropdownSetting(
@@ -370,10 +373,10 @@ fun FloatingToolbar(
                         onSelected = onFingerprintChange,
                     )
 
-                    QuickSettingsOutlineButton("Импорт / экспорт") { showImportExportDialog = true }
-                    QuickSettingsOutlineButton("Монитор ресурсов") { onResourceMonitorOpenChange(true) }
-                    QuickSettingsOutlineButton("Версия и обновления") { showVersionSheet = true }
-                    QuickSettingsOutlineButton("О приложении") { showAboutScreen = true }
+                    QuickSettingsActionRow("Импорт / экспорт") { showImportExportDialog = true }
+                    QuickSettingsActionRow("Монитор ресурсов") { onResourceMonitorOpenChange(true) }
+                    QuickSettingsActionRow("Версия и обновления") { showVersionSheet = true }
+                    QuickSettingsActionRow("О приложении") { showAboutScreen = true }
 
                     CompactDropdownSetting(
                         title = BatterySaver.TITLE,
@@ -581,6 +584,23 @@ fun FloatingToolbar(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun QuickSettingsActionRow(title: String, detail: String = "", onClick: () -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth()
+            .heightIn(min = CsqttSizes.CompactControlHeight)
+            .clickable(role = Role.Button, onClick = onClick),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(title, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
+        if (detail.isNotEmpty()) {
+            Text(detail, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Text("›", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
