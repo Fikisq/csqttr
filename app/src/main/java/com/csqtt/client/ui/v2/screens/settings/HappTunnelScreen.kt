@@ -9,6 +9,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -131,7 +132,8 @@ fun HappTunnelScreen(settingsStore: SettingsStore, version: String, onSettings: 
     val parts = hashes.split(Regex("[,\\s]+" )).filter(String::isNotBlank)
     val green = c.success
     val orange = c.warning
-    V2AdaptiveScreen(Modifier.fillMaxSize().padding(horizontal = V2Sizes.ScreenPadding), dense = transport != "udp") {
+    val goobyAvailable = GoobyMode.isAvailable(transport)
+    V2AdaptiveScreen(Modifier.fillMaxSize().padding(horizontal = V2Sizes.ScreenPadding), dense = true) {
         val layout = LocalV2AdaptiveMetrics.current
         val pill = RoundedCornerShape(50)
         V2TopBar(version = version, title = "Туннель", onSettings = onSettings)
@@ -191,7 +193,7 @@ fun HappTunnelScreen(settingsStore: SettingsStore, version: String, onSettings: 
                 },
                     compact = true, shape = pill, tone = if (transport == "udp") green else orange, enabled = !busy,
                     help = "UDP — основной транспорт TURN. TCP/TLS — альтернатива, если UDP недоступен.")
-                if (GoobyMode.isAvailable(transport)) key(editingProfile) {
+                key(editingProfile, goobyAvailable, busy) {
                     HappChoice(
                         label = "Gooby",
                         value = goobyMode.label,
@@ -200,8 +202,9 @@ fun HappTunnelScreen(settingsStore: SettingsStore, version: String, onSettings: 
                             val mode = GoobyMode.entries.first { it.label == label }
                             scope.launch { settingsStore.saveGoobyMode(mode, editingProfile) }
                         },
+                        modifier = Modifier.alpha(if (goobyAvailable) 1f else 0.5f),
                         help = GOOBY_HELP,
-                        enabled = !busy,
+                        enabled = goobyAvailable && !busy,
                         compact = true,
                         shape = pill,
                     )
