@@ -12,8 +12,9 @@ import org.junit.Test
 class DesignCompatibilityTest {
     @get:Rule val compose = createAndroidComposeRule<MainActivity>()
 
-    @Test fun bothDesignsShareBatteryPreferencesAndPreserveSelectedConnection() {
+    @Test fun threeDesignsShareSettingsAndPreserveSelectedConnection() {
         val store = SettingsStore(compose.activity)
+        val oldDesign = runBlocking { store.uiDesign.first() }
         val oldMode = runBlocking { store.batterySaverMode.first() }
         val oldPercent = runBlocking { store.batterySaverPercent.first() }
         val oldOwner = runBlocking { store.uiOwnerMode.first() }
@@ -25,37 +26,58 @@ class DesignCompatibilityTest {
                 store.saveUpdateCheckIntervalHours(UPDATE_CHECK_NEVER)
                 store.saveUiDesign("v2")
                 store.saveUiOwnerMode(false)
-                store.saveParticipantShowLogs(false)
+                store.saveParticipantShowLogs(true)
                 store.saveBatterySaverMode("level")
                 store.saveBatterySaverPercent(20)
             }
-            compose.waitUntil(5000) { compose.onAllNodesWithContentDescription("Настройки").fetchSemanticsNodes().isNotEmpty() }
-            compose.onNodeWithContentDescription("Настройки").performClick()
-            compose.onNodeWithText("Новый").performScrollTo().performClick()
-            compose.onNodeWithText("Классический").performClick()
-            compose.waitUntil(5000) { compose.onAllNodesWithContentDescription("Быстрые настройки").fetchSemanticsNodes().isNotEmpty() }
-            compose.onNodeWithContentDescription("Быстрые настройки").performClick()
-            compose.onNodeWithText(BatterySaver.TITLE).performScrollTo().assertIsDisplayed()
-            compose.onNodeWithText("Свой уровень").assertExists()
-            compose.onNodeWithText("≤ 20 %").assertExists()
-            compose.onNodeWithText("Показывать логи").performScrollTo().performClick()
-            compose.waitUntil(5000) { runBlocking { store.participantShowLogs.first() } }
-            compose.onNodeWithText("Классический").performScrollTo().performClick()
-            compose.onNodeWithText("Новый").performClick()
+
+            fun openSettingsIfNeeded() {
+                if (compose.onAllNodesWithText("Дизайн").fetchSemanticsNodes().isEmpty()) {
+                    val classic = runBlocking { store.uiDesign.first() == "classic" }
+                    compose.onNodeWithContentDescription(if (classic) "Быстрые настройки" else "Настройки")
+                        .performClick()
+                }
+            }
+
+            val designs = listOf(
+                "v2" to "CSQTTR 2.5.3",
+                "old" to "Старый",
+                "classic" to "CSQTT 2.5.0",
+            )
+            for (index in designs.indices) {
+                val (design, label) = designs[index]
+                compose.waitUntil(5000) { runBlocking { store.uiDesign.first() == design } }
+                openSettingsIfNeeded()
+                compose.onNodeWithText("Экстра потоки").performScrollTo().assertIsDisplayed()
+                compose.onNodeWithText("Автопауза Wi-Fi").performScrollTo().assertIsDisplayed()
+                val logs = compose.onNodeWithText("Показывать вкладку «Логи»").performScrollTo()
+                val before = runBlocking { store.participantShowLogs.first() }
+                logs.performClick()
+                compose.waitUntil(5000) { runBlocking { store.participantShowLogs.first() != before } }
+                compose.onNodeWithText(BatterySaver.TITLE).performScrollTo().assertIsDisplayed()
+                compose.onNodeWithText("≤ 20 %").assertExists()
+                val nextLabel = designs[(index + 1) % designs.size].second
+                compose.onNodeWithText(label).performScrollTo().performClick()
+                compose.onNodeWithText(nextLabel).performClick()
+            }
+
             compose.waitUntil(5000) { runBlocking { store.uiDesign.first() == "v2" } }
-            compose.onNodeWithText(BatterySaver.TITLE).performScrollTo().assertIsDisplayed()
-            compose.onNodeWithText("≤ 20 %").assertExists()
-            compose.onNodeWithText("Показывать вкладку «Логи»").performScrollTo().assertExists()
             runBlocking {
                 assertEquals(profile, store.activeProfile.first())
                 val after = store.readProfileConnectionSettings(profile)
                 assertEquals(connection.peer, after.peer)
                 assertEquals(connection.serverPeerPort, after.serverPeerPort)
-                assertEquals(connection.connectionPassword, after.connectionPassword)
+                check(connection.connectionPassword == after.connectionPassword)
                 assertEquals(connection.workersPerHash, after.workersPerHash)
             }
         } finally {
-            runBlocking { store.saveUiDesign("v2"); store.saveUiOwnerMode(oldOwner); store.saveParticipantShowLogs(oldShowLogs); store.saveBatterySaverMode(oldMode); store.saveBatterySaverPercent(oldPercent) }
+            runBlocking {
+                store.saveUiDesign(oldDesign)
+                store.saveUiOwnerMode(oldOwner)
+                store.saveParticipantShowLogs(oldShowLogs)
+                store.saveBatterySaverMode(oldMode)
+                store.saveBatterySaverPercent(oldPercent)
+            }
         }
     }
 }

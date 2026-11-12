@@ -125,12 +125,25 @@ class SettingsStoreSshPortTest {
         assertEquals(defaults.mainPassword, connection.connectionPassword)
         assertEquals("Owner fixture", store.profileNames.first()[slot])
         val occupied = store.occupiedProfiles.first()
-        for (theme in listOf("light", "dark", "light")) {
-            store.saveThemeMode(theme)
-            assertEquals(occupied, store.occupiedProfiles.first())
-            assertEquals(defaults.webPassword, scoped.deploySettingsSnapshot.first().webPassword)
+        val otherSlot = store.findFirstFreeDeployProfile()!!
+        deploy.ensureDeployProfileDefaults(otherSlot)
+        val other = SettingsStore(context, readOnlyProfile = otherSlot).deploySettingsSnapshot.first { it.isLoaded }
+        val generated = listOf(defaults.mainPassword, defaults.webPassword, other.mainPassword, other.webPassword)
+        check(generated.all { it.matches(Regex("[A-Za-z0-9]{16}")) })
+        check(generated.toSet().size == 4)
+        val initialDesign = store.uiDesign.first()
+        for (design in CsqttConstants.Theme.DESIGNS) {
+            store.saveUiDesign(design)
+            for (theme in listOf("light", "dark")) {
+                store.saveThemeMode(theme)
+                assertEquals(occupied, store.occupiedProfiles.first())
+                val sameProfile = scoped.deploySettingsSnapshot.first { it.isLoaded }
+                check(defaults.mainPassword == sameProfile.mainPassword)
+                check(defaults.webPassword == sameProfile.webPassword)
+            }
         }
-        store.saveThemeMode("dark")
+        store.saveUiDesign(initialDesign)
+        deploy.clearDeployProfile(otherSlot)
         deploy.clearDeployProfile(slot)
         store.clearProfile(slot)
     }
