@@ -31,11 +31,16 @@ class DesignCompatibilityTest {
                 store.saveBatterySaverPercent(20)
             }
 
-            fun openSettingsIfNeeded() {
+            fun openSettingsIfNeeded(design: String) {
+                val gear = if (design == "classic") "Быстрые настройки" else "Настройки"
+                compose.waitUntil(10_000) {
+                    runCatching {
+                        compose.onAllNodesWithText("Дизайн").fetchSemanticsNodes().isNotEmpty() ||
+                            compose.onAllNodesWithContentDescription(gear).fetchSemanticsNodes().isNotEmpty()
+                    }.getOrDefault(false)
+                }
                 if (compose.onAllNodesWithText("Дизайн").fetchSemanticsNodes().isEmpty()) {
-                    val classic = runBlocking { store.uiDesign.first() == "classic" }
-                    compose.onNodeWithContentDescription(if (classic) "Быстрые настройки" else "Настройки")
-                        .performClick()
+                    compose.onNodeWithContentDescription(gear).performClick()
                 }
             }
 
@@ -47,7 +52,7 @@ class DesignCompatibilityTest {
             for (index in designs.indices) {
                 val (design, label) = designs[index]
                 compose.waitUntil(5000) { runBlocking { store.uiDesign.first() == design } }
-                openSettingsIfNeeded()
+                openSettingsIfNeeded(design)
                 compose.onNodeWithText("Экстра потоки").performScrollTo().assertIsDisplayed()
                 compose.onNodeWithText("Автопауза Wi-Fi").performScrollTo().assertIsDisplayed()
                 val logs = compose.onNodeWithText("Показывать вкладку «Логи»").performScrollTo()
