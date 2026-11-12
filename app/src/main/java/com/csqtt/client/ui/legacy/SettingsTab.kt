@@ -1,6 +1,5 @@
 package com.csqtt.client.ui.legacy
 
-import com.csqtt.client.showRaisedToast
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
@@ -53,7 +52,6 @@ import com.csqtt.client.ui.legacy.design.CsqttShapes
 import com.csqtt.client.ui.legacy.design.CsqttSizes
 import com.csqtt.client.ui.legacy.dialogs.HashesDialog
 import com.csqtt.client.ui.legacy.dialogs.SecretsDialog
-import com.csqtt.client.ui.legacy.dialogs.VkTokenRevokeDialog
 import com.csqtt.client.ui.legacy.tunnel.WorkersInfoDialog
 import com.csqtt.client.ui.legacy.utils.parseCsqttLink
 import com.csqtt.client.ui.legacy.utils.stripVkUrlStatic
@@ -62,9 +60,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
-import android.content.ClipData
-import android.content.ClipboardManager
-import android.widget.Toast
 
 private const val WORKERS_PER_GROUP = CsqttConstants.Tunnel.WORKERS_PER_GROUP
 
@@ -133,7 +128,6 @@ internal fun SettingsTabContent(
     var showHashModeDetailDialog by rememberSaveable { mutableStateOf<String?>(null) }
     var showWorkModeGeneralDialog by rememberSaveable { mutableStateOf(false) }
     var showWorkModeDetailDialog by rememberSaveable { mutableStateOf<String?>(null) }
-    var showVkRevokeDialog by rememberSaveable { mutableStateOf(false) }
     var vkAuthMode by rememberSaveable { mutableStateOf(CsqttConstants.VkAuth.MODE_CALLS) }
     val autoJsRiskAcknowledged by settingsStore.autoJsRiskAcknowledged.collectAsStateWithLifecycle(initialValue = false)
     var showAutoJsRiskDialog by remember { mutableStateOf(false) }
@@ -510,28 +504,6 @@ internal fun SettingsTabContent(
         )
     }
 
-    if (showVkRevokeDialog) {
-        VkTokenRevokeDialog(
-            onCancel = { showVkRevokeDialog = false },
-            onCopyToken = {
-                val token = savedVkAccessToken.orEmpty()
-                if (token.isNotBlank()) {
-                    val clipboard = context.getSystemService(ClipboardManager::class.java)
-                    if (clipboard != null) {
-                        clipboard.setPrimaryClip(ClipData.newPlainText("VK token", token))
-                        context.showRaisedToast("Бессрочный VK токен скопирован", Toast.LENGTH_SHORT)
-                    } else {
-                        context.showRaisedToast("Не удалось скопировать VK токен", Toast.LENGTH_SHORT)
-                    }
-                }
-            },
-            onRevokeToken = {
-                showVkRevokeDialog = false
-                scope.launch { settingsStore.clearVkAccessToken() }
-            }
-        )
-    }
-
     CsqttScreen {
         Box(
             modifier = Modifier
@@ -621,7 +593,6 @@ internal fun SettingsTabContent(
                             onInfo = { mode -> showHashModeDetailDialog = mode },
                             onSelected = ::requestHashMode,
                             onLogin = onVkAuthRequested,
-                            onRevokeToken = { showVkRevokeDialog = true },
                             authorizationRequiredError = hashesRequiredError && autoHashMode,
                             manualAllowed = !linkTokenActive,
                             tokenFromLink = linkTokenActive,
@@ -748,7 +719,6 @@ internal fun SettingsTabContent(
                         onInfo = { mode -> showHashModeDetailDialog = mode },
                         onSelected = ::requestHashMode,
                         onLogin = onVkAuthRequested,
-                        onRevokeToken = { showVkRevokeDialog = true },
                         authorizationRequiredError = hashesRequiredError && autoHashMode,
                     )
                 }
@@ -1181,7 +1151,6 @@ private fun VkHashModeControls(
     onInfo: (String) -> Unit,
     onSelected: (String) -> Unit,
     onLogin: () -> Unit,
-    onRevokeToken: () -> Unit,
     authorizationRequiredError: Boolean = false,
     manualAllowed: Boolean = true,
     tokenFromLink: Boolean = false,
@@ -1233,7 +1202,7 @@ private fun VkHashModeControls(
             }
         } else if (vkTokenActive) {
             OutlinedButton(
-                onClick = onRevokeToken,
+                onClick = onLogin,
                 enabled = true,
                 modifier = Modifier.fillMaxWidth().height(CsqttSizes.ControlHeight),
                 shape = CsqttShapes.Pill,
@@ -1245,7 +1214,7 @@ private fun VkHashModeControls(
             ) {
                 Icon(Icons.Filled.CheckCircle, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurface)
                 Spacer(Modifier.width(8.dp))
-                Text("Сессия VK активна", fontWeight = FontWeight.SemiBold)
+                Text("Аккаунт VK подключён", fontWeight = FontWeight.SemiBold)
             }
         } else if (authorizationRequiredError) {
             OutlinedButton(
@@ -1260,7 +1229,7 @@ private fun VkHashModeControls(
             ) {
                 Icon(Icons.AutoMirrored.Filled.Login, null, Modifier.size(18.dp))
                 Spacer(Modifier.width(8.dp))
-                Text("Вход", fontWeight = FontWeight.Bold)
+                Text("Войти в VK", fontWeight = FontWeight.Bold)
             }
         } else {
             Button(
@@ -1275,7 +1244,7 @@ private fun VkHashModeControls(
             ) {
                 Icon(Icons.AutoMirrored.Filled.Login, null, Modifier.size(18.dp))
                 Spacer(Modifier.width(8.dp))
-                Text("Вход", fontWeight = FontWeight.SemiBold)
+                Text("Войти в VK", fontWeight = FontWeight.SemiBold)
             }
         }
 

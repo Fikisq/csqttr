@@ -32,24 +32,36 @@ internal object VkAuthWebViewManager {
 
     fun acquire(context: Context): WebView = createWebView(context)
 
-    fun clearVkSessionCookies() {
+    /** Clear only the embedded VK browser session; saved account credentials stay in SettingsStore. */
+    fun clearVkSessionCookies(onComplete: (Boolean) -> Unit = {}) {
         mainHandler.post {
-            runCatching {
+            val completed = java.util.concurrent.atomic.AtomicBoolean(false)
+            fun complete(success: Boolean) {
+                if (completed.compareAndSet(false, true)) onComplete(success)
+            }
+            try {
+                VK_AUTH_COOKIE_ORIGINS.forEach { android.webkit.WebStorage.getInstance().deleteOrigin(it.trimEnd('/')) }
                 val manager = CookieManager.getInstance()
                 val deletions = VK_AUTH_COOKIE_ORIGINS.flatMap { origin ->
                     vkCookieDeletionHeaders(origin, manager.getCookie(origin)).map { origin to it }
                 }
                 if (deletions.isEmpty()) {
                     manager.flush()
+                    complete(true)
                 } else {
                     val remaining = AtomicInteger(deletions.size)
+                    val failed = java.util.concurrent.atomic.AtomicBoolean(false)
                     deletions.forEach { (origin, header) ->
-                        manager.setCookie(origin, header) {
-                            if (remaining.decrementAndGet() == 0) manager.flush()
+                        manager.setCookie(origin, header) { accepted ->
+                            if (!accepted) failed.set(true)
+                            if (remaining.decrementAndGet() == 0) {
+                                manager.flush()
+                                complete(!failed.get())
+                            }
                         }
                     }
                 }
-            }
+            } catch (_: Exception) { complete(false) }
         }
     }
 

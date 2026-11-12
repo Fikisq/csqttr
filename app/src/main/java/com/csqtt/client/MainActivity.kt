@@ -93,6 +93,7 @@ class MainActivity : ComponentActivity() {
     private val appSettingsStore by lazy { SettingsStore(applicationContext) }
     private var renderUi by mutableStateOf(false)
     private var showVkAuthDialog by mutableStateOf(false)
+    private var showVkAccountsDialog by mutableStateOf(false)
     private var pendingDeepLink by mutableStateOf<String?>(null)
     private var batteryPromptInFlight = false
 
@@ -174,7 +175,7 @@ class MainActivity : ComponentActivity() {
                 CompositionLocalProvider(LocalDensity provides scaledDensity) {
                     CsqttV2Root(
                         settingsStore = settingsStore,
-                        onVkAuthRequested = { showVkAuthDialog = true },
+                        onVkAuthRequested = { showVkAccountsDialog = true },
                         historicalPalette = historicalPalette,
                     )
                 }
@@ -206,7 +207,7 @@ class MainActivity : ComponentActivity() {
                         onFingerprintChange = { fp ->
                             scope.launch { settingsStore.saveFingerprint(fp) }
                         },
-                        onVkAuthRequested = { showVkAuthDialog = true },
+                        onVkAuthRequested = { showVkAccountsDialog = true },
                     )
                     // A csqtt:// link, the classic way: confirm, then it replaces the current configuration. It stays
                     // pending until the user chooses, so the dialog survives a rotation instead of losing the link.
@@ -234,15 +235,42 @@ class MainActivity : ComponentActivity() {
             }
                 }
             }
+            if (showVkAccountsDialog) {
+                com.csqtt.client.ui.v2.design.CsqttV2Theme(darkTheme = dark, themePalette = v2Palette) {
+                    com.csqtt.client.ui.v2.dialogs.V2VkAccountsDialog(
+                        store = appSettingsStore,
+                        onAuthorize = {
+                            showVkAccountsDialog = false
+                            VkAuthWebViewManager.clearVkSessionCookies { cleared ->
+                                if (!isFinishing && !isDestroyed) {
+                                    if (cleared) {
+                                        showVkAuthDialog = true
+                                    } else {
+                                        authContext.showRaisedToast("Не удалось открыть вход в другой аккаунт VK", Toast.LENGTH_LONG)
+                                    }
+                                }
+                            }
+                        },
+                        onDismiss = { showVkAccountsDialog = false },
+                    )
+                }
+            }
             if (showVkAuthDialog) {
-                val onToken: (VkAuthPayload) -> Unit = { payload ->
-                        showVkAuthDialog = false
-                        authScope.launch {
+                val onToken: (VkAuthPayload) -> Unit = onToken@{ payload ->
+                    if (!showVkAuthDialog) return@onToken
+                    showVkAuthDialog = false
+                    authScope.launch {
+                        try {
                             appSettingsStore.saveVkAccessToken(payload.token, payload.userId)
-                            authContext.showRaisedToast(if (payload.expiresIn > 0) "Токен VK сохранён (временный)" else "Токен VK сохранён", Toast.LENGTH_SHORT)
+                            authContext.showRaisedToast("Аккаунт VK сохранён", Toast.LENGTH_SHORT)
+                        } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                            throw cancelled
+                        } catch (_: Exception) {
+                            authContext.showRaisedToast("Не удалось сохранить аккаунт VK. Проверьте, что туннель остановлен", Toast.LENGTH_LONG)
                         }
                     }
-                if (design == "classic") CSQTTTheme(themeMode = chosenTheme) {
+                }
+                if (design == CsqttConstants.Theme.DESIGN_CLASSIC) CSQTTTheme(themeMode = chosenTheme) {
                     com.csqtt.client.ui.legacy.dialogs.VkAuthDialog(onToken, onDismiss = { showVkAuthDialog = false })
                 } else com.csqtt.client.ui.v2.design.CsqttV2Theme(darkTheme = dark, themePalette = v2Palette) {
                     VkAuthDialog(onToken, onDismiss = { showVkAuthDialog = false })

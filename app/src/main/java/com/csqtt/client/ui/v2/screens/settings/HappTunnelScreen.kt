@@ -26,7 +26,6 @@ import com.csqtt.client.ui.v2.design.V2TextSizes
 import com.csqtt.client.ui.v2.screens.connection.ProfileSwipeActions
 import com.csqtt.client.ui.v2.dialogs.V2HashesDialog
 import com.csqtt.client.ui.v2.dialogs.V2TurnSubnetsDialog
-import com.csqtt.client.ui.v2.dialogs.V2VkTokenRevokeDialog
 import com.csqtt.client.ui.v2.dialogs.V2AutoVkRiskDialog
 import com.csqtt.client.ui.v2.dialogs.V2TcpTransportRiskDialog
 import com.csqtt.client.ui.v2.screens.connection.V2ProfilePickerMenu
@@ -86,7 +85,6 @@ fun HappTunnelScreen(settingsStore: SettingsStore, version: String, onSettings: 
     var showHashes by remember { mutableStateOf(false) }
     var showSubnets by remember { mutableStateOf(false) }
     var showCaptcha by remember(profile) { mutableStateOf(false) }
-    var showVkSession by remember(profile) { mutableStateOf(false) }
     var pendingAutoJs by remember(profile) { mutableStateOf<(() -> Unit)?>(null) }
     var pendingTcp by remember(profile) { mutableStateOf<(() -> Unit)?>(null) }
     val autoJsAcknowledged by settingsStore.autoJsRiskAcknowledged.collectAsStateWithLifecycle(false)
@@ -166,7 +164,7 @@ fun HappTunnelScreen(settingsStore: SettingsStore, version: String, onSettings: 
                 if (!linkTokenActive && ownerHashes.isEmpty() && authMode != "auto_js" && hashMode == "manual" || ownerHashes.isNotEmpty()) {
                     V2PillButton("Настроить хеши", { showHashes = true }, modifier = Modifier.fillMaxWidth(), height = layout.fieldHeight.coerceAtMost(44.dp), horizontalPadding = 4.dp, enabled = !busy, style = V2PillStyle.Outline, shape = pill)
                 } else {
-                    V2PillButton(if (linkTokenActive) "Токен VK из ссылки" else if (token.isNotBlank()) "Аккаунт VK подключён" else "Войти в VK", { if (token.isNotBlank()) showVkSession = true else onVkAuthRequested() }, modifier = Modifier.fillMaxWidth(), height = layout.fieldHeight.coerceAtMost(44.dp), horizontalPadding = 4.dp, enabled = !busy && !linkTokenActive, style = V2PillStyle.Accent, shape = pill, maxLines = 2)
+                    V2PillButton(if (linkTokenActive) "Токен VK из ссылки" else if (token.isNotBlank()) "Аккаунт VK подключён" else "Войти в VK", onVkAuthRequested, modifier = Modifier.fillMaxWidth(), height = layout.fieldHeight.coerceAtMost(44.dp), horizontalPadding = 4.dp, enabled = !busy && !linkTokenActive, style = V2PillStyle.Accent, shape = pill, maxLines = 2)
                 }
                 }
                 }
@@ -242,15 +240,6 @@ fun HappTunnelScreen(settingsStore: SettingsStore, version: String, onSettings: 
         onRemovedOwnerHashesChange = { removed -> scope.launch { settingsStore.saveLinkHashesRemoved(removed, forProfile = editingProfile) } })
     if (showSubnets) V2TurnSubnetsDialog(subnet, ipLimit, { scope.launch { settingsStore.saveSelectedTurnSubnet(it, forProfile = editingProfile) } }, { scope.launch { settingsStore.saveTurnSubnetIpLimit(it, forProfile = editingProfile) } }, { showSubnets = false })
     if (showCaptcha) HappCaptchaDialog(settingsStore, profile, busy) { showCaptcha = false }
-    if (showVkSession) V2VkTokenRevokeDialog(
-        onCancel = { showVkSession = false },
-        onCopyToken = {
-            context.getSystemService(android.content.ClipboardManager::class.java)
-                ?.setPrimaryClip(android.content.ClipData.newPlainText("VK token", token))
-            context.showRaisedToast("Токен VK скопирован", android.widget.Toast.LENGTH_SHORT)
-        },
-        onRevokeToken = { showVkSession = false; scope.launch { settingsStore.clearVkAccessToken() } },
-    )
     pendingAutoJs?.let { apply -> V2AutoVkRiskDialog(true,
         onAcknowledge = { pendingAutoJs = null; apply() },
         onDoNotRemind = { scope.launch { settingsStore.saveAutoJsRiskAcknowledged(true) }; pendingAutoJs = null; apply() }) }
