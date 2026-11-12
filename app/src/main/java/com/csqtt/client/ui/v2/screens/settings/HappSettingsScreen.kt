@@ -32,7 +32,6 @@ fun HappSettingsScreen(
     val owner by settingsStore.uiOwnerMode.collectAsStateWithLifecycle(false)
     val extra by settingsStore.extraWorkers.collectAsStateWithLifecycle(false)
     val wifi by settingsStore.autoPauseOnWifi.collectAsStateWithLifecycle(false)
-    val logs by settingsStore.loggingEnabled.collectAsStateWithLifecycle(true)
     val showLogs by settingsStore.participantShowLogs.collectAsStateWithLifecycle(
         initialValue = SettingsStore.DEFAULT_PARTICIPANT_SHOW_LOGS,
     )
@@ -40,6 +39,7 @@ fun HappSettingsScreen(
     val authMode by settingsStore.vkAuthMode.collectAsStateWithLifecycle("vkcalls")
     val running by com.csqtt.client.TunnelManager.running.collectAsStateWithLifecycle()
     val theme by settingsStore.themeMode.collectAsStateWithLifecycle("system")
+    val uiScalePercent by settingsStore.uiScalePercent.collectAsStateWithLifecycle(100)
     val fingerprint by settingsStore.selectedFingerprint.collectAsStateWithLifecycle("chrome")
     val design by settingsStore.uiDesign.collectAsStateWithLifecycle("v2")
     val batteryMode by settingsStore.batterySaverMode.collectAsStateWithLifecycle(BatterySaver.DEFAULT_MODE)
@@ -79,15 +79,14 @@ fun HappSettingsScreen(
                         fontSize = V2TextSizes.Secondary, maxLines = 1)
                     Text("›", color = V2Theme.colors.textSecondary, fontSize = 22.sp)
                 }
-                V2SwitchSetting("Ведение логов", logs, { value ->
-                    com.csqtt.client.TunnelManager.isLoggingEnabled = value
-                    scope.launch { settingsStore.saveLoggingEnabled(value) }
-                })
-                if (!owner) V2SwitchSetting("Показывать вкладку «Логи»", showLogs, { value ->
+                V2SwitchSetting("Показывать вкладку «Логи»", showLogs, { value ->
                     scope.launch { settingsStore.saveParticipantShowLogs(value, forProfile = profile) }
                 }, onInfoClick = { logsHelp = true })
             }
             V2Card(contentPadding = PaddingValues(12.dp)) {
+                HappChoice("Масштаб интерфейса", "$uiScalePercent%", SettingsStore.UI_SCALE_CHOICES.map { "$it%" }, { label ->
+                    scope.launch { settingsStore.saveUiScalePercent(label.removeSuffix("%").toInt()) }
+                })
                 val classicDesignLabel = stringResource(R.string.design_classic_csqtt_250)
                 val v2DesignLabel = stringResource(R.string.design_csqttr_253)
                 HappChoice("Дизайн", if (design == "classic") classicDesignLabel else v2DesignLabel, listOf(v2DesignLabel, classicDesignLabel), {
@@ -104,7 +103,7 @@ fun HappSettingsScreen(
                 HappChoice(BatterySaver.TITLE, BatterySaver.MODES.first { it.first == batteryMode }.second,
                     BatterySaver.MODES.map { it.second }, { label -> scope.launch { settingsStore.saveBatterySaverMode(BatterySaver.MODES.first { it.second == label }.first) } },
                     help = BatterySaver.DESCRIPTION)
-                HappChoice(BatterySaver.LEVEL_TITLE, "≤ $batteryPercent %", BatterySaver.PERCENT_CHOICES.map { "≤ $it %" },
+                HappChoice(BatterySaver.LEVEL_TITLE, "≤ $batteryPercent %", (BatterySaver.PERCENT_CHOICES + batteryPercent).distinct().sorted().map { "≤ $it %" },
                     { label -> label.filter(Char::isDigit).toIntOrNull()?.let { scope.launch { settingsStore.saveBatterySaverPercent(it) } } }, enabled = batteryMode == BatterySaver.MODE_LEVEL)
             }
         }
@@ -114,6 +113,6 @@ fun HappSettingsScreen(
     if (wifiLists) V2WifiNetworkListDialog(settingsStore, { wifiLists = false })
     if (logsHelp) AlertDialog(onDismissRequest = { logsHelp = false },
         title = { Text("Вкладка «Логи»") },
-        text = { Text("У участника вкладку можно скрыть. Настройка сохраняется для текущего профиля и действует в обоих дизайнах. Запись событий отдельно управляется переключателем «Ведение логов».") },
+        text = { Text("Показывает или скрывает вкладку для текущего профиля. Запись событий продолжается и при скрытой вкладке.") },
         confirmButton = { TextButton(onClick = { logsHelp = false }) { Text("Понятно") } })
 }

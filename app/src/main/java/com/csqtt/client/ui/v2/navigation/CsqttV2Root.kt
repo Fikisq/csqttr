@@ -101,7 +101,7 @@ fun CsqttV2Root(
             V2Tab.entries.filter { tab ->
                 when (tab) {
                     V2Tab.Deploy -> ownerMode
-                    V2Tab.Logs -> ownerMode || participantShowLogs
+                    V2Tab.Logs -> participantShowLogs
                     else -> true
                 }
             }
