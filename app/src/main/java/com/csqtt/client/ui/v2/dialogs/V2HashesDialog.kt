@@ -55,7 +55,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.csqtt.client.VkHashValidationCodec
 import com.csqtt.client.VkHashValidationStatus
-import com.csqtt.client.ui.legacy.utils.stripVkUrlStatic
+import com.csqtt.client.ui.legacy.utils.normalizeVkHashInput
 import com.csqtt.client.ui.v2.design.V2Theme
 import androidx.compose.ui.focus.focusRequester
 import com.csqtt.client.ui.v2.components.V2PillButton
@@ -100,7 +100,8 @@ fun V2HashesDialog(
     var isChecking by remember { mutableStateOf(false) }
     var unavailableCount by remember { mutableIntStateOf(0) }
 
-    val hashes = listOf(h1, h2, h3, h4, h5, h6)
+    val fields = listOf(h1, h2, h3, h4, h5, h6)
+    val hashes = fields.map(::normalizeVkHashInput)
 
     var removedOwner by remember(removedOwnerHashes) { mutableStateOf(removedOwnerHashes) }
     val fieldFocus = remember { List(6) { androidx.compose.ui.focus.FocusRequester() } }
@@ -114,30 +115,27 @@ fun V2HashesDialog(
     var pendingFocus by remember { mutableIntStateOf(-1) }
 
     fun updateHash(index: Int, raw: String) {
-        val cleaned = stripVkUrlStatic(raw.filter { it != ' ' && it != '\n' && it != '\r' })
+        val input = raw.filterNot(Char::isWhitespace)
+        if (input == fields[index]) return
         val previous = hashes[index]
-        if (cleaned == previous) return
-        if (results.containsKey(previous)) {
+        if (normalizeVkHashInput(input) != previous && results.containsKey(previous)) {
             val updatedResults = VkHashValidationCodec.invalidate(results, previous)
             results = updatedResults
             onValidationResultsChange(updatedResults)
         }
         unavailableCount = 0
         when (index) {
-            0 -> h1 = cleaned
-            1 -> h2 = cleaned
-            2 -> h3 = cleaned
-            3 -> h4 = cleaned
-            4 -> h5 = cleaned
-            5 -> h6 = cleaned
+            0 -> h1 = input
+            1 -> h2 = input
+            2 -> h3 = input
+            3 -> h4 = input
+            4 -> h5 = input
+            5 -> h6 = input
         }
-        val cur1 = if (index == 0) cleaned else h1
-        val cur2 = if (index == 1) cleaned else h2
-        val cur3 = if (index == 2) cleaned else h3
-        val cur4 = if (index == 3) cleaned else h4
-        val cur5 = if (index == 4) cleaned else h5
-        val cur6 = if (index == 5) cleaned else h6
-        onAutoSave?.invoke(cur1, cur2, cur3, cur4, cur5, cur6)
+        onAutoSave?.let { save ->
+            val values = listOf(h1, h2, h3, h4, h5, h6).map(::normalizeVkHashInput)
+            save(values[0], values[1], values[2], values[3], values[4], values[5])
+        }
     }
 
     val activeHashes = (ownerHashes.filterNot { it in removedOwner } + hashes.map(String::trim)).filter { it.length >= 16 }.distinct()
@@ -302,9 +300,10 @@ fun V2HashesDialog(
                             pendingFocus = -1
                         }
                     }
-                    hashes.forEachIndexed { index, value ->
-                        val short = value.isNotBlank() && value.length < 16
-                        val status = results[value]
+                    fields.forEachIndexed { index, value ->
+                        val hash = hashes[index]
+                        val short = hash.isNotBlank() && hash.length < 16
+                        val status = results[hash]
                         val invalid = status == VkHashValidationStatus.Invalid
                         Column {
                             Surface(shape = RoundedCornerShape(14.dp), color = colors.field, border = BorderStroke(1.dp, colors.outline)) {
@@ -361,7 +360,7 @@ fun V2HashesDialog(
                 }, enabled = !isChecking && activeHashes.isNotEmpty(), modifier = Modifier.weight(1f).height(46.dp), shape = RoundedCornerShape(14.dp), border = BorderStroke(1.dp, colors.outline)) {
                     Text(if (isChecking) "Проверяем…" else "Проверить (${activeHashes.size})", fontSize = 13.sp)
                 }
-                Button(onClick = { onSave(h1, h2, h3, h4, h5, h6); animateDismiss() }, enabled = !isChecking,
+                Button(onClick = { onSave(hashes[0], hashes[1], hashes[2], hashes[3], hashes[4], hashes[5]); animateDismiss() }, enabled = !isChecking,
                     modifier = Modifier.weight(1f).height(46.dp), shape = RoundedCornerShape(14.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = colors.accent, contentColor = Color.White)) {
                     Text("Сохранить", fontSize = 13.sp)

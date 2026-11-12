@@ -30,7 +30,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.csqtt.client.VkHashValidationCodec
 import com.csqtt.client.VkHashValidationStatus
-import com.csqtt.client.ui.legacy.utils.stripVkUrlStatic
+import com.csqtt.client.ui.legacy.utils.normalizeVkHashInput
 import com.csqtt.client.ui.legacy.design.CsqttShapes
 import com.csqtt.client.ui.legacy.design.CsqttSizes
 import kotlinx.coroutines.launch
@@ -71,7 +71,8 @@ fun HashesDialog(
     var unavailableCount by remember { mutableIntStateOf(0) }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
-    val hashes = listOf(h1, h2, h3, h4, h5, h6)
+    val fields = listOf(h1, h2, h3, h4, h5, h6)
+    val hashes = fields.map(::normalizeVkHashInput)
 
     // the tunnel takes at most MAX_VK_HASHES, the owner's first: say when the participant's own would be cut
     val ownerInUse = ownerHashes.count { it !in removedOwner }
@@ -84,30 +85,27 @@ fun HashesDialog(
     val validBorder = if (isSystemInDarkTheme()) Color(0xFF66BB6A) else Color(0xFF2E7D32)
 
     fun updateHash(index: Int, raw: String) {
-        val cleaned = stripVkUrlStatic(raw.filter { it != ' ' && it != '\n' && it != '\r' })
+        val input = raw.filterNot(Char::isWhitespace)
+        if (input == fields[index]) return
         val previous = hashes[index]
-        if (cleaned == previous) return
-        if (results.containsKey(previous)) {
+        if (normalizeVkHashInput(input) != previous && results.containsKey(previous)) {
             val updatedResults = VkHashValidationCodec.invalidate(results, previous)
             results = updatedResults
             onValidationResultsChange(updatedResults)
         }
         unavailableCount = 0
         when (index) {
-            0 -> h1 = cleaned
-            1 -> h2 = cleaned
-            2 -> h3 = cleaned
-            3 -> h4 = cleaned
-            4 -> h5 = cleaned
-            5 -> h6 = cleaned
+            0 -> h1 = input
+            1 -> h2 = input
+            2 -> h3 = input
+            3 -> h4 = input
+            4 -> h5 = input
+            5 -> h6 = input
         }
-        val cur1 = if (index == 0) cleaned else h1
-        val cur2 = if (index == 1) cleaned else h2
-        val cur3 = if (index == 2) cleaned else h3
-        val cur4 = if (index == 3) cleaned else h4
-        val cur5 = if (index == 4) cleaned else h5
-        val cur6 = if (index == 5) cleaned else h6
-        onAutoSave?.invoke(cur1, cur2, cur3, cur4, cur5, cur6)
+        onAutoSave?.let { save ->
+            val values = listOf(h1, h2, h3, h4, h5, h6).map(::normalizeVkHashInput)
+            save(values[0], values[1], values[2], values[3], values[4], values[5])
+        }
     }
 
     Dialog(
@@ -283,11 +281,12 @@ fun HashesDialog(
                             pendingFocus = -1
                         }
                     }
-                    hashes.forEachIndexed { idx, value ->
+                    fields.forEachIndexed { idx, value ->
+                        val hash = hashes[idx]
                         // with the owner's hashes the participant's own are optional
                         val label = if (idx == 0 && ownerHashes.isEmpty()) "VK Хеш 1 *" else "VK Хеш ${idx + 1}"
-                        val isShort = value.isNotBlank() && value.length < 16
-                        val status = results[value]
+                        val isShort = hash.isNotBlank() && hash.length < 16
+                        val status = results[hash]
                         val isInvalid = status == VkHashValidationStatus.Invalid
                         val fieldColors = if (status == VkHashValidationStatus.Valid) {
                             OutlinedTextFieldDefaults.colors(
@@ -404,7 +403,7 @@ fun HashesDialog(
 
                 Button(
                     onClick = {
-                        onSave(h1, h2, h3, h4, h5, h6)
+                        onSave(hashes[0], hashes[1], hashes[2], hashes[3], hashes[4], hashes[5])
                     },
                     modifier = Modifier.fillMaxWidth().height(CsqttSizes.ControlHeight),
                     shape = CsqttShapes.Pill,

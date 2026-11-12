@@ -7,7 +7,7 @@ import com.csqtt.client.ui.legacy.utils.generate16CharPassword
 import com.csqtt.client.ui.legacy.utils.isValidTunnelPassword
 import com.csqtt.client.ui.legacy.utils.parseCsqttLink
 import com.csqtt.client.ui.legacy.utils.peerAddress
-import com.csqtt.client.ui.legacy.utils.stripVkUrlStatic
+import com.csqtt.client.ui.legacy.utils.normalizeVkHashInput
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -57,7 +57,7 @@ class CsqttLinkTest {
         val mixed = hashes.mapIndexed { index, hash -> if (index % 2 == 0) links[index] else hash }
 
         for (inputs in listOf(links, hashes, mixed)) {
-            assertEquals(hashes, inputs.map(::stripVkUrlStatic))
+            assertEquals(hashes, inputs.map(::normalizeVkHashInput))
         }
     }
 
