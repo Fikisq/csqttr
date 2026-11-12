@@ -32,7 +32,6 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.csqtt.client.ui.legacy.ModeIndicator
 import com.csqtt.client.ui.v2.design.V2Theme
 
 @Composable
@@ -116,7 +115,7 @@ internal fun HappHelp(title: String, text: String) {
 
 @Composable
 internal fun HappChoice(label: String, value: String, options: List<String>, onSelect: (String) -> Unit,
-    modifier: Modifier = Modifier, indicators: Map<String, ModeIndicator> = emptyMap(), help: String? = null, enabled: Boolean = true, compact: Boolean = false,
+    modifier: Modifier = Modifier, tone: Color? = null, help: String? = null, enabled: Boolean = true, compact: Boolean = false,
     valueMaxLines: Int = 1, labelContent: (@Composable () -> Unit)? = null,
     shape: androidx.compose.ui.graphics.Shape = RoundedCornerShape(14.dp)) {
     val c = V2Theme.colors
@@ -125,7 +124,7 @@ internal fun HappChoice(label: String, value: String, options: List<String>, onS
         if (labelContent == null) Text(label, modifier = Modifier.weight(1f), color = c.textPrimary, fontSize = V2TextSizes.Body)
         else Box(Modifier.weight(1f)) { labelContent() }
         if (help != null) HappHelp(label, help)
-        BoxWithConstraints(Modifier.weight(1.15f)) {
+        Box(Modifier.weight(1.15f)) {
             Surface(onClick = { if (enabled) expanded = true }, enabled = enabled, shape = shape,
                 color = c.field, border = BorderStroke(1.dp, c.outline)) {
                 Column(Modifier.heightIn(min = LocalV2AdaptiveMetrics.current.fieldHeight).padding(horizontal = 10.dp, vertical = 6.dp), verticalArrangement = Arrangement.Center) {
@@ -133,43 +132,14 @@ internal fun HappChoice(label: String, value: String, options: List<String>, onS
                         Text(value, modifier = Modifier.weight(1f), fontSize = V2TextSizes.Body, maxLines = valueMaxLines, overflow = TextOverflow.Ellipsis, color = c.textPrimary)
                         Icon(Icons.Default.KeyboardArrowDown, null, tint = c.textSecondary, modifier = Modifier.size(18.dp))
                     }
-                    indicators[value]?.let { indicator ->
-                        HappChoiceIndicator(indicator)
-                    }
+                    if (tone != null) Box(Modifier.padding(top = 4.dp).fillMaxWidth().height(3.dp).background(tone, RoundedCornerShape(2.dp)))
                 }
             }
-            DropdownMenu(
-                expanded,
-                { expanded = false },
-                modifier = if (indicators.isEmpty()) Modifier else Modifier.width(maxWidth),
-                containerColor = c.surface,
-            ) {
-                options.forEach { option ->
-                    DropdownMenuItem(
-                        text = {
-                            Column {
-                                Text(option, fontSize = V2TextSizes.Body)
-                                indicators[option]?.let { indicator ->
-                                    HappChoiceIndicator(indicator)
-                                }
-                            }
-                        },
-                        onClick = { expanded = false; onSelect(option) },
-                    )
-                }
+            DropdownMenu(expanded, { expanded = false }, containerColor = c.surface) {
+                options.forEach { option -> DropdownMenuItem(text = { Text(option, fontSize = V2TextSizes.Body) }, onClick = { expanded = false; onSelect(option) }) }
             }
         }
     }
-}
-
-@Composable
-private fun HappChoiceIndicator(indicator: ModeIndicator) {
-    Box(
-        Modifier.padding(top = 3.dp)
-            .fillMaxWidth(indicator.progress.coerceIn(0f, 1f))
-            .height(3.dp)
-            .background(indicator.color, RoundedCornerShape(2.dp)),
-    )
 }
 
 @Composable

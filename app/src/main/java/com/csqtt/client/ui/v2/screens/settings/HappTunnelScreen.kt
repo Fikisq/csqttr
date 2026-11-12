@@ -18,8 +18,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import com.csqtt.client.*
 import com.csqtt.client.ui.legacy.GOOBY_HELP
-import com.csqtt.client.ui.legacy.ModeIndicator
-import com.csqtt.client.ui.legacy.goobyIndicator
 import com.csqtt.client.ui.v2.components.*
 import com.csqtt.client.ui.v2.design.V2Theme
 import com.csqtt.client.ui.v2.design.V2Sizes
@@ -132,29 +130,7 @@ fun HappTunnelScreen(settingsStore: SettingsStore, version: String, onSettings: 
     }
     val parts = hashes.split(Regex("[,\\s]+" )).filter(String::isNotBlank)
     val green = c.success
-    val yellow = Color(0xFFFACC15)
-    val hashIndicators = mapOf(
-        "Ручные хеши" to ModeIndicator(0.78f, yellow),
-        "Авто API" to ModeIndicator(1f, green),
-        "Авто ВК" to ModeIndicator(1f, yellow),
-    )
-    val credentialIndicators = mapOf(
-        "Авто" to ModeIndicator(1f, green),
-        "Капча" to ModeIndicator(0.30f, c.danger),
-        "Авто ВК" to ModeIndicator(1f, yellow),
-    )
-    val srtpIndicators = mapOf(
-        "Авто" to ModeIndicator(1f, green),
-        "DTLS-SRTP" to ModeIndicator(1f, green),
-        "WRAP-SRTP" to ModeIndicator(0.5f, c.warning),
-    )
-    val transportIndicators = mapOf(
-        "UDP" to ModeIndicator(1f, green),
-        "TCP" to ModeIndicator(0.7f, yellow),
-    )
-    val goobyIndicators = GoobyMode.entries.mapNotNull { mode ->
-        goobyIndicator(mode, green)?.let { mode.label to it }
-    }.toMap()
+    val orange = c.warning
     V2AdaptiveScreen(Modifier.fillMaxSize().padding(horizontal = V2Sizes.ScreenPadding), dense = transport != "udp") {
         val layout = LocalV2AdaptiveMetrics.current
         val pill = RoundedCornerShape(50)
@@ -194,26 +170,26 @@ fun HappTunnelScreen(settingsStore: SettingsStore, version: String, onSettings: 
                 }
                 if (ownerHashes.isNotEmpty()) Text("Хеши владельца: ${ownerHashes.count { it !in removedOwner }} · свои: ${parts.size}", color = c.accent, fontSize = 12.sp)
                 if (ownerHashes.isEmpty() && !linkTokenActive) HappChoice("Режим хешей", when(hashMode) { "auto_api" -> "Авто API"; "auto_js" -> "Авто ВК"; else -> "Ручные хеши" }, listOf("Ручные хеши", "Авто API", "Авто ВК"), ::changeHash,
-                    compact = true, shape = pill, indicators = hashIndicators, enabled = !busy,
+                    compact = true, shape = pill, tone = if (hashMode == "auto_js") orange else green, enabled = !busy,
                     help = "Ручные хеши — шесть хешей звонков без входа в VK. Авто API — получение через API VK. Авто ВК — получение через авторизованный аккаунт VK.")
                 HappChoice("Режим кредов", when(authMode) { "auto_js" -> "Авто ВК"; "legacy" -> "Капча"; else -> "Авто" }, if (ownerHashes.isNotEmpty()) listOf("Авто", "Капча") else listOf("Авто", "Капча", "Авто ВК"), { label ->
                     val mode = when(label) { "Авто ВК" -> "auto_js"; "Капча" -> "legacy"; else -> "vkcalls" }
                     requestAutoJs(mode) { scope.launch { settingsStore.saveVkAuthMode(mode, forProfile = editingProfile) } }
                 },
-                    compact = true, shape = pill, indicators = credentialIndicators, enabled = !busy, help = "Авто — гостевые TURN-креды VK Calls. Капча — браузерный способ с возможной капчей. Авто ВК — креды авторизованного аккаунта.")
+                    compact = true, shape = pill, tone = if (authMode == "vkcalls") green else orange, enabled = !busy, help = "Авто — гостевые TURN-креды VK Calls. Капча — браузерный способ с возможной капчей. Авто ВК — креды авторизованного аккаунта.")
                 if (authMode == "legacy") OutlinedButton(
                     onClick = { showCaptcha = true },
                     modifier = Modifier.fillMaxWidth().height(36.dp),
                     border = BorderStroke(1.dp, c.outline),
                 ) { Text("Настройки капчи", color = c.accent) }
                 HappChoice("Режим SRTP", when(srtp) { "dtls-srtp" -> "DTLS-SRTP"; "wrap-srtp" -> "WRAP-SRTP"; else -> "Авто" }, listOf("Авто", "DTLS-SRTP", "WRAP-SRTP"), { label -> scope.launch { settingsStore.saveSrtpMode(when(label) { "DTLS-SRTP" -> "dtls-srtp"; "WRAP-SRTP" -> "wrap-srtp"; else -> "auto" }, forProfile = editingProfile) } },
-                    compact = true, shape = pill, indicators = srtpIndicators, enabled = !busy, help = "Авто — DTLS-SRTP с переходом к WRAP-SRTP. DTLS-SRTP — настоящее рукопожатие. WRAP-SRTP — SRTP-обёртка без DTLS-рукопожатия.")
+                    compact = true, shape = pill, tone = if (srtp == "wrap-srtp") orange else green, enabled = !busy, help = "Авто — DTLS-SRTP с переходом к WRAP-SRTP. DTLS-SRTP — настоящее рукопожатие. WRAP-SRTP — SRTP-обёртка без DTLS-рукопожатия.")
                 HappChoice("Транспорт", if(transport == "udp") "UDP" else "TCP", listOf("UDP", "TCP"), { label ->
                     val mode = if(label == "UDP") "udp" else CsqttConstants.Tunnel.TURN_TRANSPORT_TCP_TLS
                     val apply = { scope.launch { settingsStore.saveTurnTransport(mode, forProfile = editingProfile) }; Unit }
                     if (shouldConfirmTcpTransport(transport, mode, tcpAcknowledged)) pendingTcp = apply else apply()
                 },
-                    compact = true, shape = pill, indicators = transportIndicators, enabled = !busy,
+                    compact = true, shape = pill, tone = if (transport == "udp") green else orange, enabled = !busy,
                     help = "UDP — основной транспорт TURN. TCP/TLS — альтернатива, если UDP недоступен.")
                 if (GoobyMode.isAvailable(transport)) key(editingProfile) {
                     HappChoice(
@@ -224,7 +200,6 @@ fun HappTunnelScreen(settingsStore: SettingsStore, version: String, onSettings: 
                             val mode = GoobyMode.entries.first { it.label == label }
                             scope.launch { settingsStore.saveGoobyMode(mode, editingProfile) }
                         },
-                        indicators = goobyIndicators,
                         help = GOOBY_HELP,
                         enabled = !busy,
                         compact = true,
