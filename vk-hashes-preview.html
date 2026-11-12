@@ -57,10 +57,8 @@ button, select, input { font: inherit; }
 fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
 legend, .field-label { font-size: 12px; font-weight: 650; margin-bottom: 5px; color: var(--muted); }
 .source-list, .account-list { display: grid; gap: 5px; }
-.hash-row, .account { display: flex; align-items: center; gap: 9px; border-radius: 11px; padding: 7px 10px; min-height: 40px; background: var(--field); font-size: 13px; }
+.account { display: flex; align-items: center; gap: 9px; border-radius: 11px; padding: 7px 10px; min-height: 40px; background: var(--field); font-size: 13px; }
 .account input { accent-color: var(--accent); width: 16px; height: 16px; margin: 0; }
-.hash-row small { display: block; color: var(--muted); margin-top: 2px; }
-.hash-row > button { margin-left: auto; }
 .hash-actions, .actions, .modes { display: flex; gap: 7px; align-items: center; }
 .actions { justify-content: space-between; }
 .modes > button, .hash-actions input { flex: 1; min-width: 0; }
@@ -150,13 +148,14 @@ const board = document.querySelector("#board");
 const modeNames = {manual:"Ручные хеши",api:"Авто API",vk:"Авто ВК"};
 const checks = ["Работает", "Не работает", "Не удалось проверить"];
 const sampleHashes = Array.from({length:6}, (_, i) => "DemoVKHash-1234567" + (i + 1));
+const ownerHashes = ["DemoOwnerHash-12345671", "DemoOwnerHash-12345672"];
 let accounts = [1, 2];
 let activeAccount = 1;
 let nextAccount = 3;
 
 const views = [...board.querySelectorAll(".example")].map(example => {
   example.append(document.querySelector("#screen").content.cloneNode(true));
-  return {example, mode:"manual", panel:"hashes", returnPanel:"tunnel", source:"owner", owner:[true,true],
+  return {example, mode:"manual", panel:"hashes", returnPanel:"tunnel", source:"owner", savedSource:"owner",
     fields:Array(6).fill(""), checked:false, removing:null};
 });
 
@@ -170,30 +169,34 @@ function normalize(value) {
     .split(/[?#]/,1)[0].replace(/\/+$/,"");
 }
 
-function ownRows(view) {
-  return view.fields.map((value, index) => {
-    const hash = normalize(value);
-    const status = !hash ? "" : hash.length < 16 ? "Минимум 16 символов" : view.checked ? checks[index % 3] : "Не проверен";
-    const tone = !hash || !view.checked ? "" : index % 3 === 0 ? "good" : index % 3 === 1 ? "bad" : "";
-    return '<label class="own-field"><span>Хеш ' + (index + 1) + '</span><input type="text" data-field="' + index +
-      '" value="' + escape(value) + '" placeholder="Ссылка VK или хеш" spellcheck="false">' +
-      (status ? '<small class="' + tone + '">' + status + '</small>' : "") + '</label>';
-  }).join("");
+function selectedValues(view) {
+  return view.source === "owner" ? ownerHashes : view.fields;
 }
 
-function ownerRows(view) {
-  return view.owner.map((enabled,index) => '<div class="hash-row"><span>От владельца ' + (index + 1) +
-    '<small>' + (enabled ? view.checked ? checks[index] : "Хеш скрыт · не проверен" : "Убран") + '</small></span>' +
-    '<button type="button" data-action="replace" data-index="' + index + '">' + (enabled ? "Заменить" : "Вернуть") + '</button></div>').join("");
+function checkCount(view) {
+  return new Set(selectedValues(view).map(normalize).filter(hash => hash.length >= 16)).size;
+}
+
+function hashRows(view) {
+  const values = selectedValues(view);
+  const fromOwner = view.source === "owner";
+  return Array.from({length:6}, (_, index) => {
+    const value = values[index] || "";
+    const hash = normalize(value);
+    const status = !hash ? "" : hash.length < 16 ? "Минимум 16 символов" : view.checked ? checks[index % 3] : "";
+    const tone = !hash || !view.checked ? "" : index % 3 === 0 ? "good" : index % 3 === 1 ? "bad" : "";
+    return '<label class="own-field"><span>Хеш ' + (index + 1) + '</span><input type="text" data-field="' + index +
+      '" value="' + escape(value) + '" placeholder="Ссылка VK или хеш" spellcheck="false"' + (fromOwner ? ' readonly' : '') + '>' +
+      (status ? '<small class="' + tone + '">' + status + '</small>' : "") + '</label>';
+  }).join("");
 }
 
 function hashesPanel(view) {
   const tabs = [["owner","От владельца"],["own","Свои"]].map(([key,label]) =>
     '<button type="button" data-action="source" data-source="' + key + '" aria-pressed="' + (view.source===key) + '">' + label + '</button>').join("");
-  return '<button type="button" data-action="manage">Аккаунты VK</button>' +
-    '<div class="modes" role="group" aria-label="Источник ручных хешей">' + tabs + '</div>' +
+  return '<div class="modes" role="group" aria-label="Источник ручных хешей">' + tabs + '</div>' +
     '<p class="note">Ссылки на VK-звонки или готовые хеши</p><div class="source-list">' +
-    (view.source === "owner" ? ownerRows(view) : ownRows(view)) + '</div>' +
+    hashRows(view) + '</div>' +
     (view.checked ? '<p class="note" role="status">Демонстрационный результат · статус указан у каждого хеша</p>' : "");
 }
 
@@ -225,7 +228,8 @@ function render(view) {
   root.querySelector(".summary [data-action=manage]").hidden = view.mode === "manual";
   root.querySelector(".summary [data-action=manage]").textContent = activeAccount ? "Аккаунт VK подключён" : "Войти в VK";
   root.querySelector(".sheet-content").innerHTML = inHashes ? hashesPanel(view) : accountsPanel(view);
-  const count = new Set([...view.fields.map(normalize), ...view.owner.flatMap((on,i) => on ? ["DemoOwnerHash-1234567"+i] : [])].filter(x => x.length >= 16)).size;
+
+  const count = checkCount(view);
   const check = root.querySelector("[data-action=check]");
   check.disabled = !count;
   check.textContent = isClassic ? "Проверить актив" : "Проверить (" + count + ")";
@@ -236,7 +240,8 @@ for (const view of views) {
     if (event.target.dataset.field === undefined) return;
     view.fields[Number(event.target.dataset.field)] = event.target.value;
     view.checked = false;
-    const count = new Set(view.fields.map(normalize).filter(x => x.length >= 16)).size + view.owner.filter(Boolean).length;
+
+    const count = checkCount(view);
     const check = view.example.querySelector("[data-action=check]");
     check.disabled = !count;
     if (view.example.dataset.design !== "classic") check.textContent = "Проверить (" + count + ")";
@@ -251,24 +256,14 @@ for (const view of views) {
     if (!button) return;
     const index = Number(button.dataset.index);
     switch(button.dataset.action) {
-      case "open": view.panel = "hashes"; break;
+      case "open": view.panel = "hashes"; view.source = view.savedSource; view.checked = false; break;
       case "close":
         view.panel = view.panel === "accounts" ? view.returnPanel : "tunnel";
         view.removing = null;
         break;
-      case "save": view.fields = view.fields.map(normalize); view.panel = "tunnel"; break;
-      case "check": view.fields = view.fields.map(normalize); view.checked = true; break;
-      case "source": view.source = button.dataset.source; break;
-      case "replace":
-        view.owner[index] = !view.owner[index];
-        if (!view.owner[index]) {
-          view.source = "own";
-          render(view);
-          const free = view.fields.findIndex(field => !field.trim());
-          view.example.querySelector('[data-field="' + free + '"]')?.focus();
-          return;
-        }
-        break;
+      case "save": view.fields = view.fields.map(normalize); view.savedSource = view.source; view.panel = "tunnel"; break;
+      case "check": if (view.source === "own") view.fields = view.fields.map(normalize); view.checked = true; break;
+      case "source": view.source = button.dataset.source; view.checked = false; break;
       case "manage": view.returnPanel = view.panel; view.panel = "accounts"; break;
       case "select-account": activeAccount = index; view.panel = view.returnPanel; views.forEach(render); return;
       case "add-account": accounts.push(nextAccount); activeAccount = nextAccount++; views.forEach(render); return;
