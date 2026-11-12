@@ -150,6 +150,7 @@ class MainActivity : ComponentActivity() {
             val uiStateHolder = rememberSaveableStateHolder()
             val design by appSettingsStore.uiDesign.collectAsStateWithLifecycle<String?>(initialValue = null)
             val chosenTheme by appSettingsStore.themeMode.collectAsStateWithLifecycle("system")
+            val uiScalePercent by appSettingsStore.uiScalePercent.collectAsStateWithLifecycle(100)
             val dark = when (chosenTheme) { "dark" -> true; "light" -> false; else -> androidx.compose.foundation.isSystemInDarkTheme() }
             if (renderUi) {
                 uiStateHolder.SaveableStateProvider("main_ui_${design ?: "loading"}") {
@@ -157,17 +158,25 @@ class MainActivity : ComponentActivity() {
             if (design == null) {
                 // Wait for the stored choice instead of briefly drawing the other design.
             } else if (design == "v2") {
-                CsqttV2Root(
-                    settingsStore = settingsStore,
-                    onVkAuthRequested = { showVkAuthDialog = true },
-                )
+                val baseDensity = LocalDensity.current
+                val scaledDensity = remember(baseDensity, uiScalePercent) {
+                    Density(baseDensity.density * uiScalePercent / 100f, baseDensity.fontScale)
+                }
+                CompositionLocalProvider(LocalDensity provides scaledDensity) {
+                    CsqttV2Root(
+                        settingsStore = settingsStore,
+                        onVkAuthRequested = { showVkAuthDialog = true },
+                    )
+                }
             } else {
             val themeMode by settingsStore.themeMode.collectAsStateWithLifecycle(initialValue = CsqttConstants.Theme.MODE_SYSTEM)
             val activeFingerprint by settingsStore.selectedFingerprint.collectAsStateWithLifecycle(initialValue = CsqttConstants.Tunnel.DEFAULT_FINGERPRINT)
             val scope = rememberCoroutineScope()
 
             val baseDensity = LocalDensity.current
-            val fixedDensity = remember(baseDensity.density) { Density(baseDensity.density, 1f) }
+            val fixedDensity = remember(baseDensity.density, uiScalePercent) {
+                Density(baseDensity.density * uiScalePercent / 100f, 1f)
+            }
 
             CompositionLocalProvider(LocalDensity provides fixedDensity) {
             CSQTTTheme(themeMode = themeMode) {

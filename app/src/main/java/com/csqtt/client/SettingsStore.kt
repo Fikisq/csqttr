@@ -176,6 +176,7 @@ class SettingsStore(context: Context, deployScope: Boolean = false, readOnlyProf
     private val appContext = context.applicationContext
     companion object {
         internal const val DEFAULT_PARTICIPANT_SHOW_LOGS = true
+        internal val UI_SCALE_CHOICES = listOf(90, 100, 110, 120)
 
         private val Context.dataStore by preferencesDataStore("settings")
         private val ACTIVE_PROFILE = intPreferencesKey("active_profile")
@@ -277,6 +278,7 @@ private val DEPLOY_LAST_INSPECTION_PANEL = booleanPreferencesKey("deploy_last_in
         private val VK_ACCOUNT_TOKEN_ENCRYPTED = stringPreferencesKey("vk_account_token_encrypted")
         private val VK_ACCOUNT_USER_ID = stringPreferencesKey("vk_account_user_id")
         private val UI_DESIGN = stringPreferencesKey("ui_design")
+        private val UI_SCALE = intPreferencesKey("ui_scale_percent")
         private val BATTERY_SAVER_MODE = stringPreferencesKey("battery_saver_mode")
         private val BATTERY_SAVER_PERCENT = intPreferencesKey("battery_saver_percent")
         private val DEPLOY_CONNECTION_PROFILE = intPreferencesKey("deploy_connection_profile")
@@ -434,6 +436,16 @@ private val DEPLOY_LAST_INSPECTION_PANEL = booleanPreferencesKey("deploy_last_in
         else -> appContext.dataStore
     }
     val uiOwnerMode: Flow<Boolean> = appContext.dataStore.data.map { it[UI_OWNER_MODE] ?: false }
+    private fun uiScaleOrDefault(percent: Int?): Int =
+        percent?.takeIf { it in UI_SCALE_CHOICES } ?: 100
+
+    val uiScalePercent: Flow<Int> = dataStore.data.map { uiScaleOrDefault(it[UI_SCALE]) }.distinctUntilChanged()
+
+    suspend fun saveUiScalePercent(percent: Int) {
+        require(percent in UI_SCALE_CHOICES)
+        dataStore.edit { it[UI_SCALE] = percent }
+    }
+
     val uiDesign: Flow<String> = appContext.dataStore.data.map { if (it[UI_DESIGN] == "classic") "classic" else "v2" }
     suspend fun saveUiDesign(design: String) { require(design in listOf("classic", "v2")); appContext.dataStore.edit { it[UI_DESIGN] = design } }
     val batterySaverMode: Flow<String> = appContext.dataStore.data.map { prefs -> prefs[BATTERY_SAVER_MODE]?.takeIf { mode -> BatterySaver.MODES.any { it.first == mode } } ?: BatterySaver.DEFAULT_MODE }
@@ -2767,6 +2779,7 @@ private val DEPLOY_LAST_INSPECTION_PANEL = booleanPreferencesKey("deploy_last_in
             val settings = JSONObject()
             settings.put("theme_mode", prefs[THEME_MODE] ?: "system")
             settings.put("ui_design", prefs[UI_DESIGN] ?: "v2")
+            settings.put("ui_scale_percent", uiScaleOrDefault(prefs[UI_SCALE]))
             settings.put("battery_saver_mode", prefs[BATTERY_SAVER_MODE] ?: BatterySaver.DEFAULT_MODE)
             settings.put("battery_saver_percent", prefs[BATTERY_SAVER_PERCENT] ?: BatterySaver.DEFAULT_PERCENT)
             settings.put("is_dynamic_color", prefs[IS_DYNAMIC_COLOR] ?: false)
@@ -2874,6 +2887,7 @@ private val DEPLOY_LAST_INSPECTION_PANEL = booleanPreferencesKey("deploy_last_in
                     val s = root.getJSONObject("settings")
                     if (s.has("theme_mode")) mutable[THEME_MODE] = s.getString("theme_mode")
                     s.optString("ui_design").takeIf { it in listOf("classic", "v2") }?.let { mutable[UI_DESIGN] = it }
+                    if (s.has("ui_scale_percent")) mutable[UI_SCALE] = uiScaleOrDefault(s.optInt("ui_scale_percent", 100))
                     s.optString("battery_saver_mode").takeIf { mode -> BatterySaver.MODES.any { it.first == mode } }?.let { mutable[BATTERY_SAVER_MODE] = it }
                     if (s.has("battery_saver_percent")) mutable[BATTERY_SAVER_PERCENT] = s.getInt("battery_saver_percent").coerceIn(5, 95)
                     if (s.has("is_dynamic_color")) mutable[IS_DYNAMIC_COLOR] = s.getBoolean("is_dynamic_color")
