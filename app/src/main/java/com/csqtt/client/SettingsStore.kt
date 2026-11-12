@@ -459,6 +459,7 @@ private val DEPLOY_LAST_INSPECTION_PANEL = booleanPreferencesKey("deploy_last_in
     suspend fun saveBatterySaverPercent(percent: Int) { appContext.dataStore.edit { it[BATTERY_SAVER_PERCENT] = percent.coerceIn(5, 95) } }
     suspend fun saveUiOwnerMode(owner: Boolean) { appContext.dataStore.edit { it[UI_OWNER_MODE] = owner } }
     private val secureStore = SecureStringStore(appContext)
+    private val savedVkAccounts = SavedVkAccounts(secureStore::encrypt, secureStore::decrypt)
     private val classicPreferences by lazy {
         appContext.getSharedPreferences("native250_ui_preview", Context.MODE_PRIVATE).all
     }
@@ -754,6 +755,10 @@ private val DEPLOY_LAST_INSPECTION_PANEL = booleanPreferencesKey("deploy_last_in
         val profile = prefs[ACTIVE_PROFILE] ?: 0
         if (hasImportedVkToken(prefs, profile)) "" else personalVkAccount(prefs).second
     }
+
+    internal val savedVkAccountIds: Flow<List<String>> = dataStore.data.map { prefs ->
+        (savedVkAccounts.available(prefs) + legacyPersonalVkAccounts(prefs).keys).distinct()
+    }.onIo()
 
     val isWhitelist: Flow<Boolean> = dataStore.data.map { prefs ->
         val profile = prefs[ACTIVE_PROFILE] ?: 0
@@ -2334,12 +2339,19 @@ private val DEPLOY_LAST_INSPECTION_PANEL = booleanPreferencesKey("deploy_last_in
 
     suspend fun saveVkAccessToken(token: String, userId: String) {
         dataStore.edit { prefs ->
+            check(!TunnelManager.running.value && !TunnelManager.starting.value && !TunnelManager.stopping.value) {
+                "Сначала остановите туннель"
+            }
             val profile = prefs[ACTIVE_PROFILE] ?: 0
+            archivePersonalVkAccounts(prefs)
+            savedVkAccounts.remember(prefs, userId, token)
             prefs.putSecret(VK_ACCOUNT_TOKEN_ENCRYPTED, VK_ACCOUNT_TOKEN, token, 0)
             prefs[VK_ACCOUNT_USER_ID] = userId
-            prefs.remove(getProfileKey(VK_ACCESS_TOKEN_ENCRYPTED, profile))
-            prefs.remove(getProfileKey(VK_ACCESS_TOKEN, profile))
-            prefs.remove(getProfileKey(VK_ACCESS_TOKEN_USER_ID, profile))
+            if (!hasImportedVkToken(prefs, profile)) {
+                prefs.remove(getProfileKey(VK_ACCESS_TOKEN_ENCRYPTED, profile))
+                prefs.remove(getProfileKey(VK_ACCESS_TOKEN, profile))
+                prefs.remove(getProfileKey(VK_ACCESS_TOKEN_USER_ID, profile))
+            }
         }
     }
 
@@ -2351,6 +2363,11 @@ private val DEPLOY_LAST_INSPECTION_PANEL = booleanPreferencesKey("deploy_last_in
                 prefs.remove(getProfileKey(VK_ACCESS_TOKEN, profile))
                 prefs.remove(getProfileKey(VK_ACCESS_TOKEN_USER_ID, profile))
             } else {
+                val removedId = personalVkAccount(prefs).second
+                legacyPersonalVkAccounts(prefs).filterKeys { it != removedId }.forEach { (id, value) ->
+                    savedVkAccounts.rememberLegacy(prefs, id, value)
+                }
+                savedVkAccounts.forget(prefs, removedId)
                 prefs.remove(VK_ACCOUNT_TOKEN_ENCRYPTED)
                 prefs.remove(VK_ACCOUNT_TOKEN)
                 prefs.remove(VK_ACCOUNT_USER_ID)
@@ -2369,7 +2386,69 @@ private val DEPLOY_LAST_INSPECTION_PANEL = booleanPreferencesKey("deploy_last_in
         prefs[getProfileKey(VK_ACCESS_TOKEN_USER_ID, profile)].isNullOrBlank() &&
             readSecret(prefs, VK_ACCESS_TOKEN_ENCRYPTED, VK_ACCESS_TOKEN, profile).isNotBlank()
 
+    /** Forget one personal account only, including its old per-profile login copies. */
+    internal suspend fun removeSavedVkAccount(userId: String) {
+        dataStore.edit { prefs ->
+            check(!TunnelManager.running.value && !TunnelManager.starting.value && !TunnelManager.stopping.value) {
+                "Сначала остановите туннель"
+            }
+            val removingActive = personalVkAccount(prefs).second == userId
+            archivePersonalVkAccounts(prefs)
+            savedVkAccounts.forget(prefs, userId)
+            if (prefs[VK_ACCOUNT_USER_ID] == userId) {
+                prefs.remove(VK_ACCOUNT_TOKEN_ENCRYPTED)
+                prefs.remove(VK_ACCOUNT_TOKEN)
+                prefs.remove(VK_ACCOUNT_USER_ID)
+            }
+            for (profile in CsqttConstants.Profiles.MIN_INDEX..CsqttConstants.Profiles.MAX_INDEX) {
+                val legacyId = prefs[getProfileKey(VK_ACCESS_TOKEN_USER_ID, profile)].orEmpty()
+                // Other logins are already archived; do not silently select one via legacy fallback.
+                if (legacyId == userId || (removingActive && legacyId.isNotBlank())) {
+                    prefs.remove(getProfileKey(VK_ACCESS_TOKEN_ENCRYPTED, profile))
+                    prefs.remove(getProfileKey(VK_ACCESS_TOKEN, profile))
+                    prefs.remove(getProfileKey(VK_ACCESS_TOKEN_USER_ID, profile))
+                }
+            }
+        }
+    }
+
+    internal suspend fun selectSavedVkAccount(userId: String) {
+        dataStore.edit { prefs ->
+            check(!TunnelManager.running.value && !TunnelManager.starting.value && !TunnelManager.stopping.value) {
+                "Сначала остановите туннель"
+            }
+            val profile = prefs[ACTIVE_PROFILE] ?: 0
+            check(!hasImportedVkToken(prefs, profile)) { "Профиль использует токен из ссылки" }
+            val current = personalVkAccount(prefs)
+            if (current.second == userId && current.first.isNotBlank()) return@edit
+            val token = requireNotNull(savedVkAccounts.token(prefs, userId) ?: legacyPersonalVkAccounts(prefs)[userId]) { "Войдите в этот аккаунт снова" }
+            archivePersonalVkAccounts(prefs)
+            prefs.putSecret(VK_ACCOUNT_TOKEN_ENCRYPTED, VK_ACCOUNT_TOKEN, token, 0)
+            prefs[VK_ACCOUNT_USER_ID] = userId
+        }
+    }
+
     // Legacy personal logins are reused across slots; tokens from links have no account UID.
+    private fun archivePersonalVkAccounts(prefs: MutablePreferences) {
+        legacyPersonalVkAccounts(prefs).forEach { (id, value) -> savedVkAccounts.rememberLegacy(prefs, id, value) }
+        // Only the explicit shared login is authoritative over an existing archive entry.
+        val shared = readSecret(prefs, VK_ACCOUNT_TOKEN_ENCRYPTED, VK_ACCOUNT_TOKEN, 0)
+        savedVkAccounts.remember(prefs, prefs[VK_ACCOUNT_USER_ID].orEmpty(), shared)
+    }
+
+    private fun legacyPersonalVkAccounts(prefs: Preferences): Map<String, String> = buildMap {
+        for (p in CsqttConstants.Profiles.MIN_INDEX..CsqttConstants.Profiles.MAX_INDEX) {
+            val uid = prefs[getProfileKey(VK_ACCESS_TOKEN_USER_ID, p)].orEmpty()
+            if (uid.isNotBlank()) {
+                val token = readSecret(prefs, VK_ACCESS_TOKEN_ENCRYPTED, VK_ACCESS_TOKEN, p)
+                if (token.isNotBlank()) put(uid, token)
+            }
+        }
+        val token = readSecret(prefs, VK_ACCOUNT_TOKEN_ENCRYPTED, VK_ACCOUNT_TOKEN, 0)
+        val uid = prefs[VK_ACCOUNT_USER_ID].orEmpty()
+        if (uid.isNotBlank() && token.isNotBlank()) put(uid, token)
+    }
+
     private fun personalVkAccount(prefs: Preferences): Pair<String, String> {
         val shared = readSecret(prefs, VK_ACCOUNT_TOKEN_ENCRYPTED, VK_ACCOUNT_TOKEN, 0)
         if (shared.isNotBlank()) return shared to (prefs[VK_ACCOUNT_USER_ID] ?: "")
