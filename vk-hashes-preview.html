@@ -58,8 +58,9 @@ fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
 legend, .field-label { font-size: 12px; font-weight: 650; margin-bottom: 5px; color: var(--muted); }
 .source-list, .account-list { display: grid; gap: 5px; }
 .hash-row, .account { display: flex; align-items: center; gap: 9px; border-radius: 11px; padding: 7px 10px; min-height: 40px; background: var(--field); font-size: 13px; }
-.hash-row input, .account input { accent-color: var(--accent); width: 16px; height: 16px; margin: 0; }
-.hash-row small { margin-left: auto; color: var(--muted); }
+.account input { accent-color: var(--accent); width: 16px; height: 16px; margin: 0; }
+.hash-row small { display: block; color: var(--muted); margin-top: 2px; }
+.hash-row > button { margin-left: auto; }
 .hash-actions, .actions, .modes { display: flex; gap: 7px; align-items: center; }
 .actions { justify-content: space-between; }
 .modes > button, .hash-actions input { flex: 1; min-width: 0; }
@@ -144,8 +145,9 @@ const views = [...board.querySelectorAll(".example")].map(example => {
 function ownerFields(state) {
   return '<fieldset><legend>От владельца сервера</legend><div class="source-list">' +
     state.owner.map((enabled, index) =>
-      '<label class="hash-row"><input type="checkbox" data-owner="' + index + '"' +
-      (enabled ? ' checked' : '') + '>От владельца ' + (index + 1) + '<small>Хеш скрыт</small></label>'
+      '<div class="hash-row"><span>От владельца ' + (index + 1) + '<small>' +
+      (enabled ? 'Хеш скрыт' : 'Убран') + '</small></span><button type="button" data-action="owner" data-index="' +
+      index + '">' + (enabled ? 'Заменить' : 'Вернуть') + '</button></div>'
     ).join("") + '</div></fieldset>';
 }
 
@@ -179,6 +181,8 @@ function accountFields(view) {
 function render(view) {
   const {example, state, key} = view;
   const ownerCount = state.owner.filter(Boolean).length;
+  example.querySelector(".sheet-title h3").textContent = board.dataset.design === "classic"
+    ? "Ссылки VK звонков" : "Ручные хеши";
   example.querySelector(".sheet").hidden = !state.open;
   example.querySelector(".scrim").hidden = !state.open;
   example.querySelector('[data-action="open"]').textContent = "Хеши владельца: " + ownerCount +
@@ -222,6 +226,17 @@ for (const view of views) {
         break;
       case "reset": view.state = fresh(); break;
       case "mode": state.mode = button.dataset.mode; break;
+      case "owner": {
+        const index = Number(button.dataset.index);
+        state.owner[index] = !state.owner[index];
+        if (!state.owner[index]) {
+          if (view.key === "source") state.mode = "manual";
+          render(view);
+          view.example.querySelector('input[type="text"]').focus();
+          return;
+        }
+        break;
+      }
       case "accounts": state.showAccounts = !state.showAccounts; break;
       case "login": {
         const name = demoAccounts.find(item => !accounts.includes(item)) || "Аккаунт " + (accounts.length + 1);
@@ -245,18 +260,19 @@ for (const view of views) {
   });
   view.example.addEventListener("change", event => {
     const {state} = view;
-    const {owner, account} = event.target.dataset;
-    if (owner !== undefined) { state.owner[Number(owner)] = event.target.checked; }
-    else if (account !== undefined) { state.account = accounts[Number(account)]; }
-    else return;
+    const {account} = event.target.dataset;
+    if (account === undefined) return;
+    state.account = accounts[Number(account)];
     state.status = "";
     render(view);
-    const attribute = owner !== undefined ? "owner" : "account";
-    view.example.querySelector('[data-' + attribute + '="' + (owner ?? account) + '"]')?.focus();
+    view.example.querySelector('[data-account="' + account + '"]')?.focus();
   });
 }
 
-document.querySelector("#design").addEventListener("change", event => { board.dataset.design = event.target.value; });
+document.querySelector("#design").addEventListener("change", event => {
+  board.dataset.design = event.target.value;
+  views.forEach(render);
+});
 document.querySelector("#theme").addEventListener("change", event => { board.dataset.theme = event.target.value; });
 document.querySelector("#zoom").addEventListener("input", event => {
   board.style.setProperty("--scale", Number(event.target.value) / 100);
