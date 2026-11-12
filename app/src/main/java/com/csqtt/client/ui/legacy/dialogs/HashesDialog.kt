@@ -81,6 +81,7 @@ fun HashesDialog(
     var replaceNote by remember { mutableStateOf(false) }
     var showOwnerHashes by rememberSaveable(ownerHashes.isNotEmpty()) { mutableStateOf(ownerHashes.isNotEmpty()) }
     var pendingFocus by remember { mutableIntStateOf(-1) }
+    val validBorder = if (isSystemInDarkTheme()) Color(0xFF66BB6A) else Color(0xFF2E7D32)
 
     fun updateHash(index: Int, raw: String) {
         val cleaned = stripVkUrlStatic(raw.filter { it != ' ' && it != '\n' && it != '\r' })
