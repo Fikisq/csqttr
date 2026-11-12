@@ -84,10 +84,14 @@ button { cursor: pointer; }
 .own-field { display: grid; gap: 3px; padding: 7px 8px; border-radius: 11px; background: var(--field); font-size: 11px; color: var(--muted); }
 .own-field input[type="text"] { min-height: 30px; background: var(--surface); }
 .own-field small { color: var(--muted); font-size: 11px; }
-.own-field .good { color: #54bc73; }
-.own-field .bad { color: #ef7777; }
-[data-theme="light"] .own-field .good { color: #26703d; }
-[data-theme="light"] .own-field .bad { color: #ad2929; }
+.phone input[data-check="valid"] { --check-color: #54bc73; }
+.phone input[data-check="invalid"] { --check-color: #ef7777; }
+[data-theme="light"] .phone input[data-check="valid"] { --check-color: #26703d; }
+[data-theme="light"] .phone input[data-check="invalid"] { --check-color: #ad2929; }
+.phone input[data-check] {
+  border-color: var(--check-color);
+  box-shadow: 0 0 0 1px var(--check-color);
+}
 .account button:first-child { flex: 1; }
 .phone button:disabled { opacity: .55; cursor: default; }
 .hash-footer > button { flex: 1; }
@@ -146,7 +150,7 @@ button { cursor: pointer; }
 <script>
 const board = document.querySelector("#board");
 const modeNames = {manual:"Ручные хеши",api:"Авто API",vk:"Авто ВК"};
-const checks = ["Работает", "Не работает", "Не удалось проверить"];
+const checks = ["valid", "invalid", null];
 const sampleHashes = Array.from({length:6}, (_, i) => "DemoVKHash-1234567" + (i + 1));
 const ownerHashes = ["DemoOwnerHash-12345671", "DemoOwnerHash-12345672"];
 let accounts = [1, 2];
@@ -183,11 +187,13 @@ function hashRows(view) {
   return Array.from({length:6}, (_, index) => {
     const value = values[index] || "";
     const hash = normalize(value);
-    const status = !hash ? "" : hash.length < 16 ? "Минимум 16 символов" : view.checked ? checks[index % 3] : "";
-    const tone = !hash || !view.checked ? "" : index % 3 === 0 ? "good" : index % 3 === 1 ? "bad" : "";
+    const short = hash && hash.length < 16;
+    const check = view.checked && hash.length >= 16 ? checks[index % 3] : null;
+    const description = check === "valid" ? "Хеш активен" : "Хеш недействителен";
+    const checkAttrs = check ? ' data-check="' + check + '" aria-description="' + description + '"' : '';
     return '<label class="own-field"><span>Хеш ' + (index + 1) + '</span><input type="text" data-field="' + index +
-      '" value="' + escape(value) + '" placeholder="Ссылка VK или хеш" spellcheck="false"' + (fromOwner ? ' readonly' : '') + '>' +
-      (status ? '<small class="' + tone + '">' + status + '</small>' : "") + '</label>';
+      '" value="' + escape(value) + '" placeholder="Ссылка VK или хеш" spellcheck="false"' + (fromOwner ? ' readonly' : '') + checkAttrs + '>' +
+      (short ? '<small>Минимум 16 символов</small>' : "") + '</label>';
   }).join("");
 }
 
@@ -197,7 +203,8 @@ function hashesPanel(view) {
   return '<div class="modes" role="group" aria-label="Источник ручных хешей">' + tabs + '</div>' +
     '<p class="note">Ссылки на VK-звонки или готовые хеши</p><div class="source-list">' +
     hashRows(view) + '</div>' +
-    (view.checked ? '<p class="note" role="status">Демонстрационный результат · статус указан у каждого хеша</p>' : "");
+    (view.checked && selectedValues(view).some((value, index) => index % 3 === 2 && normalize(value).length >= 16)
+      ? '<p class="note" role="status" data-check-message>Не удалось проверить часть хешей</p>' : "");
 }
 
 function accountsPanel(view) {
@@ -240,7 +247,11 @@ for (const view of views) {
     if (event.target.dataset.field === undefined) return;
     view.fields[Number(event.target.dataset.field)] = event.target.value;
     view.checked = false;
-
+    view.example.querySelectorAll("input[data-check]").forEach(input => {
+      input.removeAttribute("data-check");
+      input.removeAttribute("aria-description");
+    });
+    view.example.querySelector("[data-check-message]")?.remove();
     const count = checkCount(view);
     const check = view.example.querySelector("[data-action=check]");
     check.disabled = !count;
