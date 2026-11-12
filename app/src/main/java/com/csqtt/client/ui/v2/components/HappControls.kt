@@ -9,6 +9,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.HelpOutline
 import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material3.*
@@ -38,7 +39,8 @@ import com.csqtt.client.ui.v2.design.V2Theme
 internal fun HappField(label: String, value: String, onChange: (String) -> Unit, modifier: Modifier = Modifier,
     password: Boolean = false, number: Boolean = false, enabled: Boolean = true,
     placeholder: String = fieldFormatHint(label), compact: Boolean = false, visibilityKey: Any? = null,
-    shape: androidx.compose.ui.graphics.Shape = RoundedCornerShape(14.dp), floatingLabel: Boolean = false, maxFieldHeight: Dp? = null) {
+    shape: androidx.compose.ui.graphics.Shape = RoundedCornerShape(14.dp), floatingLabel: Boolean = false, maxFieldHeight: Dp? = null,
+    onGeneratePassword: (() -> Unit)? = null) {
     val c = V2Theme.colors
     val layout = LocalV2AdaptiveMetrics.current
     val density = LocalDensity.current
@@ -68,6 +70,16 @@ internal fun HappField(label: String, value: String, onChange: (String) -> Unit,
                         if(password) IconButton(onClick = { showPassword = !showPassword }, enabled = enabled, modifier = Modifier.size(36.dp)) {
                             Icon(if(showPassword) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility,
                                 "${if(showPassword) "Скрыть" else "Показать"} ${label.lowercase()}", tint = c.textSecondary, modifier = Modifier.size(17.dp))
+                        }
+                        if (password && onGeneratePassword != null) {
+                            IconButton(onClick = onGeneratePassword, enabled = enabled, modifier = Modifier.size(36.dp)) {
+                                Icon(
+                                    Icons.Default.Refresh,
+                                    contentDescription = "Сгенерировать ${label.lowercase()}",
+                                    tint = c.accent,
+                                    modifier = Modifier.size(20.dp),
+                                )
+                            }
                         }
                     }
                 }

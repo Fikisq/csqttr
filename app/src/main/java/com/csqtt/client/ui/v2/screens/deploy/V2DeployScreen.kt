@@ -1409,15 +1409,48 @@ internal fun V2DeployScreen(
         var mainPasswordInput by remember { mutableStateOf(mainPassDraft) }
         var webLoginDraft by remember { mutableStateOf(panelLoginDraft) }
         var webPasswordDraft by remember { mutableStateOf(panelPasswordDraft) }
-        androidx.compose.material3.AlertDialog(onDismissRequest = { showSecretsDialog = false }, title = { Text("Авторизация") }, text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                HappField("Пароль туннеля", mainPasswordInput, { mainPasswordInput = it }, password = true)
-                TextButton(onClick = { mainPasswordInput = generate16CharPassword() }) { Text("Сгенерировать пароль туннеля") }
-                HappField("Логин веб-панели", webLoginDraft, { webLoginDraft = it })
-                HappField("Пароль веб-панели", webPasswordDraft, { webPasswordDraft = it }, password = true)
-                V2SwitchSetting("Секретный путь панели", savedSettings.secretPathEnabled, { enabled -> scope.launch { settingsStore.saveDeploySecretPath(enabled) } })
-            }
-        }, confirmButton = { androidx.compose.material3.TextButton(onClick = { mainPassDraft = mainPasswordInput; panelLoginDraft = webLoginDraft; panelPasswordDraft = webPasswordDraft; val draft = serverDraft().copy(mainPassword = mainPasswordInput, webLogin = webLoginDraft, webPassword = webPasswordDraft); scope.launch { settingsStore.saveDeployProfileDraft(draft); showSecretsDialog = false } }) { Text("Сохранить") } })
+        androidx.compose.material3.AlertDialog(
+            containerColor = colors.surface,
+            onDismissRequest = { showSecretsDialog = false },
+            title = { Text("Авторизация") },
+            text = {
+                Column(
+                    modifier = Modifier.verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    HappField(
+                        "Пароль туннеля", mainPasswordInput, { mainPasswordInput = it },
+                        password = true,
+                        onGeneratePassword = { mainPasswordInput = generate16CharPassword() },
+                    )
+                    HappField("Логин веб-панели", webLoginDraft, { webLoginDraft = it })
+                    HappField(
+                        "Пароль веб-панели", webPasswordDraft, { webPasswordDraft = it },
+                        password = true,
+                        onGeneratePassword = { webPasswordDraft = generate16CharPassword() },
+                    )
+                    V2SwitchSetting("Секретный путь панели", savedSettings.secretPathEnabled, { enabled ->
+                        scope.launch { settingsStore.saveDeploySecretPath(enabled) }
+                    })
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val draft = serverDraft().copy(
+                        mainPassword = mainPasswordInput,
+                        webLogin = webLoginDraft,
+                        webPassword = webPasswordDraft,
+                    )
+                    scope.launch {
+                        settingsStore.saveDeployProfileDraft(draft)
+                        mainPassDraft = mainPasswordInput
+                        panelLoginDraft = webLoginDraft
+                        panelPasswordDraft = webPasswordDraft
+                        showSecretsDialog = false
+                    }
+                }) { Text("Сохранить") }
+            },
+        )
     }
 
     if (showSshKeysDialog) {

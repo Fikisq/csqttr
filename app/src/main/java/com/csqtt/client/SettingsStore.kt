@@ -2099,8 +2099,15 @@ private val DEPLOY_LAST_INSPECTION_PANEL = booleanPreferencesKey("deploy_last_in
         return reset
     }
 
-    suspend fun saveDeploySecrets(mainPass: String, sshLogin: String, sshPass: String, webLogin: String, webPass: String) {
-        val profile = activeProfile.first()
+    suspend fun saveDeploySecrets(
+        mainPass: String,
+        sshLogin: String,
+        sshPass: String,
+        webLogin: String,
+        webPass: String,
+        forProfile: Int? = null,
+    ) {
+        val profile = forProfile ?: activeProfile.first()
         dataStore.edit { prefs ->
             prefs.putSecret(DEPLOY_MAIN_PASSWORD_ENCRYPTED, DEPLOY_MAIN_PASSWORD, mainPass, profile)
             prefs[getProfileKey(DEPLOY_LOGIN, profile)] = sshLogin

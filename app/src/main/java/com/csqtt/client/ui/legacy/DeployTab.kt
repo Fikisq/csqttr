@@ -219,6 +219,7 @@ internal fun DeployTab(
     LaunchedEffect(Unit) { DeployManager.init(context) }
 
     if (!savedSettings.isLoaded) return
+    LaunchedEffect(savedSettings.profile) { settingsStore.ensureDeployProfileDefaults(savedSettings.profile) }
 
     val savedIp = savedSettings.ip
     val savedLogin = savedSettings.sshLogin
@@ -630,6 +631,7 @@ internal fun DeployTab(
     if (showSecretsDialog) {
         DeploySecretsDialog(
             settingsStore = settingsStore,
+            deployProfile = savedSettings.profile,
             initialMainPass = savedMainPass,
             initialSshLogin = sshLogin,
             initialSshPass = sshPassword,
