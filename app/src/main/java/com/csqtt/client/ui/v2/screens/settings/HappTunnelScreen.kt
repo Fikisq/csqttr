@@ -58,7 +58,7 @@ fun HappTunnelScreen(settingsStore: SettingsStore, version: String, onSettings: 
     val rawLink by settingsStore.csqttLink.collectAsStateWithLifecycle("")
     val link = remember(rawLink) { com.csqtt.client.ui.legacy.utils.parseCsqttLink(rawLink) }
     val ownerHashes = if (participant) link?.hashes.orEmpty() else emptyList()
-    val removedOwner by settingsStore.linkHashesRemoved.collectAsStateWithLifecycle(emptySet())
+    val manualHashGroup by settingsStore.manualHashGroup.collectAsStateWithLifecycle(ManualHashGroup.Owner)
     val linkTokenActive = participant && !link?.vkAccessToken.isNullOrBlank()
     val hashes by settingsStore.vkHashes.collectAsStateWithLifecycle("")
     val hashMode by settingsStore.vkHashMode.collectAsStateWithLifecycle("manual")
@@ -168,7 +168,10 @@ fun HappTunnelScreen(settingsStore: SettingsStore, version: String, onSettings: 
                 }
                 }
                 }
-                if (ownerHashes.isNotEmpty()) Text("Хеши владельца: ${ownerHashes.count { it !in removedOwner }} · свои: ${parts.size}", color = c.accent, fontSize = 12.sp)
+                if (ownerHashes.isNotEmpty()) {
+                    val selectedCount = if (manualHashGroup == ManualHashGroup.Owner) ownerHashes.size else parts.size
+                    Text("${manualHashGroup.label}: $selectedCount", color = c.accent, fontSize = 12.sp)
+                }
                 if (ownerHashes.isEmpty() && !linkTokenActive) HappChoice("Режим хешей", when(hashMode) { "auto_api" -> "Авто API"; "auto_js" -> "Авто ВК"; else -> "Ручные хеши" }, listOf("Ручные хеши", "Авто API", "Авто ВК"), ::changeHash,
                     compact = true, shape = pill, tone = if (hashMode == "auto_js") orange else green, enabled = !busy,
                     help = "Ручные хеши — шесть хешей звонков без входа в VK. Авто API — получение через API VK. Авто ВК — получение через авторизованный аккаунт VK.")
@@ -235,10 +238,15 @@ fun HappTunnelScreen(settingsStore: SettingsStore, version: String, onSettings: 
     if (showHashes) V2HashesDialog(parts.getOrElse(0){""}, parts.getOrElse(1){""}, parts.getOrElse(2){""}, parts.getOrElse(3){""}, parts.getOrElse(4){""}, parts.getOrElse(5){""},
         VkHashValidationCodec.decode(results), { scope.launch { settingsStore.saveVkHashCheckResults(VkHashValidationCodec.encode(it)) } },
         { list -> VkHashValidator.check(context, list, settingsStore.selectedFingerprint.first(), settingsStore.activeClientIds.first()) },
-        onSave = { a,b,d,e,f,g -> scope.launch { settingsStore.saveVkHashesOnly(listOf(a,b,d,e,f,g).filter(String::isNotBlank).distinct().joinToString(",")) } }, onDismiss = { showHashes = false },
-        onManageVkAccounts = onVkAuthRequested,
-        ownerHashes = ownerHashes, removedOwnerHashes = removedOwner,
-        onRemovedOwnerHashesChange = { removed -> scope.launch { settingsStore.saveLinkHashesRemoved(removed, forProfile = editingProfile) } })
+        onSave = { group, hashes ->
+            scope.launch {
+                settingsStore.saveManualHashes(group, hashes.filter(String::isNotBlank).distinct().joinToString(","), editingProfile)
+            }
+        },
+        onDismiss = { showHashes = false },
+        ownerHashes = ownerHashes,
+        selectedGroup = if (ownerHashes.isNotEmpty()) manualHashGroup else ManualHashGroup.Own,
+    )
     if (showSubnets) V2TurnSubnetsDialog(subnet, ipLimit, { scope.launch { settingsStore.saveSelectedTurnSubnet(it, forProfile = editingProfile) } }, { scope.launch { settingsStore.saveTurnSubnetIpLimit(it, forProfile = editingProfile) } }, { showSubnets = false })
     if (showCaptcha) HappCaptchaDialog(settingsStore, profile, busy) { showCaptcha = false }
     pendingAutoJs?.let { apply -> V2AutoVkRiskDialog(true,

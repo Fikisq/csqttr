@@ -189,6 +189,7 @@ class SettingsStore(context: Context, deployScope: Boolean = false, readOnlyProf
         private val CSQTT_LINK_MODE = booleanPreferencesKey("csqtt_link_mode")
         // the owner's link hashes a participant took out of the connection (per profile, comma-separated)
         private val LINK_HASHES_REMOVED = stringPreferencesKey("link_hashes_removed")
+        private val MANUAL_HASH_GROUP = stringPreferencesKey("manual_hash_group")
         private val PARTICIPANT_SHOW_LOGS = booleanPreferencesKey("participant_show_logs")
         private val SUBSCRIPTION_URL = stringPreferencesKey("subscription_url")
         private val SUBSCRIPTION_TITLE = stringPreferencesKey("subscription_title")
@@ -931,6 +932,7 @@ private val DEPLOY_LAST_INSPECTION_PANEL = booleanPreferencesKey("deploy_last_in
         this[getProfileKey(PEER, profile)].isNullOrBlank() && this[getProfileKey(CSQTT_LINK, profile)].isNullOrBlank()
 
     private fun MutablePreferences.initializeManualHashes(profile: Int) {
+        remove(getProfileKey(MANUAL_HASH_GROUP, profile))
         this[getProfileKey(VK_HASH_MODE, profile)] = CsqttConstants.VkAutoHash.MODE_MANUAL
         this[getProfileKey(VK_AUTH_MODE, profile)] = CsqttConstants.VkAuth.MODE_CALLS
         if (hasImportedVkToken(this, profile)) {
@@ -1185,7 +1187,7 @@ private val DEPLOY_LAST_INSPECTION_PANEL = booleanPreferencesKey("deploy_last_in
             listOf(
                 PROFILE_NAME, PEER, SERVER_PEER_PORT, WORKERS_PER_HASH,
                 CONNECTION_PASSWORD, CONNECTION_PASSWORD_ENCRYPTED, CONNECTION_PASSWORD_LOCAL,
-                CSQTT_LINK, CSQTT_LINK_MODE, LINK_HASHES_REMOVED, SUBSCRIPTION_URL, SUBSCRIPTION_TITLE,
+                CSQTT_LINK, CSQTT_LINK_MODE, LINK_HASHES_REMOVED, MANUAL_HASH_GROUP, SUBSCRIPTION_URL, SUBSCRIPTION_TITLE,
                 SUBSCRIPTION_UUID, SUBSCRIPTION_NODE, SUBSCRIPTION_POWER,
             ).forEach { key -> prefs.remove(getProfileKey(key, profile)) }
             val active = prefs[ACTIVE_PROFILE] ?: CsqttConstants.Profiles.MIN_INDEX
@@ -1339,19 +1341,32 @@ private val DEPLOY_LAST_INSPECTION_PANEL = booleanPreferencesKey("deploy_last_in
         }
     }
 
-    val linkHashesRemoved: Flow<Set<String>> = dataStore.data.map { prefs ->
+    internal val manualHashGroup: Flow<ManualHashGroup> = dataStore.data.map { prefs ->
         val profile = prefs[ACTIVE_PROFILE] ?: 0
-        (prefs[getProfileKey(LINK_HASHES_REMOVED, profile)] ?: "").split(",").filter(String::isNotBlank).toSet()
+        Triple(
+            prefs[getProfileKey(CSQTT_LINK, profile)].takeIf { prefs[getProfileKey(CSQTT_LINK_MODE, profile)] == true },
+            prefs[getProfileKey(MANUAL_HASH_GROUP, profile)],
+            prefs[getProfileKey(LINK_HASHES_REMOVED, profile)],
+        )
+    }.distinctUntilChanged().map { (link, selected, removed) ->
+        val ownerHashes = link?.let { com.csqtt.client.ui.legacy.utils.parseCsqttLink(it) }?.hashes.orEmpty()
+        selectManualHashGroup(ownerHashes, ManualHashGroup.entries.firstOrNull { it.name == selected }, removed.orEmpty().split(',').toSet())
     }
 
-    suspend fun saveLinkHashesRemoved(removed: Set<String>, forProfile: Int? = null) {
+    internal suspend fun readParticipantHashes(ownerHashes: List<String>): String {
+        val prefs = dataStore.data.first()
+        val profile = prefs[ACTIVE_PROFILE] ?: 0
+        val selected = prefs[getProfileKey(MANUAL_HASH_GROUP, profile)]
+        val removed = prefs[getProfileKey(LINK_HASHES_REMOVED, profile)].orEmpty().split(',').toSet()
+        val group = selectManualHashGroup(ownerHashes, ManualHashGroup.entries.firstOrNull { it.name == selected }, removed)
+        return participantHashes(ownerHashes, group, prefs[getProfileKey(VK_HASHES, profile)].orEmpty())
+    }
+
+    internal suspend fun saveManualHashes(group: ManualHashGroup, ownHashes: String, forProfile: Int) {
         dataStore.edit { prefs ->
-            val profile = forProfile ?: (prefs[ACTIVE_PROFILE] ?: 0)
-            if (removed.isEmpty()) {
-                prefs.remove(getProfileKey(LINK_HASHES_REMOVED, profile))
-            } else {
-                prefs[getProfileKey(LINK_HASHES_REMOVED, profile)] = removed.joinToString(",")
-            }
+            prefs[getProfileKey(MANUAL_HASH_GROUP, forProfile)] = group.name
+            prefs[getProfileKey(VK_HASHES, forProfile)] = ownHashes
+            prefs.remove(getProfileKey(LINK_HASHES_REMOVED, forProfile))
         }
     }
 
@@ -2849,6 +2864,7 @@ private val DEPLOY_LAST_INSPECTION_PANEL = booleanPreferencesKey("deploy_last_in
             deploy.put("docker_install", prefs[getProfileKey(DOCKER_INSTALL, p)] ?: true)
             deploy.put("ssh_keys_mode", prefs[getProfileKey(SSH_KEYS_MODE, p)] ?: false)
             deploy.put("vk_hashes", prefs[getProfileKey(VK_HASHES, p)] ?: "")
+            prefs[getProfileKey(MANUAL_HASH_GROUP, p)]?.let { deploy.put("manual_hash_group", it) }
             deploy.put("secondary_vk_hash", prefs[getProfileKey(SECONDARY_VK_HASH, p)] ?: "")
             deploy.put("vk_auth_mode", prefs[getProfileKey(VK_AUTH_MODE, p)] ?: CsqttConstants.VkAuth.MODE_CALLS)
             deploy.put("vk_hash_mode", prefs[getProfileKey(VK_HASH_MODE, p)] ?: CsqttConstants.VkAutoHash.MODE_MANUAL)
@@ -2959,6 +2975,10 @@ private val DEPLOY_LAST_INSPECTION_PANEL = booleanPreferencesKey("deploy_last_in
                     if (deploy.has("docker_install")) mutable[getProfileKey(DOCKER_INSTALL, p)] = deploy.getBoolean("docker_install")
                     if (deploy.has("ssh_keys_mode")) mutable[getProfileKey(SSH_KEYS_MODE, p)] = deploy.getBoolean("ssh_keys_mode")
                     if (deploy.has("vk_hashes")) mutable[getProfileKey(VK_HASHES, p)] = deploy.getString("vk_hashes")
+                    val hashGroup = deploy.optString("manual_hash_group")
+                    ManualHashGroup.entries.firstOrNull { it.name == hashGroup }?.let {
+                        mutable[getProfileKey(MANUAL_HASH_GROUP, p)] = it.name
+                    }
                     if (deploy.has("secondary_vk_hash")) mutable[getProfileKey(SECONDARY_VK_HASH, p)] = deploy.getString("secondary_vk_hash")
                     if (deploy.has("vk_auth_mode")) mutable[getProfileKey(VK_AUTH_MODE, p)] = deploy.getString("vk_auth_mode")
                     if (deploy.has("vk_hash_mode")) mutable[getProfileKey(VK_HASH_MODE, p)] = deploy.getString("vk_hash_mode")

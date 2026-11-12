@@ -18,8 +18,6 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -28,6 +26,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import com.csqtt.client.ManualHashGroup
 import com.csqtt.client.VkHashValidationCodec
 import com.csqtt.client.VkHashValidationStatus
 import com.csqtt.client.ui.legacy.utils.normalizeVkHashInput
@@ -37,7 +36,7 @@ import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun HashesDialog(
+internal fun HashesDialog(
     hash1: String,
     hash2: String,
     hash3: String,
@@ -48,14 +47,10 @@ fun HashesDialog(
     onValidationResultsChange: (Map<String, VkHashValidationStatus>) -> Unit,
     onCheck: suspend (List<String>) -> Map<String, VkHashValidationStatus>,
     onAutoSave: ((String, String, String, String, String, String) -> Unit)? = null,
-    onSave: (String, String, String, String, String, String) -> Unit,
+    onSave: (ManualHashGroup, List<String>) -> Unit,
     onDismiss: () -> Unit,
-    onManageVkAccounts: (() -> Unit)? = null,
-    // A participant's link hashes: used first, never shown (they are the owner's), each can be checked, taken out or
-    // replaced by one of the participant's own (taken out, then the first free field below takes the new one)
     ownerHashes: List<String> = emptyList(),
-    removedOwnerHashes: Set<String> = emptySet(),
-    onRemovedOwnerHashesChange: (Set<String>) -> Unit = {},
+    selectedGroup: ManualHashGroup = ManualHashGroup.Own,
 ) {
     var h1 by rememberSaveable { mutableStateOf(hash1) }
     var h2 by rememberSaveable { mutableStateOf(hash2) }
@@ -64,8 +59,6 @@ fun HashesDialog(
     var h5 by rememberSaveable { mutableStateOf(hash5) }
     var h6 by rememberSaveable { mutableStateOf(hash6) }
     var results by remember(validationResults) { mutableStateOf(validationResults) }
-    var removedOwner by remember(removedOwnerHashes) { mutableStateOf(removedOwnerHashes) }
-    val fieldFocus = remember { List(6) { FocusRequester() } }
 
     var isChecking by remember { mutableStateOf(false) }
     var unavailableCount by remember { mutableIntStateOf(0) }
@@ -74,14 +67,10 @@ fun HashesDialog(
     val fields = listOf(h1, h2, h3, h4, h5, h6)
     val hashes = fields.map(::normalizeVkHashInput)
 
-    // the tunnel takes at most MAX_VK_HASHES, the owner's first: say when the participant's own would be cut
-    val ownerInUse = ownerHashes.count { it !in removedOwner }
-    val ownFilled = hashes.count { it.trim().length >= 16 }
-    val overLimit = ownerHashes.isNotEmpty() &&
-        ownerInUse + ownFilled > com.csqtt.client.CsqttConstants.Tunnel.MAX_VK_HASHES
-    var replaceNote by remember { mutableStateOf(false) }
-    var showOwnerHashes by rememberSaveable(ownerHashes.isNotEmpty()) { mutableStateOf(ownerHashes.isNotEmpty()) }
-    var pendingFocus by remember { mutableIntStateOf(-1) }
+    var group by rememberSaveable(selectedGroup) { mutableStateOf(selectedGroup) }
+    val showOwnerHashes = group == ManualHashGroup.Owner
+    val visibleFields = if (showOwnerHashes) List(6) { ownerHashes.getOrElse(it) { "" } } else fields
+    val activeHashes = (if (showOwnerHashes) ownerHashes else hashes).filter { it.length >= 16 }.distinct()
     val validBorder = if (isSystemInDarkTheme()) Color(0xFF66BB6A) else Color(0xFF2E7D32)
 
     fun updateHash(index: Int, raw: String) {
@@ -167,205 +156,105 @@ fun HashesDialog(
                     lineHeight = 15.sp,
                 )
 
-                onManageVkAccounts?.let { manage ->
-                    TextButton(onClick = manage, enabled = !isChecking, modifier = Modifier.fillMaxWidth()) {
-                        Text("Аккаунты VK")
-                    }
-                }
-                if (ownerHashes.isNotEmpty()) {
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        FilterChip(
-                            selected = showOwnerHashes,
-                            onClick = { showOwnerHashes = true },
-                            label = { Text("От владельца") },
-                            modifier = Modifier.weight(1f),
-                        )
-                        FilterChip(
-                            selected = !showOwnerHashes,
-                            onClick = { showOwnerHashes = false },
-                            label = { Text("Свои") },
-                            modifier = Modifier.weight(1f),
-                        )
-                    }
-                }
-                if (showOwnerHashes) {
-                    Text(
-                        "От владельца сервера",
-                        style = MaterialTheme.typography.labelLarge,
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                    ownerHashes.forEachIndexed { idx, ownerHash ->
-                        val removed = ownerHash in removedOwner
-                        val status = results[ownerHash]
-                        fun setRemoved(value: Boolean) {
-                            removedOwner = if (value) removedOwner + ownerHash else removedOwner - ownerHash
-                            onRemovedOwnerHashesChange(removedOwner)
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    for (option in ManualHashGroup.entries) {
+                        val select = {
+                            group = option
+                            unavailableCount = 0
                         }
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    "От владельца ${idx + 1}",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = if (removed) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
-                                )
-                                Text(
-                                    when {
-                                        removed -> "убран"
-                                        status == VkHashValidationStatus.Valid -> "работает"
-                                        status == VkHashValidationStatus.Invalid -> "не работает"
-                                        else -> "не проверен"
-                                    },
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = when {
-                                        removed -> MaterialTheme.colorScheme.onSurfaceVariant
-                                        status == VkHashValidationStatus.Valid -> validBorder
-                                        status == VkHashValidationStatus.Invalid -> MaterialTheme.colorScheme.error
-                                        else -> MaterialTheme.colorScheme.onSurfaceVariant
-                                    },
-                                )
+                        val enabled = !isChecking && (option != ManualHashGroup.Owner || ownerHashes.isNotEmpty())
+                        if (group == option) {
+                            Button(onClick = select, enabled = enabled, modifier = Modifier.weight(1f), shape = CsqttShapes.Pill) {
+                                Text(option.label)
                             }
-                            if (removed) {
-                                TextButton(onClick = { setRemoved(false) }, enabled = !isChecking) { Text("Вернуть") }
-                            } else {
-                                TextButton(
-                                    onClick = {
-                                        setRemoved(true)
-                                        val free = hashes.indexOfFirst { it.isBlank() }
-                                        replaceNote = free < 0
-                                        pendingFocus = free
-                                        showOwnerHashes = false
-                                    },
-                                    enabled = !isChecking,
-                                ) { Text("Заменить") }
+                        } else {
+                            OutlinedButton(onClick = select, enabled = enabled, modifier = Modifier.weight(1f), shape = CsqttShapes.Pill) {
+                                Text(option.label)
+                            }
+                        }
+                    }
+                }
+
+                visibleFields.forEachIndexed { idx, value ->
+                    val hash = if (showOwnerHashes) value else hashes[idx]
+                    val isShort = hash.isNotBlank() && hash.length < 16
+                    val status = results[hash]
+                    val isInvalid = status == VkHashValidationStatus.Invalid
+                    val fieldColors = if (status == VkHashValidationStatus.Valid) {
+                        OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = validBorder,
+                            unfocusedBorderColor = validBorder,
+                        )
+                    } else {
+                        OutlinedTextFieldDefaults.colors()
+                    }
+                    OutlinedTextField(
+                        value = value,
+                        onValueChange = { updateHash(idx, it) },
+                        readOnly = showOwnerHashes,
+                        label = { Text("Хеш ${idx + 1}", maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis) },
+                        placeholder = {
+                            Text(
+                                "Ссылка звонка или хеш",
+                                maxLines = 1,
+                                softWrap = false,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        },
+                        singleLine = true,
+                        enabled = !isChecking,
+                        isError = isShort || isInvalid,
+                        supportingText = if (isShort) {
+                            { Text("Хеш ${idx + 1} — короткий (мин. 16)", color = MaterialTheme.colorScheme.error) }
+                        } else null,
+                        trailingIcon = if (showOwnerHashes) null else { {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.padding(end = 4.dp),
+                            ) {
                                 IconButton(
-                                    onClick = { setRemoved(true) },
-                                    enabled = !isChecking,
+                                    onClick = {
+                                        val clipText = context.getSystemService(ClipboardManager::class.java)
+                                            ?.primaryClip
+                                            ?.takeIf { it.itemCount > 0 }
+                                            ?.getItemAt(0)
+                                            ?.coerceToText(context)
+                                            ?.toString()
+                                        if (!clipText.isNullOrBlank()) {
+                                            updateHash(idx, clipText)
+                                        }
+                                    },
+                                    modifier = Modifier.size(36.dp),
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Outlined.ContentPaste,
+                                        contentDescription = "Вставить из буфера в хеш ${idx + 1}",
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(20.dp),
+                                    )
+                                }
+                                IconButton(
+                                    onClick = { updateHash(idx, "") },
+                                    enabled = value.isNotEmpty(),
                                     modifier = Modifier.size(36.dp),
                                 ) {
                                     Icon(
                                         imageVector = Icons.Default.Delete,
-                                        contentDescription = "Убрать хеш владельца ${idx + 1}",
-                                        tint = MaterialTheme.colorScheme.error,
+                                        contentDescription = "Удалить хеш ${idx + 1}",
+                                        tint = MaterialTheme.colorScheme.error.copy(
+                                            alpha = if (value.isNotEmpty()) 1f else 0.38f,
+                                        ),
                                         modifier = Modifier.size(20.dp),
                                     )
                                 }
                             }
-                        }
-                    }
-                }
-
-                if (!showOwnerHashes) {
-                    if (replaceNote) {
-                        Text(
-                            "Свободных полей нет: очистите один из своих хешей и вставьте новый",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.error,
-                        )
-                    }
-                    if (overLimit) {
-                        Text(
-                            "Используются первые ${com.csqtt.client.CsqttConstants.Tunnel.MAX_VK_HASHES} хешей: сначала " +
-                                "владельца, потом ваши. Чтобы работали все ваши, уберите часть хешей владельца.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            lineHeight = 15.sp,
-                        )
+                        } },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = CsqttShapes.Control,
+                        colors = fieldColors,
+                    )
                     }
 
-                    LaunchedEffect(pendingFocus) {
-                        if (pendingFocus >= 0) {
-                            fieldFocus[pendingFocus].requestFocus()
-                            pendingFocus = -1
-                        }
-                    }
-                    fields.forEachIndexed { idx, value ->
-                        val hash = hashes[idx]
-                        // with the owner's hashes the participant's own are optional
-                        val label = if (idx == 0 && ownerHashes.isEmpty()) "VK Хеш 1 *" else "VK Хеш ${idx + 1}"
-                        val isShort = hash.isNotBlank() && hash.length < 16
-                        val status = results[hash]
-                        val isInvalid = status == VkHashValidationStatus.Invalid
-                        val fieldColors = if (status == VkHashValidationStatus.Valid) {
-                            OutlinedTextFieldDefaults.colors(
-                                focusedBorderColor = validBorder,
-                                unfocusedBorderColor = validBorder,
-                            )
-                        } else {
-                            OutlinedTextFieldDefaults.colors()
-                        }
-                        OutlinedTextField(
-                            value = value,
-                            onValueChange = { updateHash(idx, it) },
-                            label = { Text(label, maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis) },
-                            placeholder = {
-                                Text(
-                                    "Ссылка звонка или хеш",
-                                    maxLines = 1,
-                                    softWrap = false,
-                                    overflow = TextOverflow.Ellipsis,
-                                )
-                            },
-                            singleLine = true,
-                            enabled = !isChecking,
-                            isError = isShort || isInvalid,
-                            supportingText = if (isShort) {
-                                { Text("Хеш ${idx + 1} — короткий (мин. 16)", color = MaterialTheme.colorScheme.error) }
-                            } else null,
-                            trailingIcon = {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier.padding(end = 4.dp),
-                                ) {
-                                    IconButton(
-                                        onClick = {
-                                            val clipText = context.getSystemService(ClipboardManager::class.java)
-                                                ?.primaryClip
-                                                ?.takeIf { it.itemCount > 0 }
-                                                ?.getItemAt(0)
-                                                ?.coerceToText(context)
-                                                ?.toString()
-                                            if (!clipText.isNullOrBlank()) {
-                                                updateHash(idx, clipText)
-                                            }
-                                        },
-                                        modifier = Modifier.size(36.dp),
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Outlined.ContentPaste,
-                                            contentDescription = "Вставить из буфера в хеш ${idx + 1}",
-                                            tint = MaterialTheme.colorScheme.primary,
-                                            modifier = Modifier.size(20.dp),
-                                        )
-                                    }
-                                    IconButton(
-                                        onClick = { updateHash(idx, "") },
-                                        enabled = value.isNotEmpty(),
-                                        modifier = Modifier.size(36.dp),
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Default.Delete,
-                                            contentDescription = "Удалить хеш ${idx + 1}",
-                                            tint = MaterialTheme.colorScheme.error.copy(
-                                                alpha = if (value.isNotEmpty()) 1f else 0.38f,
-                                            ),
-                                            modifier = Modifier.size(20.dp),
-                                        )
-                                    }
-                                }
-                            },
-                            modifier = Modifier.fillMaxWidth().focusRequester(fieldFocus[idx]),
-                            shape = CsqttShapes.Control,
-                            colors = fieldColors,
-                        )
-                    }
-                }
-
-                // the check covers the owner's hashes still in use too (their status shows above, never the hash)
-                val activeHashes = (ownerHashes.filterNot { it in removedOwner } + hashes.map(String::trim))
-                    .filter { it.length >= 16 }.distinct()
                 OutlinedButton(
                     onClick = {
                         isChecking = true
@@ -403,7 +292,7 @@ fun HashesDialog(
 
                 Button(
                     onClick = {
-                        onSave(hashes[0], hashes[1], hashes[2], hashes[3], hashes[4], hashes[5])
+                        onSave(group, hashes)
                     },
                     modifier = Modifier.fillMaxWidth().height(CsqttSizes.ControlHeight),
                     shape = CsqttShapes.Pill,

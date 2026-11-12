@@ -1,6 +1,7 @@
 package com.csqtt.client
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Test
 
@@ -130,6 +131,21 @@ class ConnectionStartPolicyTest {
                 connectionPasswordSet = false,
                 connectionPasswordReadable = false,
                 hashesReady = true,
+            ),
+        )
+    }
+
+    @Test
+    fun emptyOwnGroupCannotStartWithOwnerHashesOrAnOldAutoToken() {
+        assertFalse(
+            ConnectionStartPolicy.hasReadyVkCredentials(
+                linkMode = true,
+                linkHashCount = 2,
+                linkTokenPresent = false,
+                autoHashMode = true,
+                storedTokenPresent = true,
+                manualHashCount = 0,
+                manualLinkGroup = ManualHashGroup.Own,
             ),
         )
     }

@@ -59,6 +59,7 @@ import com.csqtt.client.TunnelManager
 import com.csqtt.client.TunnelService
 import com.csqtt.client.VkHashValidationCodec
 import com.csqtt.client.newTunnelSessionId
+import com.csqtt.client.ManualHashGroup
 import com.csqtt.client.resolveConnectionSource
 import com.csqtt.client.showRaisedToast
 import com.csqtt.client.ui.legacy.components.CsqttScreen
@@ -109,9 +110,8 @@ internal fun ConnectionTab(
     var pendingStartAfterVpnPermission by remember { mutableStateOf(false) }
 
     val parsedLink = remember(csqttLink) { parseCsqttLink(csqttLink) }
-    val linkHashesRemoved by settingsStore.linkHashesRemoved.collectAsStateWithLifecycle(initialValue = emptySet())
-    // the owner's hashes still in use: the ones the participant took out do not count
-    val linkHashes = parsedLink?.hashes.orEmpty().filterNot { it in linkHashesRemoved }
+    val manualHashGroup by settingsStore.manualHashGroup.collectAsStateWithLifecycle(ManualHashGroup.Owner)
+    val linkHashes = parsedLink?.hashes.orEmpty()
     val linkTokenActive = csqttLinkMode && parsedLink?.vkAccessToken?.isNotEmpty() == true
     val rawManualHashes = remember(vkHashes) {
         vkHashes.split(Regex("[,\\s\\n]+"))
@@ -139,6 +139,7 @@ internal fun ConnectionTab(
         autoHashMode = autoHashMode,
         storedTokenPresent = vkTokenActive,
         manualHashCount = manualHashes.size,
+        manualLinkGroup = manualHashGroup.takeIf { linkHashes.isNotEmpty() },
     )
     val peerPortValid = !manualPortsEnabled || serverPeerPort in 1..65535
     val trimmedPeer = peer.trim()

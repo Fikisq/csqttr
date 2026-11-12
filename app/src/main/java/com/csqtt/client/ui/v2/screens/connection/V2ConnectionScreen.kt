@@ -77,6 +77,7 @@ import com.csqtt.client.TunnelService
 import com.csqtt.client.VkHashValidationCodec
 import com.csqtt.client.defaultProfileName
 import com.csqtt.client.newTunnelSessionId
+import com.csqtt.client.ManualHashGroup
 import com.csqtt.client.resolveConnectionSource
 import com.csqtt.client.showRaisedToast
 import com.csqtt.client.ui.legacy.utils.parseCsqttLink
@@ -219,9 +220,8 @@ fun V2ConnectionScreen(
     val parsedLink = remember(tunnelAuthSettings.csqttLink) {
         parseCsqttLink(tunnelAuthSettings.csqttLink)
     }
-    val linkHashesRemoved by settingsStore.linkHashesRemoved.collectAsStateWithLifecycle(initialValue = emptySet())
-    // the owner's hashes still in use: the ones the participant took out do not count
-    val linkHashes = parsedLink?.hashes.orEmpty().filterNot { it in linkHashesRemoved }
+    val manualHashGroup by settingsStore.manualHashGroup.collectAsStateWithLifecycle(ManualHashGroup.Owner)
+    val linkHashes = parsedLink?.hashes.orEmpty()
     val linkTokenActive = csqttLinkMode && !parsedLink?.vkAccessToken.isNullOrEmpty()
 
     val rawManualHashes = remember(vkHashes) {
@@ -243,6 +243,7 @@ fun V2ConnectionScreen(
         autoOrInteractive,
         hashesReady,
         manualHashes.size,
+        manualLinkGroup = manualHashGroup.takeIf { linkHashes.isNotEmpty() },
     )
     val peerPortValid = serverPeerPort in 1..65535
     val trimmedPeer = peer.trim()

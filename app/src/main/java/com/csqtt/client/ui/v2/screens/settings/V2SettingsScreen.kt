@@ -62,6 +62,7 @@ import com.csqtt.client.R
 import com.csqtt.client.SettingsStore
 import com.csqtt.client.TunnelAuthSnapshot
 import com.csqtt.client.TunnelManager
+import com.csqtt.client.ManualHashGroup
 import com.csqtt.client.VkHashValidationCodec
 import com.csqtt.client.VkHashValidator
 import com.csqtt.client.showRaisedToast
@@ -223,7 +224,7 @@ fun V2SettingsScreen(
         com.csqtt.client.ui.legacy.utils.parseCsqttLink(tunnelAuthSettings.csqttLink)
     }
     val linkHashes = parsedCsqttLink?.hashes.orEmpty()
-    val linkHashesRemoved by settingsStore.linkHashesRemoved.collectAsStateWithLifecycle(initialValue = emptySet())
+    val manualHashGroup by settingsStore.manualHashGroup.collectAsStateWithLifecycle(ManualHashGroup.Owner)
     val linkVkAccessToken = parsedCsqttLink?.vkAccessToken.orEmpty()
     val linkTokenActive = participantMode && linkVkAccessToken.isNotEmpty()
 
@@ -413,7 +414,7 @@ fun V2SettingsScreen(
                     // the owner's hashes (never shown) plus the participant's own, edited in one sheet
                     V2ActionSetting(
                         title = "VK хеши",
-                        action = "От владельца: ${linkHashes.count { it !in linkHashesRemoved }} · свои: $filledHashCount",
+                        action = "${manualHashGroup.label}: ${if (manualHashGroup == ManualHashGroup.Owner) linkHashes.size else filledHashCount}",
                         onAction = { showHashesDialog = true },
                     )
                 } else if (linkTokenActive) {
@@ -907,8 +908,7 @@ fun V2SettingsScreen(
     if (showHashesDialog) {
         V2HashesDialog(
             ownerHashes = if (participantMode) linkHashes else emptyList(),
-            removedOwnerHashes = linkHashesRemoved,
-            onRemovedOwnerHashesChange = { removed -> scope.launch { settingsStore.saveLinkHashesRemoved(removed) } },
+            selectedGroup = if (participantMode && linkHashes.isNotEmpty()) manualHashGroup else ManualHashGroup.Own,
             hash1 = vkHash1,
             hash2 = vkHash2,
             hash3 = vkHash3,
@@ -940,19 +940,18 @@ fun V2SettingsScreen(
                     )
                 }
             },
-            onSave = { h1: String, h2: String, h3: String, h4: String, h5: String, h6: String ->
-                vkHash1 = stripVkUrlStatic(h1)
-                vkHash2 = stripVkUrlStatic(h2)
-                vkHash3 = stripVkUrlStatic(h3)
-                vkHash4 = stripVkUrlStatic(h4)
-                vkHash5 = stripVkUrlStatic(h5)
-                vkHash6 = stripVkUrlStatic(h6)
+            onSave = { group, hashes ->
+                vkHash1 = hashes[0]
+                vkHash2 = hashes[1]
+                vkHash3 = hashes[2]
+                vkHash4 = hashes[3]
+                vkHash5 = hashes[4]
+                vkHash6 = hashes[5]
                 scope.launch {
-                    settingsStore.saveVkHashesOnly(
-                        listOf(vkHash1, vkHash2, vkHash3, vkHash4, vkHash5, vkHash6)
-                            .filter { it.isNotBlank() && it.length >= 16 }
-                            .distinct()
-                            .joinToString(","),
+                    settingsStore.saveManualHashes(
+                        group,
+                        hashes.filter { it.length >= 16 }.distinct().joinToString(","),
+                        activeProfile,
                     )
                 }
             },

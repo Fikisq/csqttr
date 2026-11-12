@@ -41,6 +41,7 @@ import com.csqtt.client.TunnelAuthSnapshot
 import com.csqtt.client.CsqttConstants
 import com.csqtt.client.GoobyMode
 import com.csqtt.client.WorkerCountPolicy
+import com.csqtt.client.ManualHashGroup
 import com.csqtt.client.VkHashValidationCodec
 import com.csqtt.client.VkHashValidator
 import com.csqtt.client.shouldConfirmAutoJsMode
@@ -206,7 +207,7 @@ internal fun SettingsTabContent(
     }
     val parsedCsqttLink = remember(linkText) { parseCsqttLink(linkText) }
     val linkHashes = parsedCsqttLink?.hashes.orEmpty()
-    val linkHashesRemoved by settingsStore.linkHashesRemoved.collectAsStateWithLifecycle(initialValue = emptySet())
+    val manualHashGroup by settingsStore.manualHashGroup.collectAsStateWithLifecycle(ManualHashGroup.Owner)
     val linkVkAccessToken = parsedCsqttLink?.vkAccessToken.orEmpty()
     val serverWorkers by TunnelManager.serverAssignedWorkers.collectAsState()
     val effectiveServerWorkers = serverWorkers.takeIf { tunnelRunning && it in 3..100 }
@@ -433,8 +434,7 @@ internal fun SettingsTabContent(
     val isPeerValid = peerInput.isNotBlank() && !peerInput.contains(":")
     val isPeerPortValid = peerPortInput.toIntOrNull() in 1..65535
     val hashesReadyForTunnel = when {
-        // the owner's hashes still in use, or the participant's own
-        participantMode && linkHashes.isNotEmpty() -> linkHashes.any { it !in linkHashesRemoved } || filledHashCount > 0
+        participantMode && linkHashes.isNotEmpty() -> manualHashGroup == ManualHashGroup.Owner || filledHashCount > 0
         participantMode && linkTokenActive -> true
         autoHashMode -> effectiveVkTokenActive
         else -> filledHashCount > 0
@@ -446,10 +446,8 @@ internal fun SettingsTabContent(
     val passwordRequiredError = showRequiredFieldErrors && !participantMode && connectionPassword.isBlank()
     if (showHashesDialog) {
         HashesDialog(
-            onManageVkAccounts = onVkAuthRequested,
             ownerHashes = if (participantMode) linkHashes else emptyList(),
-            removedOwnerHashes = linkHashesRemoved,
-            onRemovedOwnerHashesChange = { removed -> scope.launch { settingsStore.saveLinkHashesRemoved(removed) } },
+            selectedGroup = if (participantMode && linkHashes.isNotEmpty()) manualHashGroup else ManualHashGroup.Own,
             hash1 = vkHash1,
             hash2 = vkHash2,
             hash3 = vkHash3,
@@ -480,20 +478,16 @@ internal fun SettingsTabContent(
                 vkHash6 = cleaned6
                 saveTunnelSettingsNow(normalizeHashes(cleaned1, cleaned2, cleaned3, cleaned4, cleaned5, cleaned6))
             },
-            onSave = { h1, h2, h3, h4, h5, h6 ->
-                val cleaned1 = stripVkUrlStatic(h1)
-                val cleaned2 = stripVkUrlStatic(h2)
-                val cleaned3 = stripVkUrlStatic(h3)
-                val cleaned4 = stripVkUrlStatic(h4)
-                val cleaned5 = stripVkUrlStatic(h5)
-                val cleaned6 = stripVkUrlStatic(h6)
-                vkHash1 = cleaned1
-                vkHash2 = cleaned2
-                vkHash3 = cleaned3
-                vkHash4 = cleaned4
-                vkHash5 = cleaned5
-                vkHash6 = cleaned6
-                saveTunnelSettingsNow(normalizeHashes(cleaned1, cleaned2, cleaned3, cleaned4, cleaned5, cleaned6)) {
+            onSave = { group, hashes ->
+                vkHash1 = hashes[0]
+                vkHash2 = hashes[1]
+                vkHash3 = hashes[2]
+                vkHash4 = hashes[3]
+                vkHash5 = hashes[4]
+                vkHash6 = hashes[5]
+                saveJob?.cancel()
+                scope.launch {
+                    settingsStore.saveManualHashes(group, normalizeHashes(*hashes.toTypedArray()), activeProfile)
                     showHashesDialog = false
                 }
             },
@@ -554,10 +548,9 @@ internal fun SettingsTabContent(
                     }
 
                     if (linkHashes.isNotEmpty()) {
-                        // the owner's hashes (never shown) plus the participant's own, edited in one dialog
-                        val ownerInUse = linkHashes.count { it !in linkHashesRemoved }
+                        val selectedCount = if (manualHashGroup == ManualHashGroup.Owner) linkHashes.size else filledHashCount
                         Text(
-                            text = "VK хеши: от владельца — $ownerInUse, свои — $filledHashCount",
+                            text = "${manualHashGroup.label}: $selectedCount",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.primary,
                             fontWeight = FontWeight.SemiBold,

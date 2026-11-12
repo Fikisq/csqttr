@@ -250,7 +250,7 @@ class HappInterfaceTest {
         runBlocking { check(store.readProfileConnectionSettings(0).connectionPassword == "DemoPassword1234") }
     }
 
-    @Test fun importedOwnerHashesStayHiddenAndCombineWithParticipantHashes() {
+    @Test fun importedOwnerAndOwnHashesAreVisibleAndUsedSeparately() {
         val owner = "owner-private-hash-1234567890"
         val own = "participant-own-hash-1234567890"
         runBlocking {
@@ -261,11 +261,16 @@ class HappInterfaceTest {
         compose.onNodeWithText("Туннель").performClick()
         compose.waitUntil(5000) { compose.onAllNodesWithText("Настроить хеши").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText("Настроить хеши").performClick()
+        compose.onNodeWithText(owner).assertIsDisplayed()
+        compose.onNodeWithText(own).assertDoesNotExist()
+        compose.onNodeWithText("Аккаунты VK").assertDoesNotExist()
+        compose.onNodeWithText("Заменить").assertDoesNotExist()
+        runBlocking { check(resolveConnectionSource(store)?.hashes == owner) }
+        compose.onNodeWithText("Свои").performClick()
+        compose.onNodeWithText(own).assertIsDisplayed()
         compose.onNodeWithText(owner).assertDoesNotExist()
-        compose.onNodeWithText("От владельца 1").assertExists()
-        compose.onNodeWithText(own).assertExists()
-        compose.onNodeWithContentDescription("Убрать хеш владельца 1").performClick()
-        compose.waitUntil(5000) { runBlocking { owner in store.linkHashesRemoved.first() } }
+        compose.onNodeWithText("Сохранить").performClick()
+        compose.waitUntil(5000) { runBlocking { store.manualHashGroup.first() == ManualHashGroup.Own } }
         runBlocking {
             check(resolveConnectionSource(store)?.hashes == own)
             store.saveProfileConnectionSettings(27, "203.0.113.128", 46128, "ChangedPassword", 20)
@@ -274,7 +279,6 @@ class HappInterfaceTest {
             check(source.password == "ChangedPassword")
             check(source.hashes == own)
         }
-        compose.onNodeWithContentDescription("Закрыть").performClick()
         runBlocking { store.clearProfile(27); store.saveActiveProfile(0) }
     }
 
@@ -305,10 +309,10 @@ class HappInterfaceTest {
         compose.onNodeWithText("Туннель").performClick()
         compose.waitUntil(5000) { compose.onAllNodesWithText("Настроить хеши").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText("Настроить хеши").performClick()
-        hashes.forEach { compose.onNodeWithText(it).assertIsDisplayed() }
+        hashes.forEach { compose.onNodeWithText(it).performScrollTo().assertIsDisplayed() }
         compose.onNodeWithText("Сохранить").assertIsDisplayed()
         screenshot("happ-manual-hashes.png")
-        compose.onNodeWithText(hashes.first()).performTextReplacement("edited-hash-1234567890")
+        compose.onNodeWithText(hashes.first()).performScrollTo().performTextReplacement("edited-hash-1234567890")
         compose.onNodeWithText("Сохранить").performClick()
         compose.waitUntil(5000) { runBlocking { store.vkHashes.first().startsWith("edited-hash-1234567890,") } }
         runBlocking { check(store.vkHashes.first().split(',').drop(1) == hashes.drop(1)) }

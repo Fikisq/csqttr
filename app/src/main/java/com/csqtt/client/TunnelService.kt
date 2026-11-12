@@ -612,7 +612,7 @@ class TunnelService : Service() {
                 val store = SettingsStore(applicationContext)
                 val vkHashMode = store.vkHashMode.first()
                 val source = resolveConnectionSource(store) ?: return@launch
-                if (vkHashMode == CsqttConstants.VkAutoHash.MODE_MANUAL && !source.tokenFromLink) {
+                if ((source.hashesFromLink || vkHashMode == CsqttConstants.VkAutoHash.MODE_MANUAL) && !source.tokenFromLink) {
                     return@launch
                 }
                 val accountAutoJs = previous.vkAuthMode == CsqttConstants.VkAuth.MODE_AUTO_JS ||
