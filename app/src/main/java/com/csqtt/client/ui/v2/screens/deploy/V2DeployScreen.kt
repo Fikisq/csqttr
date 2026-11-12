@@ -1028,8 +1028,8 @@ internal fun V2DeployScreen(
         val pill = RoundedCornerShape(50)
         BoxWithConstraints(Modifier.fillMaxSize()) {
         val progressSpace = if (isDeploying) 60.dp else if (actionsBusy) 44.dp else 0.dp
-        val cardMinimum = (maxHeight - form.profileHeight - 12.dp - progressSpace).coerceAtLeast(0.dp)
-        Column(Modifier.fillMaxWidth().imePadding().verticalScroll(rememberScrollState()).testTag("deploy-settings"), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        val cardMinimum = (maxHeight - form.profileHeight - layout.gap - progressSpace).coerceAtLeast(0.dp)
+        Column(Modifier.fillMaxWidth().imePadding().verticalScroll(rememberScrollState()).testTag("deploy-settings"), verticalArrangement = Arrangement.spacedBy(layout.gap)) {
             HappProfileHeader(
                 title = serverTitle,
                 subtitle = if (host.isBlank()) "Сервер не настроен" else "$host:${sshPort.ifBlank { "22" }}",
