@@ -1022,11 +1022,14 @@ internal fun V2DeployScreen(
     V2AdaptiveScreen(modifier.fillMaxSize().padding(horizontal = V2Sizes.ScreenPadding), dense = true) {
         val layout = LocalV2AdaptiveMetrics.current
         V2TopBar(version = version, title = "Деплой", onSettings = onSettings)
-        V2AdaptiveForm(Modifier.weight(1f).fillMaxWidth(), fieldRows = if (manualPorts) 3 else 2, controlRows = 4,
+        V2AdaptiveForm(Modifier.weight(1f).fillMaxWidth(), fieldRows = 3, controlRows = 4,
             extraHeight = 80.dp + if (isDeploying) 48.dp else if (actionsBusy) 32.dp else 0.dp) { form ->
         val formLayout = LocalV2AdaptiveMetrics.current
         val pill = RoundedCornerShape(50)
-        Column(Modifier.fillMaxWidth().imePadding().verticalScroll(rememberScrollState()).testTag("deploy-settings"), verticalArrangement = Arrangement.spacedBy(form.gap)) {
+        BoxWithConstraints(Modifier.fillMaxSize()) {
+        val progressSpace = if (isDeploying) 60.dp else if (actionsBusy) 44.dp else 0.dp
+        val cardMinimum = (maxHeight - form.profileHeight - 12.dp - progressSpace).coerceAtLeast(0.dp)
+        Column(Modifier.fillMaxWidth().imePadding().verticalScroll(rememberScrollState()).testTag("deploy-settings"), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             HappProfileHeader(
                 title = serverTitle,
                 subtitle = if (host.isBlank()) "Сервер не настроен" else "$host:${sshPort.ifBlank { "22" }}",
@@ -1043,18 +1046,24 @@ internal fun V2DeployScreen(
                         Icon(Icons.Default.Add, "Добавить VPS", tint = colors.textPrimary, modifier = Modifier.size(22.dp))
                     }
             }
-            V2Card(modifier = Modifier.testTag("deploy-card"), shape = RoundedCornerShape(28.dp), contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp), color = colors.surface,
-                verticalArrangement = Arrangement.spacedBy(form.innerGap)) {
+            V2Card(modifier = Modifier.testTag("deploy-card"), shape = RoundedCornerShape(28.dp), contentPadding = PaddingValues(start = 14.dp, end = 14.dp, top = 12.dp, bottom = 8.dp), color = colors.surface,
+                contentModifier = Modifier.heightIn(min = cardMinimum), verticalArrangement = Arrangement.SpaceBetween) {
                 Column {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     HappField("Адрес сервера", host, { value -> val split = splitPastedHostPort(host, value); host = split?.first ?: value; if (split != null) sshPort = split.second }, Modifier.weight(1f), enabled = !actionsBusy, compact = true, shape = pill, floatingLabel = true, maxFieldHeight = 44.dp)
                     HappField("Порт SSH", sshPort, { sshPort = it.filter(Char::isDigit).take(5) }, Modifier.weight(1f), number = true, enabled = !actionsBusy, compact = true, shape = pill, floatingLabel = true, maxFieldHeight = 44.dp)
                 }
-                DeployFormToggle("Ручные порты", manualPorts, { manualPorts = it }, enabled = !actionsBusy)
-                if (manualPorts) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                androidx.compose.animation.AnimatedVisibility(
+                    visible = manualPorts,
+                    enter = androidx.compose.animation.expandVertically(animationSpec = androidx.compose.animation.core.tween(140), expandFrom = Alignment.Top),
+                    exit = androidx.compose.animation.shrinkVertically(animationSpec = androidx.compose.animation.core.tween(120), shrinkTowards = Alignment.Top),
+                ) {
+                    Column {
+                    Spacer(Modifier.height(8.dp))
+                    Row(Modifier.testTag("deploy-manual-ports"), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         HappField("Порт туннеля", peerPort, { peerPort = it.filter(Char::isDigit).take(5) }, Modifier.weight(1f), number = true, enabled = !actionsBusy, compact = true, shape = pill, floatingLabel = true, maxFieldHeight = 44.dp)
                         HappField("Порт WEB", webPort, { webPort = it.filter(Char::isDigit).take(5) }, Modifier.weight(1f), number = true, enabled = !actionsBusy, compact = true, shape = pill, floatingLabel = true, maxFieldHeight = 44.dp)
+                    }
                     }
                 }
                 Spacer(Modifier.height(8.dp))
@@ -1070,6 +1079,7 @@ internal fun V2DeployScreen(
                 }
                 }
                 DeployFormToggle("Ключи SSH", sshKeysMode, { sshKeysMode = it }, enabled = !actionsBusy)
+                DeployFormToggle("Ручные порты", manualPorts, { manualPorts = it }, enabled = !actionsBusy)
                 DeployFormToggle("Установить в Docker", dockerInstall, { dockerInstall = it }, enabled = !actionsBusy)
                 Row(Modifier.fillMaxWidth().heightIn(min = formLayout.rowHeight).clickable(enabled = !actionsBusy) { showSecretsDialog = true }, verticalAlignment = Alignment.CenterVertically) {
                     Text("Авторизация", Modifier.weight(1f), fontSize = V2TextSizes.Body)
@@ -1106,6 +1116,7 @@ internal fun V2DeployScreen(
             } else if (actionsBusy) {
                 Text(if(isInspecting) "Проверка VPS по SSH…" else "Операция выполняется · подробности в логах", color = colors.textSecondary, fontSize = V2TextSizes.Secondary)
             }
+        }
         }
         }
         Row(Modifier.fillMaxWidth().testTag("deploy-actions").padding(top = 6.dp, bottom = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
