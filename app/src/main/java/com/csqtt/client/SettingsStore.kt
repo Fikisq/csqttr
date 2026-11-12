@@ -927,6 +927,19 @@ private val DEPLOY_LAST_INSPECTION_PANEL = booleanPreferencesKey("deploy_last_in
             )
         }.first()
 
+    private fun Preferences.isEmptyConnectionSlot(profile: Int): Boolean =
+        this[getProfileKey(PEER, profile)].isNullOrBlank() && this[getProfileKey(CSQTT_LINK, profile)].isNullOrBlank()
+
+    private fun MutablePreferences.initializeManualHashes(profile: Int) {
+        this[getProfileKey(VK_HASH_MODE, profile)] = CsqttConstants.VkAutoHash.MODE_MANUAL
+        this[getProfileKey(VK_AUTH_MODE, profile)] = CsqttConstants.VkAuth.MODE_CALLS
+        if (hasImportedVkToken(this, profile)) {
+            remove(getProfileKey(VK_ACCESS_TOKEN_ENCRYPTED, profile))
+            remove(getProfileKey(VK_ACCESS_TOKEN, profile))
+            remove(getProfileKey(VK_ACCESS_TOKEN_USER_ID, profile))
+        }
+    }
+
     suspend fun saveProfileConnectionSettings(
         profile: Int,
         peer: String,
@@ -943,6 +956,7 @@ private val DEPLOY_LAST_INSPECTION_PANEL = booleanPreferencesKey("deploy_last_in
                 prefs[getProfileKey(PROFILE_REMOVED, profile)] = false
             }
             if (expectedRevision == null) {
+                if (peer.isNotBlank() && prefs.isEmptyConnectionSlot(profile)) prefs.initializeManualHashes(profile)
                 prefs[getProfileKey(PROFILE_REMOVED, profile)] = false
                 prefs[getProfileKey(PROFILE_REVISION, profile)] = revision + 1L
             }
@@ -1004,6 +1018,7 @@ private val DEPLOY_LAST_INSPECTION_PANEL = booleanPreferencesKey("deploy_last_in
         val host = imported.host.trim().removePrefix("[").removeSuffix("]")
         if (host.isEmpty() || imported.port !in 1..65535 || imported.password.isBlank()) return false
         dataStore.edit { prefs ->
+            if (prefs.isEmptyConnectionSlot(profile)) prefs.initializeManualHashes(profile)
             prefs[getProfileKey(PROFILE_REMOVED, profile)] = false
             prefs[getProfileKey(PROFILE_REVISION, profile)] = (prefs[getProfileKey(PROFILE_REVISION, profile)] ?: 0L) + 1L
             PingResultsCache.removeProfile(profile)
@@ -1649,6 +1664,7 @@ private val DEPLOY_LAST_INSPECTION_PANEL = booleanPreferencesKey("deploy_last_in
     suspend fun saveCsqttParticipantLink(link: String) {
         dataStore.edit { prefs ->
             val profile = prefs[ACTIVE_PROFILE] ?: 0
+            if (link.isNotBlank() && prefs.isEmptyConnectionSlot(profile)) prefs.initializeManualHashes(profile)
             prefs[getProfileKey(CSQTT_LINK, profile)] = link
             prefs[getProfileKey(CSQTT_LINK_MODE, profile)] = true
             // a new link from the owner (QR, csqtt:// link) starts with all of its hashes in use
@@ -1914,9 +1930,8 @@ private val DEPLOY_LAST_INSPECTION_PANEL = booleanPreferencesKey("deploy_last_in
                     prefs.remove(getProfileKey(CONNECTION_PASSWORD, target))
                     prefs.remove(getProfileKey(CONNECTION_PASSWORD_ENCRYPTED, target))
                 }
-                if (isNew && prefs[getProfileKey(VK_HASHES, target)].isNullOrBlank()) {
-                    prefs[getProfileKey(VK_HASH_MODE, target)] = CsqttConstants.VkAutoHash.MODE_AUTO_API
-                    prefs[getProfileKey(VK_AUTH_MODE, target)] = "vkcalls"
+                if (isNew && prefs[getProfileKey(CSQTT_LINK, target)].isNullOrBlank()) {
+                    prefs.initializeManualHashes(target)
                 }
             }
             if (prefs[getProfileKey(DEPLOY_IP, profile)] != draft.ip.trim()) {

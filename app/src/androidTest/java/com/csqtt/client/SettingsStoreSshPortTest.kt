@@ -120,6 +120,7 @@ class SettingsStoreSshPortTest {
         assertEquals(defaults.mainPassword, scoped.deploySettingsSnapshot.first().mainPassword)
         deploy.saveDeployProfileDraft(defaults.copy(ip = "203.0.113.94", serverName = "Owner fixture", serverPeerPort = 49400, serverWebPort = 49402), restoreConnection = true)
         val connection = store.readProfileConnectionSettings(slot)
+        assertEquals(CsqttConstants.VkAutoHash.MODE_MANUAL, scoped.vkHashMode.first())
         assertEquals("203.0.113.94", connection.peer)
         assertEquals(49400, connection.serverPeerPort)
         assertEquals(defaults.mainPassword, connection.connectionPassword)
