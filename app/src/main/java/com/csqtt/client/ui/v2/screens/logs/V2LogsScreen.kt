@@ -28,6 +28,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -59,6 +60,8 @@ import com.csqtt.client.ui.v2.components.V2AdaptiveScreen
 import com.csqtt.client.ui.v2.components.LocalV2AdaptiveMetrics
 import com.csqtt.client.ui.v2.design.V2TextSizes
 import com.csqtt.client.ui.v2.components.V2TransparentIconButton
+import com.csqtt.client.ui.v2.design.LocalV2Colors
+import com.csqtt.client.ui.v2.design.V2ClassicLightColors
 import com.csqtt.client.ui.v2.design.V2MonoFamily
 import com.csqtt.client.ui.v2.design.V2Palette
 import com.csqtt.client.ui.v2.design.TagColors
@@ -75,6 +78,16 @@ fun V2LogsScreen(
     onVersionClick: (() -> Unit)? = null,
 ) {
     val colors = V2Theme.colors
+    val terminalColors = if (colors.background.luminance() > 0.5f) {
+        val surface = if (colors == V2ClassicLightColors) Color(0xFF171B21) else colors.terminal
+        colors.copy(
+            background = surface,
+            surface = surface,
+            surfaceElevated = Color(0xFF292D36),
+            textPrimary = colors.terminalText,
+            textSecondary = Color(0xFFBAC1CE),
+        )
+    } else colors
     var level by rememberSaveable { mutableStateOf("Все уровни") }
     var source by rememberSaveable { mutableStateOf("Все события") }
 
@@ -99,14 +112,16 @@ fun V2LogsScreen(
                 .weight(1f)
                 .fillMaxWidth()
                 .padding(bottom = 10.dp),
-            color = colors.surface,
-            contentColor = colors.textPrimary,
+            color = terminalColors.surface,
+            contentColor = terminalColors.textPrimary,
             shape = RoundedCornerShape(26.dp),
             borderColor = null,
             contentPadding = PaddingValues(0.dp),
             contentModifier = Modifier.fillMaxSize(),
         ) {
-            V2LogsTerminal(level, source)
+            CompositionLocalProvider(LocalV2Colors provides terminalColors) {
+                V2LogsTerminal(level, source)
+            }
         }
     }
 }
