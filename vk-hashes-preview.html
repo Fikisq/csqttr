@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>CSQTTR · VK в окне хешей</title>
+<title>CSQTTR · Ручные хеши и аккаунты VK</title>
 <style>
 * { box-sizing: border-box; }
 :root { color-scheme: dark; font-family: Roboto, "Segoe UI", sans-serif; color: #eaf0f8; background: #0e1219; }
@@ -77,28 +77,39 @@ button { cursor: pointer; }
 .feedback { color: var(--muted); font-size: 12px; min-height: 1.2em; margin: 8px 0 0; }
 [hidden] { display: none !important; }
 @media (max-width: 540px) { header { align-items: start; } .controls { gap: 7px; } .viewport { padding-inline: 10px; } }
+
+.board { --scale: .76; }
+.example h2 { margin-bottom: 10px; }
+.summary label { color: var(--muted); }
+.select-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 12px; }
+.select-row select { padding: 7px; color: var(--fg); border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+.own-field { display: grid; gap: 3px; padding: 7px 8px; border-radius: 11px; background: var(--field); font-size: 11px; color: var(--muted); }
+.own-field input[type="text"] { min-height: 30px; background: var(--surface); }
+.own-field small { color: var(--muted); font-size: 11px; }
+.own-field .good { color: #54bc73; }
+.own-field .bad { color: #ef7777; }
+[data-theme="light"] .own-field .good { color: #26703d; }
+[data-theme="light"] .own-field .bad { color: #ad2929; }
+.account button:first-child { flex: 1; }
+.phone button:disabled { opacity: .55; cursor: default; }
+.hash-footer > button { flex: 1; }
+
 </style>
 </head>
 <body>
 <header>
-  <div><h1>Хеши владельца и аккаунт VK</h1><p>Два интерактивных макета с демонстрационными данными</p></div>
+  <div><h1>Ручные хеши и аккаунты VK</h1><p>Интерактивный макет · демонстрационные данные и статусы проверки</p></div>
   <div class="controls">
-    <label>Оформление<select id="design"><option value="classic">CSQTT 2.5.0</option><option value="modern" selected>CSQTTR 2.5.3</option><option value="old">Старый</option></select></label>
     <label>Тема<select id="theme"><option value="dark">Тёмная</option><option value="light">Светлая</option></select></label>
-    <label>Аккаунты<select id="scenario"><option value="empty">Без аккаунта</option><option value="saved">Два сохранённых</option></select></label>
-    <label>Масштаб <output id="zoom-value">88%</output><input type="range" id="zoom" min="55" max="125" value="88"></label>
+    <label>Заполнить шесть полей<select id="fixture"><option value="">Пустые поля</option><option value="links">Шесть ссылок</option><option value="hashes">Шесть хешей</option><option value="mixed">Три ссылки и три хеша</option></select></label>
+    <label>Масштаб <output id="zoom-value">76%</output><input type="range" id="zoom" min="45" max="115" value="76"></label>
   </div>
 </header>
 <main class="viewport">
-  <div class="board" id="board" data-design="modern" data-theme="dark">
-    <article class="example" data-variant="inline">
-      <h2>А. Вход VK в окне хешей</h2>
-      <p>Хеши владельца и свои ссылки видны сразу.</p>
-    </article>
-    <article class="example" data-variant="source">
-      <h2>Б. Выбор источника хешей</h2>
-      <p>Три режима в одном окне.</p>
-    </article>
+  <div class="board" id="board" data-theme="dark">
+    <article class="example" data-design="classic"><h2>CSQTT 2.5.0</h2></article>
+    <article class="example" data-design="modern"><h2>CSQTTR 2.5.3</h2></article>
+    <article class="example" data-design="old"><h2>Старый</h2></article>
   </div>
 </main>
 <template id="screen">
@@ -109,179 +120,187 @@ button { cursor: pointer; }
       <div class="summary">
         <div><span>Профиль</span><strong>Тестовый</strong></div>
         <div><span>IP и порт</span><strong>203.0.113.25:54321</strong></div>
-        <div><span>Пароль туннеля</span><strong>••••••••••••</strong></div>
-        <button type="button" data-action="open">Хеши владельца: 2</button>
+        <label class="select-row">Режим хешей
+          <select data-mode aria-label="Режим хешей">
+            <option value="manual">Ручные хеши</option><option value="api">Авто API</option><option value="vk">Авто ВК</option>
+          </select>
+        </label>
+        <button type="button" data-action="open">Настроить хеши</button>
+        <button type="button" data-action="manage" hidden>Аккаунты VK</button>
       </div>
     </div>
     <div class="nav" aria-hidden="true"><span>Подкл.</span><strong>Туннель</strong><span>Деплой</span><span>Логи</span><span>Маршрут</span></div>
     <div class="scrim"></div>
-    <section class="sheet">
+    <section class="sheet" aria-label="Настройки хешей">
       <div class="handle"></div>
       <div class="sheet-title">
-        <h3>Ссылки VK звонков</h3>
+        <h3></h3>
         <button type="button" class="close" data-action="close" aria-label="Закрыть">×</button>
       </div>
       <div class="sheet-content"></div>
-      <div class="actions">
-        <button type="button" class="text-button" data-action="reset">Сбросить</button>
-        <button type="button" class="primary" data-action="apply">Готово</button>
+      <div class="actions hash-footer">
+        <button type="button" data-action="check">Проверить</button>
+        <button type="button" class="primary" data-action="save">Сохранить</button>
       </div>
     </section>
   </div>
 </template>
 <script>
 const board = document.querySelector("#board");
-const scenario = document.querySelector("#scenario");
-const demoAccounts = ["Личный аккаунт", "Второй аккаунт"];
-let accounts = [];
-let activeAccount = "";
-const modes = [["owner", "От владельца"], ["manual", "Свои хеши"], ["vk", "Аккаунт VK"]];
-const fresh = () => ({ owner:[true, true], hashes:[], mode:"owner", open:true, showAccounts:false, status:"" });
+const modeNames = {manual:"Ручные хеши",api:"Авто API",vk:"Авто ВК"};
+const checks = ["Работает", "Не работает", "Не удалось проверить"];
+const sampleHashes = Array.from({length:6}, (_, i) => "DemoVKHash-1234567" + (i + 1));
+let accounts = [1, 2];
+let activeAccount = 1;
+let nextAccount = 3;
 
 const views = [...board.querySelectorAll(".example")].map(example => {
   example.append(document.querySelector("#screen").content.cloneNode(true));
-  return { example, key:example.dataset.variant, state:fresh() };
+  return {example, mode:"manual", panel:"hashes", returnPanel:"tunnel", source:"owner", owner:[true,true],
+    fields:Array(6).fill(""), checked:false, removing:null};
 });
 
-function ownerFields(state) {
-  return '<fieldset><legend>От владельца сервера</legend><div class="source-list">' +
-    state.owner.map((enabled, index) =>
-      '<div class="hash-row"><span>От владельца ' + (index + 1) + '<small>' +
-      (enabled ? 'Хеш скрыт' : 'Убран') + '</small></span><button type="button" data-action="owner" data-index="' +
-      index + '">' + (enabled ? 'Заменить' : 'Вернуть') + '</button></div>'
-    ).join("") + '</div></fieldset>';
+function escape(value) {
+  return value.replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"})[c]);
 }
 
-function manualFields(state) {
-  const rows = state.hashes.map((_, index) =>
-    '<div class="hash-actions"><div class="hash-row">Своя ссылка ' + (index + 1) +
-    '</div><button type="button" data-action="remove" data-index="' + index + '">Убрать</button></div>'
-  ).join("");
-  return '<fieldset><legend>Свои ссылки VK звонков</legend><div class="source-list">' + rows +
-    '<div class="hash-actions"><input type="text" aria-label="Своя ссылка VK звонка" placeholder="Ссылка на звонок VK">' +
-    '<button type="button" data-action="manual">Добавить</button></div></div></fieldset>';
+function normalize(value) {
+  return value.trim()
+    .replace(/^(?:https?:\/\/)?(?:m\.)?vk\.(?:com|ru)\/call\/join\//i, "")
+    .split(/[?#]/,1)[0].replace(/\/+$/,"");
 }
 
-function accountFields(view) {
-  const {state, key} = view;
-  const list = accounts.length && state.showAccounts
-    ? '<div class="account-list">' + accounts.map((name, i) =>
-      '<label class="account"><input type="radio" name="account-' + key + '" data-account="' + i +
-      '"' + (activeAccount === name ? ' checked' : '') + '>' + name + '</label>'
-    ).join("") + '</div>' : "";
-  const action = accounts.length
-    ? '<button type="button" data-action="accounts" aria-expanded="' + state.showAccounts + '">' +
-      (activeAccount || 'Выбрать аккаунт VK') + (state.showAccounts ? ' ▴' : ' ▾') + '</button>'
-    : "";
-  const add = '<button type="button" class="' + (accounts.length ? 'text-button' : 'primary') + '" data-action="login">' +
-    (accounts.length ? '+ Добавить аккаунт' : 'Войти в VK') + '</button>';
-  return '<fieldset><legend>Аккаунт VK</legend><div class="account-cta">' + action + list + add +
-    '<p class="note">Активный аккаунт VK общий для ваших профилей.</p></div></fieldset>';
+function ownRows(view) {
+  return view.fields.map((value, index) => {
+    const hash = normalize(value);
+    const status = !hash ? "" : hash.length < 16 ? "Минимум 16 символов" : view.checked ? checks[index % 3] : "Не проверен";
+    const tone = !hash || !view.checked ? "" : index % 3 === 0 ? "good" : index % 3 === 1 ? "bad" : "";
+    return '<label class="own-field"><span>Хеш ' + (index + 1) + '</span><input type="text" data-field="' + index +
+      '" value="' + escape(value) + '" placeholder="Ссылка VK или хеш" spellcheck="false">' +
+      (status ? '<small class="' + tone + '">' + status + '</small>' : "") + '</label>';
+  }).join("");
+}
+
+function ownerRows(view) {
+  return view.owner.map((enabled,index) => '<div class="hash-row"><span>От владельца ' + (index + 1) +
+    '<small>' + (enabled ? view.checked ? checks[index] : "Хеш скрыт · не проверен" : "Убран") + '</small></span>' +
+    '<button type="button" data-action="replace" data-index="' + index + '">' + (enabled ? "Заменить" : "Вернуть") + '</button></div>').join("");
+}
+
+function hashesPanel(view) {
+  const tabs = [["owner","От владельца"],["own","Свои"]].map(([key,label]) =>
+    '<button type="button" data-action="source" data-source="' + key + '" aria-pressed="' + (view.source===key) + '">' + label + '</button>').join("");
+  return '<button type="button" data-action="manage">Аккаунты VK</button>' +
+    '<div class="modes" role="group" aria-label="Источник ручных хешей">' + tabs + '</div>' +
+    '<p class="note">Ссылки на VK-звонки или готовые хеши</p><div class="source-list">' +
+    (view.source === "owner" ? ownerRows(view) : ownRows(view)) + '</div>' +
+    (view.checked ? '<p class="note" role="status">Демонстрационный результат · статус указан у каждого хеша</p>' : "");
+}
+
+function accountsPanel(view) {
+  if (view.removing !== null) {
+    return '<p class="note">Профили серверов и остальные аккаунты сохранятся.</p>' +
+      '<div class="actions"><button type="button" data-action="cancel-remove">Отмена</button>' +
+      '<button type="button" class="primary" data-action="confirm-remove">Удалить</button></div>';
+  }
+  const rows = accounts.map((id,index) => '<div class="account"><button type="button" data-action="select-account" data-index="' + id +
+    '" aria-pressed="' + (activeAccount===id) + '">Аккаунт ' + (index + 1) + (activeAccount===id ? " · выбран" : "") +
+    '</button><button type="button" data-action="remove-account" data-index="' + id + '" aria-label="Удалить аккаунт ' + (index+1) + '">×</button></div>').join("");
+  return '<p class="note">Личный аккаунт общий для ваших профилей</p>' +
+    (rows || '<p class="note">Сохранённых аккаунтов пока нет</p>') +
+    '<button type="button" class="primary" data-action="add-account">Добавить / сменить аккаунт</button>';
 }
 
 function render(view) {
-  const {example, state, key} = view;
-  const ownerCount = state.owner.filter(Boolean).length;
-  example.querySelector(".sheet-title h3").textContent = board.dataset.design === "classic"
-    ? "Ссылки VK звонков" : "Ручные хеши";
-  example.querySelector(".sheet").hidden = !state.open;
-  example.querySelector(".scrim").hidden = !state.open;
-  example.querySelector('[data-action="open"]').textContent = "Хеши владельца: " + ownerCount +
-    (state.hashes.length ? " · свои: " + state.hashes.length : "") +
-    (activeAccount ? " · VK подключён" : "");
-  if (key === "source" && state.mode !== "owner") {
-    example.querySelector('[data-action="open"]').textContent = state.mode === "manual"
-      ? "Свои хеши: " + state.hashes.length : "Аккаунт VK: " + (activeAccount || "выбрать");
-  }
-  const segments = '<div class="modes" role="group" aria-label="Источник хешей">' + modes.map(([mode, label]) =>
-    '<button type="button" data-action="mode" data-mode="' + mode + '" aria-pressed="' + (state.mode === mode) + '">' + label + '</button>'
-  ).join("") + '</div>';
-  const content = key === "inline" ? ownerFields(state) + manualFields(state) + accountFields(view) :
-    segments + (state.mode === "owner" ? ownerFields(state) : state.mode === "manual" ? manualFields(state) : accountFields(view));
-  example.querySelector(".sheet-content").innerHTML = content + '<p class="feedback" aria-live="polite"></p>';
-  example.querySelector(".feedback").textContent = state.status;
-}
-
-function setScenario() {
-  accounts = scenario.value === "saved" ? [...demoAccounts] : [];
-  activeAccount = accounts[0] || "";
-  views.forEach(view => { view.state = fresh(); render(view); });
+  const root = view.example;
+  const isClassic = root.dataset.design === "classic";
+  const inHashes = view.panel === "hashes";
+  root.querySelector(".scrim").hidden = root.querySelector(".sheet").hidden = view.panel === "tunnel";
+  root.querySelector(".hash-footer").hidden = !inHashes;
+  root.querySelector(".sheet-title h3").textContent = inHashes ? isClassic ? "VK Хеши" : "Ручные хеши" :
+    view.removing === null ? "Аккаунты VK" : "Удалить аккаунт из CSQTT?";
+  root.querySelector("[data-mode]").value = view.mode;
+  root.querySelector(".summary [data-action=open]").hidden = view.mode !== "manual";
+  root.querySelector(".summary [data-action=manage]").hidden = view.mode === "manual";
+  root.querySelector(".summary [data-action=manage]").textContent = activeAccount ? "Аккаунт VK подключён" : "Войти в VK";
+  root.querySelector(".sheet-content").innerHTML = inHashes ? hashesPanel(view) : accountsPanel(view);
+  const count = new Set([...view.fields.map(normalize), ...view.owner.flatMap((on,i) => on ? ["DemoOwnerHash-1234567"+i] : [])].filter(x => x.length >= 16)).size;
+  const check = root.querySelector("[data-action=check]");
+  check.disabled = !count;
+  check.textContent = isClassic ? "Проверить актив" : "Проверить (" + count + ")";
 }
 
 for (const view of views) {
+  view.example.addEventListener("input", event => {
+    if (event.target.dataset.field === undefined) return;
+    view.fields[Number(event.target.dataset.field)] = event.target.value;
+    view.checked = false;
+    const count = new Set(view.fields.map(normalize).filter(x => x.length >= 16)).size + view.owner.filter(Boolean).length;
+    const check = view.example.querySelector("[data-action=check]");
+    check.disabled = !count;
+    if (view.example.dataset.design !== "classic") check.textContent = "Проверить (" + count + ")";
+  });
+  view.example.addEventListener("change", event => {
+    if (!event.target.matches("[data-mode]") || !modeNames[event.target.value]) return;
+    view.mode = event.target.value;
+    render(view);
+  });
   view.example.addEventListener("click", event => {
     const button = event.target.closest("button[data-action]");
     if (!button) return;
-    const state = view.state;
-    state.status = "";
-    switch (button.dataset.action) {
-      case "open": state.open = true; break;
-      case "close": state.open = false; break;
-      case "apply":
-        if (view.key === "source" && state.mode === "vk" && !activeAccount) {
-          state.status = "Выберите аккаунт VK для этого профиля.";
-        } else if (view.key === "source" && state.mode === "manual" && !state.hashes.length) {
-          state.status = "Добавьте хотя бы одну ссылку VK.";
-        } else {
-          state.open = false;
-        }
+    const index = Number(button.dataset.index);
+    switch(button.dataset.action) {
+      case "open": view.panel = "hashes"; break;
+      case "close":
+        view.panel = view.panel === "accounts" ? view.returnPanel : "tunnel";
+        view.removing = null;
         break;
-      case "reset": view.state = fresh(); break;
-      case "mode": state.mode = button.dataset.mode; break;
-      case "owner": {
-        const index = Number(button.dataset.index);
-        state.owner[index] = !state.owner[index];
-        if (!state.owner[index]) {
-          if (view.key === "source") state.mode = "manual";
+      case "save": view.fields = view.fields.map(normalize); view.panel = "tunnel"; break;
+      case "check": view.fields = view.fields.map(normalize); view.checked = true; break;
+      case "source": view.source = button.dataset.source; break;
+      case "replace":
+        view.owner[index] = !view.owner[index];
+        if (!view.owner[index]) {
+          view.source = "own";
           render(view);
-          view.example.querySelector('input[type="text"]').focus();
+          const free = view.fields.findIndex(field => !field.trim());
+          view.example.querySelector('[data-field="' + free + '"]')?.focus();
           return;
         }
         break;
-      }
-      case "accounts": state.showAccounts = !state.showAccounts; break;
-      case "login": {
-        const name = demoAccounts.find(item => !accounts.includes(item)) || "Аккаунт " + (accounts.length + 1);
-        accounts.push(name);
-        activeAccount = name;
-        state.showAccounts = true;
-        state.status = "Демонстрационный аккаунт добавлен.";
+      case "manage": view.returnPanel = view.panel; view.panel = "accounts"; break;
+      case "select-account": activeAccount = index; view.panel = view.returnPanel; views.forEach(render); return;
+      case "add-account": accounts.push(nextAccount); activeAccount = nextAccount++; views.forEach(render); return;
+      case "remove-account": view.removing = index; break;
+      case "cancel-remove": view.removing = null; break;
+      case "confirm-remove":
+        accounts = accounts.filter(id => id !== view.removing);
+        if (activeAccount === view.removing) activeAccount = null;
+        view.removing = null;
         views.forEach(render);
         return;
-      }
-      case "manual": {
-        const field = view.example.querySelector('input[type="text"]');
-        if (!field.value.trim()) { field.focus(); return; }
-        state.hashes.push(true);
-        state.status = "Своя ссылка добавлена.";
-        break;
-      }
-      case "remove": state.hashes.splice(Number(button.dataset.index), 1); break;
     }
     render(view);
   });
-  view.example.addEventListener("change", event => {
-    const {state} = view;
-    const {account} = event.target.dataset;
-    if (account === undefined) return;
-    activeAccount = accounts[Number(account)];
-    state.status = "";
-    views.forEach(render);
-    view.example.querySelector('[data-account="' + account + '"]')?.focus();
-  });
 }
 
-document.querySelector("#design").addEventListener("change", event => {
-  board.dataset.design = event.target.value;
-  views.forEach(render);
+document.querySelector("#theme").addEventListener("change", e => { board.dataset.theme = e.target.value; });
+document.querySelector("#zoom").addEventListener("input", e => {
+  board.style.setProperty("--scale", Number(e.target.value) / 100);
+  document.querySelector("#zoom-value").value = e.target.value + "%";
 });
-document.querySelector("#theme").addEventListener("change", event => { board.dataset.theme = event.target.value; });
-document.querySelector("#zoom").addEventListener("input", event => {
-  board.style.setProperty("--scale", Number(event.target.value) / 100);
-  document.querySelector("#zoom-value").value = event.target.value + "%";
+document.querySelector("#fixture").addEventListener("change", e => {
+  const kind = e.target.value;
+  for (const view of views) {
+    view.fields = sampleHashes.map((hash,i) => !kind ? "" : kind === "links" || (kind === "mixed" && i % 2 === 0)
+      ? "https://" + (i % 2 === 0 ? "vk.com" : "m.vk.ru") + "/call/join/" + hash : hash);
+    view.panel = "hashes";
+    view.source = "own";
+    view.checked = false;
+    render(view);
+  }
 });
-scenario.addEventListener("change", setScenario);
-setScenario();
+views.forEach(render);
 </script>
 </body>
 </html>
