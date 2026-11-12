@@ -70,6 +70,7 @@ import com.csqtt.client.ui.legacy.AppUpdateDialog
 import com.csqtt.client.ui.legacy.ConnectionTab
 import com.csqtt.client.ui.legacy.ExceptionsTab
 import com.csqtt.client.ui.legacy.FloatingToolbar
+import com.csqtt.client.ui.v2.dialogs.V2ResourceHud
 import com.csqtt.client.ui.legacy.LogsTab
 import com.csqtt.client.ui.legacy.SettingsTab
 import com.csqtt.client.CsqttConstants
@@ -341,11 +342,11 @@ internal fun shouldCommitNavigationSwipe(progress: Float): Boolean = progress > 
 internal fun resolveActiveNavIds(csqttLinkMode: Boolean, participantShowLogs: Boolean): List<Int> {
     val allIds = listOf(0, 1, 2, 3, 4)
     return allIds.filter { id ->
-        if (csqttLinkMode) {
-            if (id == 2) return@filter false
-            if (id == 3 && !participantShowLogs) return@filter false
+        when (id) {
+            2 -> !csqttLinkMode
+            3 -> participantShowLogs
+            else -> true
         }
-        true
     }
 }
 
@@ -379,7 +380,8 @@ fun MainScreen(
     val participantShowLogs by settingsStore.participantShowLogs.collectAsStateWithLifecycle(
         initialValue = SettingsStore.DEFAULT_PARTICIPANT_SHOW_LOGS,
     )
-    val autoPauseOnWifi by settingsStore.autoPauseOnWifi.collectAsStateWithLifecycle(initialValue = false)
+    var resourceMonitorOpen by rememberSaveable { mutableStateOf(false) }
+    var floatingHudEnabled by rememberSaveable { mutableStateOf(false) }
     val excludedApps by settingsStore.excludedApps.collectAsStateWithLifecycle(
         initialValue = SettingsStore.cachedExcludedApps ?: ""
     )
@@ -506,10 +508,10 @@ fun MainScreen(
                     onThemeChange = onThemeChange,
                     activeFingerprint = activeFingerprint,
                     onFingerprintChange = onFingerprintChange,
-                    autoPauseOnWifi = autoPauseOnWifi,
-                    onAutoPauseOnWifiChange = { enabled ->
-                        scope.launch { settingsStore.saveAutoPauseOnWifi(enabled) }
-                    },
+                    resourceMonitorOpen = resourceMonitorOpen,
+                    onResourceMonitorOpenChange = { resourceMonitorOpen = it },
+                    floatingHudEnabled = floatingHudEnabled,
+                    onToggleFloatingHud = { floatingHudEnabled = it },
                 )
             },
         ) {
@@ -606,7 +608,7 @@ fun MainScreen(
                                 } else {
                                     Spacer(modifier = Modifier.fillMaxSize())
                                 }
-                                3 -> if (!csqttLinkMode || participantShowLogs) {
+                                3 -> if (participantShowLogs) {
                                     LogsTab(settingsStore)
                                 } else {
                                     Spacer(modifier = Modifier.fillMaxSize())
@@ -642,6 +644,11 @@ fun MainScreen(
                             dragProgress.floatValue = 0f
                         },
                         modifier = Modifier.align(Alignment.BottomCenter)
+                    )
+                    V2ResourceHud(
+                        visible = floatingHudEnabled,
+                        onClick = { resourceMonitorOpen = true },
+                        modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = navOverlayReserve),
                     )
                 }
             }
