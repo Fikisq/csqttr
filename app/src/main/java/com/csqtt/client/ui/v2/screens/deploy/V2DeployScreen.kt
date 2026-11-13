@@ -24,7 +24,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.TextButton
 import androidx.compose.ui.platform.testTag
 import com.csqtt.client.ui.v2.components.V2AdaptiveScreen
@@ -110,7 +109,7 @@ import com.csqtt.client.ui.legacy.DeployPlan
 import com.csqtt.client.ui.legacy.EffectiveServerPorts as CheckPorts
 import com.csqtt.client.ui.legacy.FoundServer
 import com.csqtt.client.ui.legacy.PlanAction
-import com.csqtt.client.ui.legacy.PlanKind
+import com.csqtt.client.ui.legacy.DeployProgressContent
 import com.csqtt.client.ui.legacy.ServerCheckDialog
 import com.csqtt.client.ui.legacy.ServerInventory
 import com.csqtt.client.ui.legacy.ServerPlace
@@ -1018,19 +1017,8 @@ internal fun V2DeployScreen(
                 }
             }
             if (isDeploying) {
-                Column(Modifier.fillMaxWidth().testTag("deploy-progress"), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text(deployStep, Modifier.weight(1f), color = colors.textSecondary, fontSize = V2TextSizes.Secondary)
-                        Text("${(deployProgress.coerceIn(0f, 1f) * 100).toInt()} %", color = colors.accent, fontSize = V2TextSizes.Secondary)
-                    }
-                    LinearProgressIndicator(
-                        progress = { deployProgress.coerceIn(0f, 1f) },
-                        modifier = Modifier.fillMaxWidth().height(6.dp),
-                        color = colors.accent,
-                        trackColor = colors.outline,
-                        drawStopIndicator = {},
-                    )
-                }
+                DeployProgressContent(deployProgress, deployStep, Modifier.fillMaxWidth().testTag("deploy-progress"),
+                    accent = colors.accent, foreground = colors.textPrimary)
             } else if (actionsBusy) {
                 Text(if(isInspecting) "Проверка VPS по SSH…" else "Операция выполняется · подробности в логах", color = colors.textSecondary, fontSize = V2TextSizes.Secondary)
             }

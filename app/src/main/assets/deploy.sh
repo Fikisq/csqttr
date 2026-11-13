@@ -3003,23 +3003,23 @@ main() {
 
             local total_started=$SECONDS
             detect_os
-            run_timed "Проверка и установка системных пакетов" 0.10 install_prerequisites
+            run_timed "Пакеты..." 0.10 install_prerequisites
             require_runtime_tools
             if [ "$CSQTT_ROLE" = side ]; then side_preflight; else main_preflight; fi
             if [ "$DEPLOY_MODE" = "docker" ]; then
-                run_timed "Подготовка Docker Engine" 0.15 ensure_docker
+                run_timed "Docker..." 0.15 ensure_docker
             fi
-            run_timed "Проверка маршрутизации VPS" 0.20 setup_sysctl
+            run_timed "Проверка сети..." 0.20 setup_sysctl
 
             run_timed "Проверка полученных файлов" 0.25 prepare_uploaded_release
             if [ "$DEPLOY_MODE" = "docker" ]; then
-                run_timed "Сборка образа Docker и загрузка его пакетов" 0.32 prepare_docker_candidate "$UPLOAD_BINARY"
+                run_timed "Docker-образ: загрузка пакетов..." 0.32 prepare_docker_candidate "$UPLOAD_BINARY"
             fi
-            run_timed "Проверка совместимости TUN" 0.42 run_platform_preflight
+            run_timed "Совместимость ядра..." 0.42 run_platform_preflight
             DEPLOY_PHASE="cutover"
-            run_timed "Остановка прежнего экземпляра CSQTT" 0.46 csqtt_cleanup
+            run_timed "Очистка..." 0.46 csqtt_cleanup
             detect_firewall
-            run_timed "Настройка правил CSQTT" 0.54 setup_nat_and_firewall
+            run_timed "NAT + Firewall..." 0.54 setup_nat_and_firewall
             install_network_helper
             if [ "$PRESERVE_CONFIG" = "1" ]; then
                 log_info "Повторная установка: данные клиентов и правила сохраняются"
@@ -3027,14 +3027,18 @@ main() {
             setup_csqtt_environment
             run_timed "Подготовка сертификата веб-панели" 0.62 setup_letsencrypt_ip_tls
             DEPLOY_PHASE="activation"
-            run_timed "Установка бинарника CSQTT" 0.68 setup_csqtt_binary
+            run_timed "Бинарник..." 0.68 setup_csqtt_binary
             run_timed "Проверка остановки старого процесса CSQTT" 0.72 force_stop_csqtt_processes
             if [ "$DEPLOY_MODE" = "docker" ]; then
-                run_timed "Подготовка контейнера CSQTT" 0.75 setup_csqtt_docker
+                run_timed "Docker-образ..." 0.75 setup_csqtt_docker
             else
-                run_timed "Подготовка службы CSQTT" 0.75 setup_csqtt_service
+                run_timed "Сервис..." 0.75 setup_csqtt_service
             fi
-            run_timed "Запуск и проверка CSQTT" 0.90 start_csqtt
+            if [ "$DEPLOY_MODE" = "docker" ]; then
+                run_timed "Запуск Docker..." 0.90 start_csqtt
+            else
+                run_timed "Запуск..." 0.90 start_csqtt
+            fi
             log_info "Общее время deploy.sh: $((SECONDS - total_started))с"
             ;;
         *) die "Неизвестная команда установщика: $action" ;;

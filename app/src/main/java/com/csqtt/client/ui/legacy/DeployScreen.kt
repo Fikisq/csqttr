@@ -34,6 +34,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -354,6 +355,19 @@ private fun DeployProgressCard(
     )
 
     AppSectionCard(verticalArrangement = Arrangement.spacedBy(CsqttSpacing.Xs)) {
+        DeployProgressContent(animatedProgress, currentStep)
+    }
+}
+
+@Composable
+internal fun DeployProgressContent(
+    progress: Float,
+    currentStep: String,
+    modifier: Modifier = Modifier,
+    accent: Color = MaterialTheme.colorScheme.primary,
+    foreground: Color = MaterialTheme.colorScheme.onSurface,
+) {
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(CsqttSpacing.Xs)) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(CsqttSpacing.Md),
@@ -362,18 +376,20 @@ private fun DeployProgressCard(
             Text(
                 text = currentStep.ifBlank { "Подготовка…" },
                 style = MaterialTheme.typography.bodyMedium,
+                color = foreground,
                 modifier = Modifier.weight(1f),
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
             Text(
-                text = "${(animatedProgress * 100).toInt()}%",
+                text = "${(progress.coerceIn(0f, 1f) * 100).toInt()}%",
                 style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.primary,
+                color = accent,
             )
         }
         LinearProgressIndicator(
-            progress = { animatedProgress },
+            progress = { progress.coerceIn(0f, 1f) },
+            color = accent,
             modifier = Modifier.fillMaxWidth(),
         )
     }
