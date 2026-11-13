@@ -940,12 +940,11 @@ internal fun V2DeployScreen(
         val layout = LocalV2AdaptiveMetrics.current
         V2TopBar(version = version, title = "Деплой", onSettings = onSettings)
         V2AdaptiveForm(Modifier.weight(1f).fillMaxWidth(), fieldRows = 3, controlRows = 4,
-            extraHeight = 80.dp + if (isDeploying) 48.dp else if (actionsBusy) 32.dp else 0.dp) { form ->
+            extraHeight = 80.dp) { form ->
         val formLayout = LocalV2AdaptiveMetrics.current
         val pill = RoundedCornerShape(50)
         BoxWithConstraints(Modifier.fillMaxSize()) {
-        val progressSpace = if (isDeploying) 60.dp else if (actionsBusy) 44.dp else 0.dp
-        val cardMinimum = (maxHeight - form.profileHeight - layout.gap - progressSpace).coerceAtLeast(0.dp)
+        val cardMinimum = (maxHeight - form.profileHeight - layout.gap).coerceAtLeast(0.dp)
         Column(Modifier.fillMaxWidth().imePadding().verticalScroll(rememberScrollState()).testTag("deploy-settings"), verticalArrangement = Arrangement.spacedBy(layout.gap)) {
             HappProfileHeader(
                 title = serverTitle,
@@ -1016,14 +1015,15 @@ internal fun V2DeployScreen(
                 }
                 }
             }
-            if (isDeploying) {
-                DeployProgressContent(deployProgress, deployStep, Modifier.fillMaxWidth().testTag("deploy-progress"),
-                    accent = colors.accent, foreground = colors.textPrimary)
-            } else if (actionsBusy) {
-                Text(if(isInspecting) "Проверка VPS по SSH…" else "Операция выполняется · подробности в логах", color = colors.textSecondary, fontSize = V2TextSizes.Secondary)
-            }
         }
         }
+        }
+        if (isDeploying) {
+            DeployProgressContent(deployProgress, deployStep, Modifier.fillMaxWidth().testTag("deploy-progress"),
+                accent = colors.accent, foreground = colors.textPrimary)
+        } else if (actionsBusy) {
+            Text(if (isInspecting) "Проверка VPS по SSH…" else "Операция выполняется · подробности в логах",
+                color = colors.textSecondary, fontSize = V2TextSizes.Secondary)
         }
         Row(Modifier.fillMaxWidth().testTag("deploy-actions").padding(top = 6.dp, bottom = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             V2PillButton("Удалить", { requestUninstall() }, modifier = Modifier.weight(1f), enabled = !actionsBusy && host.isNotBlank() && sshAuthReady, style = V2PillStyle.Danger, height = layout.buttonHeight, fontSize = V2TextSizes.Action, shape = RoundedCornerShape(50))
