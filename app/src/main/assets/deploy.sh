@@ -2253,9 +2253,8 @@ write_csqtt_dockerfile() {
     # /usr/local/bin/csqtt in the entrypoint)
     cat > "$target" << 'DOCKERFILE'
 FROM alpine:3.21
-ARG CSQTT_BUILD_DNS_PRIMARY
-ARG CSQTT_BUILD_DNS_SECONDARY
-RUN set -eu; if [ -n "${CSQTT_BUILD_DNS_PRIMARY:-}" ]; then printf 'nameserver %s\n' "$CSQTT_BUILD_DNS_PRIMARY" > /etc/resolv.conf; fi; if [ -n "${CSQTT_BUILD_DNS_SECONDARY:-}" ]; then printf 'nameserver %s\n' "$CSQTT_BUILD_DNS_SECONDARY" >> /etc/resolv.conf; fi; timeout -k 5s 120s apk add --no-cache --no-progress ca-certificates iproute2 iptables; rm -rf /var/cache/apk/*
+ARG CSQTT_ALPINE_MIRROR=https://dl-cdn.alpinelinux.org/alpine
+RUN set -eu; printf '%s/v3.21/main\n' "$CSQTT_ALPINE_MIRROR" > /etc/apk/repositories; timeout -k 5s 75s apk add --no-cache --no-progress ca-certificates iproute2 iptables
 COPY csqtt @IMG_BIN@
 COPY network-up.sh @IMG_LIB@/network-up.sh
 COPY tun-recover.sh @IMG_LIB@/tun-recover.sh
@@ -2279,16 +2278,15 @@ docker_build_candidate_image() {
         return 1
     fi
     rm -f -- "$primary_log"
-    prog 0.32 "Docker: повторная загрузка пакетов с резервным DNS"
-    log_warn "Docker build не получил DNS через сеть VPS; повтор с резервными DNS Яндекса"
+    prog 0.32 "Docker: загрузка пакетов с резервного зеркала Alpine"
+    log_warn "Первое зеркало Alpine недоступно при сборке. Повторяем с резервным HTTPS-зеркалом."
     fallback_log="$(mktemp)" || return 1
-    if timeout -k 15s "${DOCKER_BUILD_TIMEOUT_SECONDS}s" docker build --network default \
-        --build-arg CSQTT_BUILD_DNS_PRIMARY=77.88.8.8 \
-        --build-arg CSQTT_BUILD_DNS_SECONDARY=77.88.8.1 \
+    if timeout -k 15s "${DOCKER_BUILD_TIMEOUT_SECONDS}s" docker build --network host \
+        --build-arg CSQTT_ALPINE_MIRROR=https://alpine.mirror.far.fi/alpine \
         -t "$image" "$context_dir" >"$fallback_log" 2>&1; then
         cat "$fallback_log" >>"$LOG_FILE"
         rm -f -- "$fallback_log"
-        log_info "Docker-образ собран через резервные DNS Яндекса"
+        log_info "Docker-образ собран через резервное зеркало Alpine"
         return 0
     fi
     cat "$fallback_log" >>"$LOG_FILE"

@@ -129,15 +129,15 @@ class DeployScriptPreflightTest {
     }
 
     @Test
-    fun `docker image build retries DNS with Yandex resolvers`() {
+    fun `docker image build tries an alternative repository without modifying DNS`() {
         val deploy = script()
         assertTrue(deploy.contains("DOCKER_BUILD_TIMEOUT_SECONDS"))
         assertTrue(deploy.contains("docker build --network host"))
-        assertTrue(deploy.contains("CSQTT_BUILD_DNS_PRIMARY:-"))
+        assertTrue(deploy.contains("ARG CSQTT_ALPINE_MIRROR=https://dl-cdn.alpinelinux.org/alpine"))
+        assertFalse(deploy.contains("> /etc/resolv.conf"))
         assertTrue(deploy.contains("FROM alpine:3.21"))
         assertTrue(deploy.contains("apk add --no-cache --no-progress ca-certificates iproute2 iptables"))
-        assertTrue(deploy.contains("CSQTT_BUILD_DNS_PRIMARY=77.88.8.8"))
-        assertTrue(deploy.contains("CSQTT_BUILD_DNS_SECONDARY=77.88.8.1"))
+        assertTrue(deploy.contains("CSQTT_ALPINE_MIRROR=https://alpine.mirror.far.fi/alpine"))
         assertTrue(deploy.contains("Temporary failure resolving|Could not resolve|Name or service not known"))
     }
 
