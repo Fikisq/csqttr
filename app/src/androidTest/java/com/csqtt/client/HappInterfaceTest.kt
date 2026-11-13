@@ -183,7 +183,7 @@ class HappInterfaceTest {
         compose.onNodeWithContentDescription("Настройки").performClick()
         compose.onNodeWithText("Участник").performClick()
         compose.onNodeWithText("Владелец").performClick()
-        compose.onNodeWithContentDescription("Назад").performClick()
+        compose.onNodeWithContentDescription("Закрыть").performClick()
         compose.onNodeWithText("Деплой").performClick()
         compose.onNodeWithText("IP сервера").assertIsDisplayed()
         compose.onNodeWithText("Порт SSH").assertIsDisplayed()
@@ -341,7 +341,7 @@ class HappInterfaceTest {
         compose.onNodeWithContentDescription("Настройки").performClick()
         compose.onNodeWithText("Участник").performClick()
         compose.onNodeWithText("Владелец").performClick()
-        compose.onNodeWithContentDescription("Назад").performClick()
+        compose.onNodeWithContentDescription("Закрыть").performClick()
         compose.onNodeWithText("Деплой").performClick()
         compose.onNodeWithContentDescription("Добавить VPS").performClick()
         compose.waitUntil(5000) { compose.onAllNodesWithText("Новый VPS").fetchSemanticsNodes().isNotEmpty() }
@@ -356,7 +356,7 @@ class HappInterfaceTest {
         compose.onNodeWithContentDescription("Настройки").performClick()
         compose.onNodeWithText("Участник").performClick()
         compose.onNodeWithText("Владелец").performClick()
-        compose.onNodeWithContentDescription("Назад").performClick()
+        compose.onNodeWithContentDescription("Закрыть").performClick()
         compose.onNodeWithText("Деплой").performClick()
         val deploy = SettingsStore(compose.activity, deployScope = true)
         fun add(name: String, ip: String, ssh: String, peer: String, web: String): Int {

@@ -4,6 +4,8 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -51,7 +53,11 @@ fun HappSettingsScreen(
     var extraHelp by remember { mutableStateOf(false) }
     V2AdaptiveScreen(Modifier.fillMaxSize().padding(horizontal = V2Sizes.ScreenPadding)) {
         val layout = LocalV2AdaptiveMetrics.current
-        V2TopBar(title = "Настройки", onBack = onBack)
+        V2TopBar(title = "Настройки", actions = {
+            IconButton(onClick = onBack) {
+                Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.action_close))
+            }
+        })
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(bottom = layout.gap),
             verticalArrangement = Arrangement.spacedBy(layout.gap)) {
             V2Card {
