@@ -1511,8 +1511,11 @@ ensure_letsencrypt_client() {
         return 0
     fi
     if [ -n "$system_certbot" ]; then
-        log_warn "Системный Certbot не поддерживает выпуск IP-сертификата; используется имеющийся TLS или самоподписанный сертификат"
-        return 1
+        log_info "Системный Certbot не подходит для IP-сертификата; используется отдельное окружение CSQTT"
+        if ! command -v openssl >/dev/null 2>&1 || ! python3 -c 'import ensurepip' >/dev/null 2>&1; then
+            log_warn "Для Certbot CSQTT не хватает Python venv или OpenSSL; используется имеющийся TLS или самоподписанный сертификат"
+            return 1
+        fi
     fi
 
     log_step "Подготовка Let’s Encrypt клиента..."
@@ -1535,12 +1538,12 @@ ensure_letsencrypt_client() {
     fi
     if [ ! -x "$CSQTT_LE_CERTBOT" ] || ! "$CSQTT_LE_CERTBOT" --version >/dev/null 2>&1; then
         rm -rf "$CSQTT_LE_VENV"
-        if ! python3 -m venv "$CSQTT_LE_VENV" >>"$LOG_FILE" 2>&1; then
+        if ! timeout -k 2s 8s python3 -m venv "$CSQTT_LE_VENV" >>"$LOG_FILE" 2>&1; then
             log_warn "Не удалось создать изолированный Let’s Encrypt client; WEB-панель временно останется на self-signed TLS"
             return 1
         fi
     fi
-    if ! timeout 180 "$CSQTT_LE_VENV/bin/pip" install --disable-pip-version-check --no-cache-dir --upgrade 'certbot>=5.4,<6' >>"$LOG_FILE" 2>&1; then
+    if ! timeout -k 2s 15s "$CSQTT_LE_VENV/bin/pip" install --disable-pip-version-check --no-cache-dir --upgrade 'certbot>=5.4,<6' >>"$LOG_FILE" 2>&1; then
         log_warn "Не удалось установить актуальный Certbot с поддержкой IP-сертификатов; WEB-панель временно останется на self-signed TLS"
         return 1
     fi

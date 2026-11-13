@@ -295,13 +295,16 @@ class DeployScriptPreflightTest {
     }
 
     @Test
-    fun `an installed certbot prevents package setup and issuance has one bounded attempt`() {
+    fun `certbot uses the legacy fallback in a separate venv with bounded setup and issuance`() {
         val deploy = script()
         val client = deploy.substringAfter("ensure_letsencrypt_client() {").substringBefore("\n}\n")
         val setup = client.indexOf("log_step")
         assertTrue(client.indexOf("LE_CERTBOT_COMMAND=\"\$system_certbot\"") in 0 until setup)
         assertTrue(client.indexOf("LE_CERTBOT_COMMAND=\"\$CSQTT_LE_CERTBOT\"") in 0 until setup)
+        assertTrue(client.indexOf("if [ -n \"\$system_certbot\" ]; then") in 0 until setup)
         assertTrue(client.indexOf("return 1") in 0 until setup)
+        assertTrue(client.contains("timeout -k 2s 8s python3 -m venv \"\$CSQTT_LE_VENV\""))
+        assertTrue(client.contains("timeout -k 2s 15s \"\$CSQTT_LE_VENV/bin/pip\" install"))
         val tls = deploy.substringAfter("setup_letsencrypt_ip_tls() {").substringBefore("\n}\n")
         val prepare = tls.indexOf("elif ensure_letsencrypt_client")
         assertTrue(tls.indexOf("if letsencrypt_certificate_is_current") in 0 until prepare)
