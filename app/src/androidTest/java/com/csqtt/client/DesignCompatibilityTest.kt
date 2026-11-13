@@ -19,6 +19,7 @@ class DesignCompatibilityTest {
         val previous = runBlocking { store.activeProfile.first() }
         val previousDesign = runBlocking { store.uiDesign.first() }
         val untouched = runBlocking { store.readProfileConnectionSettings(previous) }
+        val previousExtra = runBlocking { store.extraWorkers.first() }
         val slot = runBlocking { checkNotNull(store.findFirstFreeProfile()) }
         val clipboard = compose.activity.getSystemService(android.content.ClipboardManager::class.java)
         try {
@@ -27,6 +28,7 @@ class DesignCompatibilityTest {
                 store.saveProfileName(slot, "Clipboard transfer fixture")
                 store.saveActiveProfile(slot)
                 store.saveAppRoutingLists("com.example.before", "", false)
+                store.saveExtraWorkers(true)
             }
             for (design in listOf("v2", "old", "classic")) {
                 runBlocking { store.saveUiDesign(design) }
@@ -45,6 +47,7 @@ class DesignCompatibilityTest {
                 runBlocking {
                     store.saveProfileConnectionSettings(slot, "203.0.113.62", 46124, "TransferFixture62", 20)
                     store.saveAppRoutingLists("com.example.after", "", false)
+                    store.saveExtraWorkers(false)
                 }
                 compose.onNodeWithText("Импорт").performClick()
                 compose.onNodeWithText("Из буфера").performScrollTo().performClick()
@@ -57,8 +60,9 @@ class DesignCompatibilityTest {
                     check(restored.connectionPassword == "TransferFixture61")
                     assertEquals(40, restored.workersPerHash)
                     assertEquals("com.example.before", store.excludedApps.first())
+                    check(store.extraWorkers.first())
                     assertEquals(slot, store.activeProfile.first())
-                    check(untouched == store.readProfileConnectionSettings(previous))
+                    check(untouched == store.readProfileConnectionSettings(previous).copy(extraWorkers = previousExtra))
                 }
                 val close = compose.onAllNodesWithContentDescription("Закрыть")
                 compose.waitUntil(5000) { close.fetchSemanticsNodes().isNotEmpty() }
@@ -70,6 +74,118 @@ class DesignCompatibilityTest {
                 store.saveActiveProfile(previous)
                 store.clearProfile(slot)
                 store.saveUiDesign(previousDesign)
+                store.saveExtraWorkers(previousExtra)
+            }
+        }
+    }
+
+    @Test fun routingClipboardRoundTripRestoresBothListsInEveryDesign() {
+        val store = SettingsStore(compose.activity)
+        val previous = runBlocking { store.activeProfile.first() }
+        val previousDesign = runBlocking { store.uiDesign.first() }
+        val slot = runBlocking { checkNotNull(store.findFirstFreeProfile()) }
+        val clipboard = compose.activity.getSystemService(android.content.ClipboardManager::class.java)
+        try {
+            runBlocking {
+                store.saveProfileConnectionSettings(slot, "203.0.113.61", 46123, "RoutingFixture61", 40)
+                store.saveActiveProfile(slot)
+            }
+            for (design in listOf("v2", "old", "classic")) {
+                runBlocking {
+                    store.saveUiDesign(design)
+                    store.saveAppRoutingLists("com.example.direct", "com.example.vpn", true)
+                    store.saveDirectDomainsBlack("direct.example")
+                    store.saveDirectDomainsWhite("vpn.example")
+                    store.saveDomainIsWhitelist(true)
+                    store.saveDirectIpsBlack("192.0.2.10")
+                    store.saveDirectIpsWhite("198.51.100.20")
+                    store.saveIpIsWhitelist(true)
+                }
+                compose.onAllNodesWithText("Маршрут").onLast().performClick()
+                val transferButton = if (design == "classic") "Импорт и экспорт правил" else "Импорт / экспорт"
+                compose.onNode(hasText(transferButton) and hasClickAction()).performScrollTo().performClick()
+                compose.runOnIdle { clipboard.clearPrimaryClip() }
+                compose.onNodeWithText("Экспорт").performClick()
+                compose.waitUntil(5000) {
+                    compose.runOnIdle {
+                        clipboard.primaryClip?.getItemAt(0)?.text?.contains("com.example.direct") == true
+                    }
+                }
+                runBlocking {
+                    store.saveAppRoutingLists("", "", false)
+                    store.saveDirectDomainsBlack("")
+                    store.saveDirectDomainsWhite("")
+                    store.saveDomainIsWhitelist(false)
+                    store.saveDirectIpsBlack("")
+                    store.saveDirectIpsWhite("")
+                    store.saveIpIsWhitelist(false)
+                }
+                compose.onNodeWithText("Импорт").performClick()
+                compose.waitUntil(5000) {
+                    !compose.onNodeWithText("Импорт").isDisplayed()
+                }
+                runBlocking {
+                    assertEquals("$design excluded apps", "com.example.direct", store.excludedApps.first())
+                    assertEquals("$design VPN apps", "com.example.vpn", store.whitelistApps.first())
+                    assertEquals("$design app mode", true, store.isWhitelist.first())
+                    assertEquals("$design excluded domains", "direct.example", store.directDomainsBlack.first())
+                    assertEquals("$design VPN domains", "vpn.example", store.directDomainsWhite.first())
+                    assertEquals("$design domain mode", true, store.domainIsWhitelist.first())
+                    assertEquals("$design excluded IPs", "192.0.2.10", store.directIpsBlack.first())
+                    assertEquals("$design VPN IPs", "198.51.100.20", store.directIpsWhite.first())
+                    assertEquals("$design IP mode", true, store.ipIsWhitelist.first())
+                }
+            }
+        } finally {
+            compose.runOnIdle { clipboard.clearPrimaryClip() }
+            runBlocking {
+                store.saveAppRoutingLists("", "", false)
+                store.saveDirectDomainsBlack("")
+                store.saveDirectDomainsWhite("")
+                store.saveDomainIsWhitelist(false)
+                store.saveDirectIpsBlack("")
+                store.saveDirectIpsWhite("")
+                store.saveIpIsWhitelist(false)
+                store.saveActiveProfile(previous)
+                store.clearProfile(slot)
+                store.saveUiDesign(previousDesign)
+            }
+        }
+    }
+
+    @Test fun classicTunnelAuthorizationIsVisibleWithoutScrolling() {
+        val store = SettingsStore(compose.activity)
+        val oldDesign = runBlocking { store.uiDesign.first() }
+        val oldProfile = runBlocking { store.activeProfile.first() }
+        val slot = runBlocking { checkNotNull(store.findFirstFreeProfile()) }
+        try {
+            runBlocking {
+                store.saveProfileConnectionSettings(slot, "203.0.113.44", 46000, "TunnelFixture44", 20)
+                store.saveProfileParticipantMode(slot, false)
+                store.saveActiveProfile(slot)
+                store.saveUiDesign("classic")
+            }
+            compose.onAllNodesWithText("Туннель").onLast().performClick()
+            val authorization = compose.onNodeWithText("Авторизация")
+            compose.waitUntil(5000) { authorization.isDisplayed() }
+            authorization.performClick()
+            val dialog = compose.onNodeWithTag("classic-tunnel-authorization")
+            val scroll = dialog.fetchSemanticsNode().config[
+                androidx.compose.ui.semantics.SemanticsProperties.VerticalScrollAxisRange
+            ]
+            assertEquals("Authorization must fit with the keyboard closed", 0f, scroll.maxValue(), 0f)
+            compose.onNodeWithText("Пароль туннеля").assertIsDisplayed()
+            compose.onNodeWithText("Показать").assertIsDisplayed().performClick()
+            compose.onNodeWithText("Скрыть").assertIsDisplayed().performClick()
+            compose.onNodeWithText("Сохранить").assertIsDisplayed().assertIsEnabled().performClick()
+            compose.waitUntil(5000) {
+                compose.onAllNodesWithTag("classic-tunnel-authorization").fetchSemanticsNodes().isEmpty()
+            }
+        } finally {
+            runBlocking {
+                store.saveActiveProfile(oldProfile)
+                store.clearProfile(slot)
+                store.saveUiDesign(oldDesign)
             }
         }
     }
@@ -170,6 +286,18 @@ class DesignCompatibilityTest {
             compose.waitUntil(5_000) { slot !in runBlocking { store.occupiedProfiles.first() } }
             check(slot != runBlocking { store.activeProfile.first() } || slot == previous)
             check(other == runBlocking { store.readProfileConnectionSettings(previous) })
+            val picker = compose.onNodeWithTag("classic-profile-picker")
+            if (compose.onAllNodesWithTag("classic-profile-picker").fetchSemanticsNodes().isEmpty()) {
+                gear.onFirst().performClick()
+            }
+            picker.performScrollTo().performClick()
+            val popup = hasAnyAncestor(isPopup())
+            compose.onNode(hasText(name) and popup).assertDoesNotExist()
+            compose.onNode(hasText(defaultProfileName(slot)) and popup).assertDoesNotExist()
+            val freeSlot = runBlocking { store.findFirstFreeProfile() }
+            compose.onNode(hasText("Добавить профиль") and popup).performScrollTo().performClick()
+            compose.waitUntil(5_000) { runBlocking { store.activeProfile.first() } == freeSlot }
+            compose.onNodeWithText("Транспорт").performScrollTo().assertIsDisplayed()
         } finally {
             runBlocking {
                 store.saveActiveProfile(previous)
@@ -344,6 +472,68 @@ class DesignCompatibilityTest {
                 store.saveTcpTransportRiskAcknowledged(oldAcknowledgment)
                 store.saveGoobyMode(oldPreset, profile)
                 store.saveUiDesign(oldDesign)
+            }
+        }
+    }
+
+    @Test fun settingsAndTunnelControlsStayReachableAtTheCurrentWindowSize() {
+        val store = SettingsStore(compose.activity)
+        val oldDesign = runBlocking { store.uiDesign.first() }
+        val oldOwner = runBlocking { store.uiOwnerMode.first() }
+        val oldAuth = runBlocking { store.vkAuthMode.first() }
+        val oldLogs = runBlocking { store.participantShowLogs.first() }
+        try {
+            runBlocking {
+                store.saveUiOwnerMode(true)
+                store.saveParticipantShowLogs(true)
+                store.saveVkAuthMode(CsqttConstants.VkAuth.MODE_CAPTCHA)
+            }
+            for (design in listOf("classic", "v2", "old")) {
+                runBlocking { store.saveUiDesign(design) }
+                val gear = if (design == "classic") "Быстрые настройки" else "Настройки"
+                val settings = compose.onNodeWithContentDescription(gear)
+                settings.performClick()
+                val about = compose.onNodeWithText("О приложении")
+                val aboutInitiallyVisible = about.isDisplayed()
+                for (label in listOf("Экстра потоки", "Автопауза Wi-Fi", "Дизайн", "Импорт / экспорт", "О приложении")) {
+                    compose.onNodeWithText(label).performScrollTo().assertIsDisplayed()
+                }
+                if (design == "classic") {
+                    androidx.test.platform.app.InstrumentationRegistry.getInstrumentation()
+                        .uiAutomation.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_BACK)
+                } else {
+                    compose.onNodeWithContentDescription("Закрыть").performClick()
+                }
+                compose.onAllNodesWithText("Туннель").onLast().performClick()
+                val goobyInitiallyVisible = compose.onNodeWithText("Gooby").isDisplayed()
+                for (label in listOf("Режим кредов", "Режим SRTP", "Транспорт", "Gooby")) {
+                    val title = compose.onNodeWithText(label)
+                    title.performScrollTo().assertIsDisplayed()
+                    val helpPrefix = if (design == "classic") "Информация" else "Подсказка"
+                    val help = compose.onNodeWithContentDescription("$helpPrefix: $label")
+                    val titleBounds = title.getUnclippedBoundsInRoot()
+                    val helpBounds = help.getUnclippedBoundsInRoot()
+                    check(titleBounds.right <= helpBounds.left || helpBounds.right <= titleBounds.left) {
+                        "Overlapping title and help for $label in $design: $titleBounds / $helpBounds"
+                    }
+                }
+                compose.onNodeWithText("Капча").performScrollTo().performClick()
+                compose.onNodeWithContentDescription("Информация: Капча").assertIsDisplayed().performClick()
+                compose.onNodeWithText("Понятно").performClick()
+                for (tab in listOf("Деплой", "Логи", "Маршрут", "Подкл.")) {
+                    compose.onAllNodesWithText(tab).onFirst().assertIsDisplayed().performClick()
+                }
+                android.util.Log.i(
+                    "CSQTTR-layout",
+                    "$design aboutInitiallyVisible=$aboutInitiallyVisible goobyInitiallyVisible=$goobyInitiallyVisible",
+                )
+            }
+        } finally {
+            runBlocking {
+                store.saveUiDesign(oldDesign)
+                store.saveUiOwnerMode(oldOwner)
+                store.saveVkAuthMode(oldAuth)
+                store.saveParticipantShowLogs(oldLogs)
             }
         }
     }

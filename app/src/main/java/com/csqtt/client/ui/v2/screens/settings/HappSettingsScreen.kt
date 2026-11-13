@@ -39,8 +39,10 @@ fun HappSettingsScreen(
         initialValue = SettingsStore.DEFAULT_PARTICIPANT_SHOW_LOGS,
     )
     val profile by settingsStore.activeProfile.collectAsStateWithLifecycle(0)
-    val authMode by settingsStore.vkAuthMode.collectAsStateWithLifecycle("vkcalls")
     val running by com.csqtt.client.TunnelManager.running.collectAsStateWithLifecycle()
+    val starting by com.csqtt.client.TunnelManager.starting.collectAsStateWithLifecycle()
+    val stopping by com.csqtt.client.TunnelManager.stopping.collectAsStateWithLifecycle()
+    val paused by com.csqtt.client.TunnelManager.autoPausedForWifi.collectAsStateWithLifecycle()
     val uiScalePercent by settingsStore.uiScalePercent.collectAsStateWithLifecycle(100)
     val fingerprint by settingsStore.selectedFingerprint.collectAsStateWithLifecycle("chrome")
     val design by settingsStore.uiDesign.collectAsStateWithLifecycle("v2")
@@ -82,8 +84,8 @@ fun HappSettingsScreen(
                 }
             }
             V2Card(contentPadding = PaddingValues(12.dp)) {
-                V2SwitchSetting("Экстра потоки", extra, { scope.launch { settingsStore.saveExtraWorkers(it, forProfile = profile) } },
-                    enabled = !running && authMode != "auto_js", onInfoClick = { extraHelp = true })
+                V2SwitchSetting("Экстра потоки", extra, { scope.launch { settingsStore.saveExtraWorkers(it) } },
+                    enabled = !(running || starting || stopping || paused), onInfoClick = { extraHelp = true })
                 V2SettingRow(title = "Автопауза Wi-Fi", onClick = { wifiLists = true }) {
                     Text(if (wifi) "Включена" else "Выключена", color = V2Theme.colors.textSecondary,
                         fontSize = V2TextSizes.Secondary, maxLines = 1)

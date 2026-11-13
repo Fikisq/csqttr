@@ -12,6 +12,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.platform.testTag
 import com.csqtt.client.SettingsStore
 import com.csqtt.client.defaultProfileName
 import com.csqtt.client.BatterySaver
@@ -26,7 +27,7 @@ import com.csqtt.client.R
 
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Delete
+
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.foundation.verticalScroll
@@ -64,6 +65,7 @@ fun FloatingToolbar(
     csqttLinkMode: Boolean,
     activeProfile: Int,
     onActiveProfileChange: (Int) -> Unit,
+    onAddProfile: (Int) -> Unit,
     currentTheme: String,
     onThemeChange: (String) -> Unit,
     activeFingerprint: String,
@@ -77,9 +79,7 @@ fun FloatingToolbar(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val selectedRole = if (csqttLinkMode) UsageRole.Participant else UsageRole.Owner
-    val vkAuthMode by settingsStore.vkAuthMode.collectAsStateWithLifecycle(
-        initialValue = CsqttConstants.VkAuth.MODE_CALLS,
-    )
+
     val tunnelRunning by TunnelManager.running.collectAsStateWithLifecycle()
     val tunnelStarting by TunnelManager.starting.collectAsStateWithLifecycle()
     val tunnelStopping by TunnelManager.stopping.collectAsStateWithLifecycle()
@@ -279,9 +279,23 @@ fun FloatingToolbar(
                     CompactDropdownSetting(
                         title = "Профиль конфигурации",
                         selectedKey = activeProfile.toString(),
-                        options = (CsqttConstants.Profiles.MIN_INDEX..CsqttConstants.Profiles.MAX_INDEX)
-                            .map { profile -> profile.toString() to (profileNames[profile] ?: defaultProfileName(profile)) },
+                        options = occupiedProfiles.sorted().map { profile ->
+                            profile.toString() to (profileNames[profile] ?: defaultProfileName(profile))
+                        },
                         enabled = true,
+                        unselectedLabel = "Не выбран",
+                        triggerModifier = Modifier.testTag("classic-profile-picker"),
+                        menuAction = "Добавить профиль" to {
+                            scope.launch {
+                                val slot = settingsStore.findFirstFreeProfile()
+                                if (slot != null) {
+                                    isExpanded = false
+                                    onAddProfile(slot)
+                                } else {
+                                    Toast.makeText(context, "Нет свободных слотов для профиля", Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        },
                         onSelected = { profile ->
                             profile.toIntOrNull()?.let(onActiveProfileChange)
                         },
@@ -329,9 +343,9 @@ fun FloatingToolbar(
                         title = "Экстра потоки",
                         description = "До ${CsqttConstants.Tunnel.MAX_WORKERS} потоков вместо ${CsqttConstants.Tunnel.DEFAULT_MAX_WORKERS}",
                         checked = extraWorkers,
-                        enabled = !tunnelRunning && vkAuthMode != CsqttConstants.VkAuth.MODE_AUTO_JS,
+                        enabled = !tunnelBusy,
                         onCheckedChange = { enabled ->
-                            scope.launch { settingsStore.saveExtraWorkers(enabled, forProfile = activeProfile) }
+                            scope.launch { settingsStore.saveExtraWorkers(enabled) }
                         },
                         onInfoClick = { showExtraWorkersInfo = true },
                     )
@@ -552,9 +566,9 @@ fun FloatingToolbar(
                                 modifier = Modifier.size(32.dp),
                             ) {
                                 Icon(
-                                    imageVector = Icons.Default.Delete,
-                                    contentDescription = "Очистить",
-                                    tint = MaterialTheme.colorScheme.error,
+                                    imageVector = Icons.Default.Close,
+                                    contentDescription = "Очистить название",
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                     modifier = Modifier.size(20.dp),
                                 )
                             }

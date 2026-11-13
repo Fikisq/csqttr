@@ -330,11 +330,6 @@ fun V2SettingsScreen(
         }
     }
 
-    LaunchedEffect(effectiveVkAuthMode, extraWorkers) {
-        if (effectiveVkAuthMode == CsqttConstants.VkAuth.MODE_AUTO_JS && extraWorkers) {
-            settingsStore.saveExtraWorkers(false)
-        }
-    }
 
     LaunchedEffect(initialized, participantMode, linkHashes, linkTokenActive, vkAuthMode, savedHashMode) {
         if (!initialized || !participantMode) return@LaunchedEffect

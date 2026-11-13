@@ -58,7 +58,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -874,7 +876,7 @@ internal fun V2RulesTransferDialog(
         context.showRaisedToast("Правила экспортированы в буфер обмена", Toast.LENGTH_SHORT)
     }
 
-    fun importRules() {
+    suspend fun importRules() {
         if (!transferApps && !transferDomains && !transferIps) {
             context.showRaisedToast("Выберите хотя бы один пункт", Toast.LENGTH_SHORT)
             return
@@ -910,12 +912,10 @@ internal fun V2RulesTransferDialog(
                         if (isValidPackage(pkg)) newWhite.add(pkg)
                     }
                 }
-                scope.launch {
-                    settingsStore.saveIsWhitelist(isWhite)
-                    settingsStore.saveExcludedApps(newBlack.sorted().joinToString(","))
-                    settingsStore.saveWhitelistApps(newWhite.sorted().joinToString(","))
-                    TunnelManager.reloadVpn()
-                }
+                settingsStore.saveIsWhitelist(isWhite)
+                settingsStore.saveExcludedApps(newBlack.sorted().joinToString(","))
+                settingsStore.saveWhitelistApps(newWhite.sorted().joinToString(","))
+                TunnelManager.reloadVpn()
                 importedAny = true
             }
             if (transferDomains && rootJson.has("domains")) {
@@ -953,13 +953,11 @@ internal fun V2RulesTransferDialog(
                 }
                 val formattedBlack = impBlack.distinct().take(1024).joinToString(",")
                 val formattedWhite = impWhite.distinct().take(1024).joinToString(",")
-                scope.launch {
-                    settingsStore.saveDomainIsWhitelist(isWhite)
-                    settingsStore.saveTemplateDomainsEnabled(isTemplate)
-                    if (impBlack.isNotEmpty() || !isWhite) settingsStore.saveDirectDomainsBlack(formattedBlack)
-                    if (impWhite.isNotEmpty() || isWhite) settingsStore.saveDirectDomainsWhite(formattedWhite)
-                    TunnelManager.pushLocalRouting(context)
-                }
+                settingsStore.saveDomainIsWhitelist(isWhite)
+                settingsStore.saveTemplateDomainsEnabled(isTemplate)
+                if (impBlack.isNotEmpty() || !isWhite) settingsStore.saveDirectDomainsBlack(formattedBlack)
+                if (impWhite.isNotEmpty() || isWhite) settingsStore.saveDirectDomainsWhite(formattedWhite)
+                TunnelManager.pushLocalRouting(context)
                 importedAny = true
             }
             if (transferIps && rootJson.has("ips")) {
@@ -996,13 +994,11 @@ internal fun V2RulesTransferDialog(
                 }
                 val formattedBlack = impBlack.distinct().take(1024).joinToString(",")
                 val formattedWhite = impWhite.distinct().take(1024).joinToString(",")
-                scope.launch {
-                    settingsStore.saveIpIsWhitelist(isWhite)
-                    settingsStore.saveIpRoutingEnabled(true)
-                    if (impBlack.isNotEmpty() || !isWhite) settingsStore.saveDirectIpsBlack(formattedBlack)
-                    if (impWhite.isNotEmpty() || isWhite) settingsStore.saveDirectIpsWhite(formattedWhite)
-                    TunnelManager.pushLocalRouting(context)
-                }
+                settingsStore.saveIpIsWhitelist(isWhite)
+                settingsStore.saveIpRoutingEnabled(true)
+                if (impBlack.isNotEmpty() || !isWhite) settingsStore.saveDirectIpsBlack(formattedBlack)
+                if (impWhite.isNotEmpty() || isWhite) settingsStore.saveDirectIpsWhite(formattedWhite)
+                TunnelManager.pushLocalRouting(context)
                 importedAny = true
             }
         } else {
@@ -1013,15 +1009,13 @@ internal fun V2RulesTransferDialog(
                     if (impBlack.isNotEmpty() || impWhite.isNotEmpty()) {
                         val mergedBlack = blacklistSelection + impBlack
                         val mergedWhite = whitelistSelection + impWhite
-                        scope.launch {
-                            if (impBlack.isNotEmpty()) {
-                                settingsStore.saveExcludedApps(mergedBlack.sorted().joinToString(","))
-                            }
-                            if (impWhite.isNotEmpty()) {
-                                settingsStore.saveWhitelistApps(mergedWhite.sorted().joinToString(","))
-                            }
-                            TunnelManager.reloadVpn()
+                        if (impBlack.isNotEmpty()) {
+                            settingsStore.saveExcludedApps(mergedBlack.sorted().joinToString(","))
                         }
+                        if (impWhite.isNotEmpty()) {
+                            settingsStore.saveWhitelistApps(mergedWhite.sorted().joinToString(","))
+                        }
+                        TunnelManager.reloadVpn()
                         importedAny = true
                     }
                 }
@@ -1035,14 +1029,12 @@ internal fun V2RulesTransferDialog(
                         parseDomainsFromText(directDomainsBlackStr)
                     }
                     val combined = (currentList + importedDomains).distinct().take(1024).joinToString(",")
-                    scope.launch {
-                        if (domainIsWhitelist) {
-                            settingsStore.saveDirectDomainsWhite(combined)
-                        } else {
-                            settingsStore.saveDirectDomainsBlack(combined)
-                        }
-                        TunnelManager.pushLocalRouting(context)
+                    if (domainIsWhitelist) {
+                        settingsStore.saveDirectDomainsWhite(combined)
+                    } else {
+                        settingsStore.saveDirectDomainsBlack(combined)
                     }
+                    TunnelManager.pushLocalRouting(context)
                     importedAny = true
                 }
             }
@@ -1055,22 +1047,23 @@ internal fun V2RulesTransferDialog(
                         parseIpsFromText(directIpsBlackStr)
                     }
                     val combined = (currentList + importedIps).distinct().take(1024).joinToString(",")
-                    scope.launch {
-                        settingsStore.saveIpRoutingEnabled(true)
-                        if (ipIsWhitelist) {
-                            settingsStore.saveDirectIpsWhite(combined)
-                        } else {
-                            settingsStore.saveDirectIpsBlack(combined)
-                        }
-                        TunnelManager.pushLocalRouting(context)
+                    settingsStore.saveIpRoutingEnabled(true)
+                    if (ipIsWhitelist) {
+                        settingsStore.saveDirectIpsWhite(combined)
+                    } else {
+                        settingsStore.saveDirectIpsBlack(combined)
                     }
+                    TunnelManager.pushLocalRouting(context)
                     importedAny = true
                 }
             }
         }
         if (importedAny) {
-            context.showRaisedToast("Правила успешно импортированы", Toast.LENGTH_SHORT)
-            animateClose()
+            withContext(Dispatchers.Main.immediate) {
+                context.showRaisedToast("Правила успешно импортированы", Toast.LENGTH_SHORT)
+            }
+            sheetState.hide()
+            onClose()
         } else {
             context.showRaisedToast("В буфере обмена нет подходящих данных", Toast.LENGTH_SHORT)
         }
@@ -1150,7 +1143,7 @@ internal fun V2RulesTransferDialog(
                 )
                 V2PillButton(
                     text = "Импорт",
-                    onClick = { importRules() },
+                    onClick = { scope.launch { importRules() } },
                     modifier = Modifier.weight(1f),
                     style = V2PillStyle.Contrast,
                 )

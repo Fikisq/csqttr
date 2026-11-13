@@ -390,7 +390,7 @@ internal fun resolveActiveNavIds(csqttLinkMode: Boolean, participantShowLogs: Bo
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun MainScreen(
     settingsStore: SettingsStore,
@@ -444,7 +444,9 @@ fun MainScreen(
     )
     var pendingRelease by remember { mutableStateOf<AppReleaseInfo?>(null) }
     val currentVersion = remember { "v${BuildConfig.VERSION_NAME.removePrefix("v").substringBefore('-')}" }
-    val safeBottomInset = with(density) { WindowInsets.safeDrawing.getBottom(density).toDp() }
+    val safeBottomInset = with(density) {
+        WindowInsets.systemBars.union(WindowInsets.displayCutout).getBottom(density).toDp()
+    }
     val navToolbarHeight = 66.dp
     val navToolbarBottomMargin = 10.dp
     val navContentGap = 5.dp
@@ -540,6 +542,12 @@ fun MainScreen(
                     onActiveProfileChange = { profile ->
                         scope.launch { settingsStore.saveActiveProfile(profile) }
                     },
+                    onAddProfile = { profile ->
+                        scope.launch {
+                            settingsStore.saveActiveProfile(profile)
+                            selectedTab = 1
+                        }
+                    },
                     currentTheme = themeMode,
                     onThemeChange = onThemeChange,
                     activeFingerprint = activeFingerprint,
@@ -605,7 +613,16 @@ fun MainScreen(
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
-                            .padding(bottom = navOverlayReserve),
+                            .padding(bottom = navOverlayReserve)
+                            .then(
+                                if (selectedTab == 1 || selectedTab == 2) {
+                                    Modifier.windowInsetsPadding(
+                                        WindowInsets.imeAnimationTarget.exclude(WindowInsets(bottom = navOverlayReserve)),
+                                    )
+                                } else {
+                                    Modifier
+                                },
+                            ),
                     ) {
                         key(selectedTab) {
                             val tab = selectedTab
@@ -782,7 +799,10 @@ private fun ProxyNavigationBar(
     BoxWithConstraints(
         modifier = modifier
             .fillMaxWidth()
-            .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom))
+            .windowInsetsPadding(
+                WindowInsets.systemBars.union(WindowInsets.displayCutout)
+                    .only(WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom),
+            )
             .padding(horizontal = 22.dp, vertical = 10.dp)
     ) {
         val trackPadding = 6.dp

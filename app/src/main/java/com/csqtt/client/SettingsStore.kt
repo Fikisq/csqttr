@@ -2,6 +2,7 @@ package com.csqtt.client
 
 import android.content.Context
 import android.content.pm.PackageManager
+import androidx.datastore.core.DataMigration
 import androidx.datastore.preferences.core.MutablePreferences
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
@@ -223,7 +224,24 @@ class SettingsStore(context: Context, deployScope: Boolean = false, readOnlyProf
         internal const val DEFAULT_PARTICIPANT_SHOW_LOGS = true
         internal val UI_SCALE_CHOICES = listOf(90, 100, 110, 120)
 
-        private val Context.dataStore by preferencesDataStore("settings")
+        private val Context.dataStore by preferencesDataStore(
+            name = "settings",
+            produceMigrations = {
+                listOf(object : DataMigration<Preferences> {
+                    override suspend fun shouldMigrate(currentData: Preferences): Boolean =
+                        EXTRA_WORKERS_GLOBAL !in currentData
+
+                    override suspend fun migrate(currentData: Preferences): Preferences {
+                        val active = currentData[ACTIVE_PROFILE] ?: CsqttConstants.Profiles.MIN_INDEX
+                        return currentData.toMutablePreferences().apply {
+                            this[EXTRA_WORKERS_GLOBAL] = currentData[getProfileKey(EXTRA_WORKERS, active)] ?: false
+                        }
+                    }
+
+                    override suspend fun cleanUp() = Unit
+                })
+            },
+        )
         private val ACTIVE_PROFILE = intPreferencesKey("active_profile")
         private val UI_OWNER_MODE = booleanPreferencesKey("ui_owner_mode")
         private val SHOW_SYSTEM_APPS = booleanPreferencesKey("show_system_apps")
@@ -334,6 +352,7 @@ private val DEPLOY_LAST_INSPECTION_PANEL = booleanPreferencesKey("deploy_last_in
         private val IS_WHITELIST = booleanPreferencesKey("is_whitelist")
         private val SPLIT_TUNNEL_WHITELIST_MIGRATED = booleanPreferencesKey("split_tunnel_whitelist_migrated")
         private val EXTRA_WORKERS = booleanPreferencesKey("extra_workers")
+        private val EXTRA_WORKERS_GLOBAL = booleanPreferencesKey("extra_workers_global")
         private val AUTO_JS_RISK_ACKNOWLEDGED = booleanPreferencesKey("auto_js_risk_acknowledged")
         private val TCP_TRANSPORT_RISK_ACKNOWLEDGED = booleanPreferencesKey("tcp_transport_risk_acknowledged")
         private val BATTERY_OPTIMIZATION_PROMPT_HANDLED =
@@ -551,7 +570,8 @@ private val DEPLOY_LAST_INSPECTION_PANEL = booleanPreferencesKey("deploy_last_in
     /** The most workers the active profile may use: «Экстра потоки» lifts 70 to 100, a subscription can lower it. */
     private fun workersMaximum(prefs: Preferences): Int {
         val profile = prefs[ACTIVE_PROFILE] ?: 0
-        val isExtra = prefs[getProfileKey(EXTRA_WORKERS, profile)] ?: false
+        val isExtra = prefs[EXTRA_WORKERS_GLOBAL] == true &&
+            prefs[getProfileKey(VK_AUTH_MODE, profile)] != CsqttConstants.VkAuth.MODE_AUTO_JS
         val defaultMax = WorkerCountPolicy.defaultMaximum(isExtra)
         return prefs[getProfileKey(SUBSCRIPTION_POWER, profile)]
             ?.takeIf { it in 10..100 }
@@ -1034,7 +1054,7 @@ private val DEPLOY_LAST_INSPECTION_PANEL = booleanPreferencesKey("deploy_last_in
                 workersPerHash = WorkerCountPolicy.normalize(
                     prefs[getProfileKey(WORKERS_PER_HASH, profile)] ?: 18,
                 ),
-                extraWorkers = prefs[getProfileKey(EXTRA_WORKERS, profile)] ?: false,
+                extraWorkers = prefs[EXTRA_WORKERS_GLOBAL] ?: false,
                 csqttLink = prefs[getProfileKey(CSQTT_LINK, profile)] ?: "",
                 csqttLinkMode = prefs[getProfileKey(CSQTT_LINK_MODE, profile)] ?: false,
                 subscriptionUrl = prefs[getProfileKey(SUBSCRIPTION_URL, profile)] ?: "",
@@ -1485,10 +1505,9 @@ private val DEPLOY_LAST_INSPECTION_PANEL = booleanPreferencesKey("deploy_last_in
         }
     }
 
-    val extraWorkers: Flow<Boolean> = dataStore.data.map { prefs ->
-        val profile = prefs[ACTIVE_PROFILE] ?: 0
-        prefs[getProfileKey(EXTRA_WORKERS, profile)] ?: false
-    }
+    val extraWorkers: Flow<Boolean> = appContext.dataStore.data
+        .map { it[EXTRA_WORKERS_GLOBAL] ?: false }
+        .distinctUntilChanged()
     val autoJsRiskAcknowledged: Flow<Boolean> = dataStore.data.map { prefs ->
         prefs[AUTO_JS_RISK_ACKNOWLEDGED] ?: false
     }
@@ -2364,19 +2383,8 @@ private val DEPLOY_LAST_INSPECTION_PANEL = booleanPreferencesKey("deploy_last_in
         }
     }
 
-    suspend fun saveExtraWorkers(enabled: Boolean, forProfile: Int? = null) {
-        dataStore.edit { prefs ->
-            val profile = forProfile ?: (prefs[ACTIVE_PROFILE] ?: 0)
-            prefs[getProfileKey(EXTRA_WORKERS, profile)] = enabled
-            if (!enabled) {
-                val current = prefs[getProfileKey(WORKERS_PER_HASH, profile)] ?: 18
-                val maximum = WorkerCountPolicy.defaultMaximum(extraWorkers = false)
-                if (current > maximum) {
-                    prefs[getProfileKey(WORKERS_PER_HASH, profile)] =
-                        WorkerCountPolicy.normalize(current, maximum = maximum)
-                }
-            }
-        }
+    suspend fun saveExtraWorkers(enabled: Boolean) {
+        appContext.dataStore.edit { it[EXTRA_WORKERS_GLOBAL] = enabled }
     }
 
     suspend fun saveAutoJsRiskAcknowledged(acknowledged: Boolean) {
@@ -2993,7 +3001,7 @@ private val DEPLOY_LAST_INSPECTION_PANEL = booleanPreferencesKey("deploy_last_in
             // the VK access token is a VK account credential: it stays on this device (an export goes to the clipboard
             // and Downloads). Exports before 2.5.2 carried it blank in practice; the import below leaves a stored one alone.
             deploy.put("workers_per_hash", prefs[getProfileKey(WORKERS_PER_HASH, p)] ?: 18)
-            deploy.put("extra_workers", prefs[getProfileKey(EXTRA_WORKERS, p)] ?: false)
+
             deploy.put("csqtt_link", prefs[getProfileKey(CSQTT_LINK, p)] ?: "")
             deploy.put("csqtt_link_mode", prefs[getProfileKey(CSQTT_LINK_MODE, p)] ?: false)
             deploy.put("secret_path_enabled", prefs[getProfileKey(DEPLOY_SECRET_PATH_ENABLED, p)] ?: false)
@@ -3024,6 +3032,7 @@ private val DEPLOY_LAST_INSPECTION_PANEL = booleanPreferencesKey("deploy_last_in
             settings.put("theme_mode", prefs[THEME_MODE] ?: "system")
             settings.put("ui_design", prefs[UI_DESIGN] ?: CsqttConstants.Theme.DESIGN_V2)
             settings.put("ui_scale_percent", uiScaleOrDefault(prefs[UI_SCALE]))
+            settings.put("extra_workers", prefs[EXTRA_WORKERS_GLOBAL] ?: false)
             settings.put("battery_saver_mode", prefs[BATTERY_SAVER_MODE] ?: BatterySaver.DEFAULT_MODE)
             settings.put("battery_saver_percent", prefs[BATTERY_SAVER_PERCENT] ?: BatterySaver.DEFAULT_PERCENT)
             settings.put("is_dynamic_color", prefs[IS_DYNAMIC_COLOR] ?: false)
@@ -3109,7 +3118,7 @@ private val DEPLOY_LAST_INSPECTION_PANEL = booleanPreferencesKey("deploy_last_in
                         mutable.putSecret(VK_ACCESS_TOKEN_ENCRYPTED, VK_ACCESS_TOKEN, it, p)
                     }
                     if (deploy.has("workers_per_hash")) mutable[getProfileKey(WORKERS_PER_HASH, p)] = deploy.getInt("workers_per_hash")
-                    if (deploy.has("extra_workers")) mutable[getProfileKey(EXTRA_WORKERS, p)] = deploy.getBoolean("extra_workers")
+
                     if (deploy.has("csqtt_link")) mutable[getProfileKey(CSQTT_LINK, p)] = deploy.getString("csqtt_link")
                     if (deploy.has("csqtt_link_mode")) mutable[getProfileKey(CSQTT_LINK_MODE, p)] = deploy.getBoolean("csqtt_link_mode")
                     if (deploy.has("secret_path_enabled")) mutable[getProfileKey(DEPLOY_SECRET_PATH_ENABLED, p)] = deploy.getBoolean("secret_path_enabled")
@@ -3130,6 +3139,16 @@ private val DEPLOY_LAST_INSPECTION_PANEL = booleanPreferencesKey("deploy_last_in
                     if (exc.has("ip_is_whitelist")) mutable[getProfileKey(IP_IS_WHITELIST, p)] = exc.getBoolean("ip_is_whitelist")
                     if (exc.has("direct_ips_black")) mutable[getProfileKey(DIRECT_IPS_BLACK, p)] = exc.getString("direct_ips_black")
                     if (exc.has("direct_ips_white")) mutable[getProfileKey(DIRECT_IPS_WHITE, p)] = exc.getString("direct_ips_white")
+                }
+                if (includeSettings) {
+                    val settings = root.optJSONObject("settings")
+                    val legacyDeploy = root.optJSONObject("deploy")
+                    when {
+                        settings?.has("extra_workers") == true ->
+                            mutable[EXTRA_WORKERS_GLOBAL] = settings.getBoolean("extra_workers")
+                        legacyDeploy?.has("extra_workers") == true ->
+                            mutable[EXTRA_WORKERS_GLOBAL] = legacyDeploy.getBoolean("extra_workers")
+                    }
                 }
                 if (includeSettings && root.has("settings")) {
                     val s = root.getJSONObject("settings")
