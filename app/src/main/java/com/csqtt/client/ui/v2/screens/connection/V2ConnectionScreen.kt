@@ -381,6 +381,7 @@ internal fun V2ConnectionScreen(
     val darkSurface = colors.background.luminance() < 0.5f
     val powerInk = when {
         isStarting || tunnelStopping || autoPausedForWifi || profileChecking -> colors.warning
+        tunnelRunning && historicalPalette -> androidx.compose.ui.graphics.Color(0xFFD2E8FF)
         tunnelRunning -> colors.success
         historicalPalette -> colors.onAccent
         darkSurface -> androidx.compose.ui.graphics.Color(0xFF78ADF5)
