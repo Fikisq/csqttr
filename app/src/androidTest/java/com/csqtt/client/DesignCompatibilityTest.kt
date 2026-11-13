@@ -170,7 +170,11 @@ class DesignCompatibilityTest {
             compose.waitUntil(5_000) { slot !in runBlocking { store.occupiedProfiles.first() } }
             check(slot != runBlocking { store.activeProfile.first() } || slot == previous)
             check(other == runBlocking { store.readProfileConnectionSettings(previous) })
-            compose.onNodeWithTag("classic-profile-picker").performScrollTo().performClick()
+            val picker = compose.onNodeWithTag("classic-profile-picker")
+            if (compose.onAllNodesWithTag("classic-profile-picker").fetchSemanticsNodes().isEmpty()) {
+                gear.onFirst().performClick()
+            }
+            picker.performScrollTo().performClick()
             val popup = hasAnyAncestor(isPopup())
             compose.onNode(hasText(name) and popup).assertDoesNotExist()
             compose.onNode(hasText(defaultProfileName(slot)) and popup).assertDoesNotExist()
