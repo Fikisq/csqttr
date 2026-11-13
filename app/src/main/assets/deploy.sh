@@ -2037,23 +2037,15 @@ setup_letsencrypt_ip_tls() {
         log_info "Используется заранее установленный TLS-сертификат пользователя; CSQTT сохраняет его и не заменяет Let’s Encrypt"
         return 0
     fi
-    public_ip="$(detect_public_ipv4 2>/dev/null || true)"
-    if [ -z "$public_ip" ]; then
-        public_ip="$(state_value IP 2>/dev/null || true)"
+    public_ip="${CSQTT_PUBLIC_IP:-}"
+    if ! is_public_ipv4 "$public_ip"; then
+        public_ip="$(detect_public_ipv4 2>/dev/null || state_value IP 2>/dev/null || true)"
     fi
-    if ! ensure_letsencrypt_client; then
-        if [ ! -s "$CSQTT_CONFIG_DIR/web_cert.pem" ] || ! openssl x509 -noout -checkend 0 -in "$CSQTT_CONFIG_DIR/web_cert.pem" >/dev/null 2>&1; then
-            generate_rcgen_fallback_certificate "$public_ip" || true
-        fi
-        return 0
-    fi
-    write_letsencrypt_renewal_helper
     if [ -z "$public_ip" ]; then
         log_warn "Публичный IPv4 не определён; WEB-панель временно останется на self-signed TLS"
         if [ ! -s "$CSQTT_CONFIG_DIR/web_cert.pem" ] || ! openssl x509 -noout -checkend 0 -in "$CSQTT_CONFIG_DIR/web_cert.pem" >/dev/null 2>&1; then
             generate_rcgen_fallback_certificate "" || true
         fi
-        install_letsencrypt_renewal_timer
         return 0
     fi
     if [ "$CSQTT_ROLE" = side ] && ! letsencrypt_certificate_is_current "$public_ip"; then
@@ -2067,15 +2059,22 @@ setup_letsencrypt_ip_tls() {
     fi
     if letsencrypt_certificate_is_current "$public_ip"; then
         log_info "Let’s Encrypt IP-сертификат действителен; перевыпуск не требуется"
-    else
+        LE_CERTBOT_COMMAND="$(command -v certbot || printf '%s' "$CSQTT_LE_CERTBOT")"
+    elif ss -ltnH "sport = :${LE_HTTP_PORT}" 2>/dev/null | grep -q .; then
+        log_warn "TCP/${LE_HTTP_PORT} уже занят; выпуск Let’s Encrypt отложен"
+        LE_CERTBOT_COMMAND="$(command -v certbot || printf '%s' "$CSQTT_LE_CERTBOT")"
+    elif ensure_letsencrypt_client; then
         cert_name="$(letsencrypt_cert_name "$public_ip")"
-        if ! issue_letsencrypt_ip_certificate "$LE_CERTBOT_COMMAND" "$public_ip" "$cert_name"; then
-            if [ ! -s "$CSQTT_CONFIG_DIR/web_cert.pem" ] || ! openssl x509 -noout -checkend 0 -in "$CSQTT_CONFIG_DIR/web_cert.pem" >/dev/null 2>&1; then
-                generate_rcgen_fallback_certificate "$public_ip" || true
-            fi
-        fi
+        issue_letsencrypt_ip_certificate "$LE_CERTBOT_COMMAND" "$public_ip" "$cert_name" || true
     fi
-    install_letsencrypt_renewal_timer
+    if [ -n "$LE_CERTBOT_COMMAND" ]; then
+        write_letsencrypt_renewal_helper
+        install_letsencrypt_renewal_timer
+    fi
+    if [ ! -s "$CSQTT_CONFIG_DIR/web_cert.pem" ] || ! openssl x509 -noout -checkend 0 -in "$CSQTT_CONFIG_DIR/web_cert.pem" >/dev/null 2>&1; then
+        generate_rcgen_fallback_certificate "$public_ip" || true
+    fi
+    return 0
 }
 
 verify_web_panel() {
