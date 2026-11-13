@@ -42,6 +42,10 @@ val releaseSigningProblems = mutableListOf<String>().apply {
 }
 val releaseSigningReady = releaseSigningProblems.isEmpty()
 
+val compactApk = providers.gradleProperty("csqtt.compactApk").orNull == "true"
+val debugMinify = providers.gradleProperty("csqtt.debugMinify").map(String::toBooleanStrict).getOrElse(false)
+val debugVersionCode = providers.gradleProperty("csqtt.debugVersionCode").map(String::toInt)
+
 val supportedAbis = listOf("arm64-v8a", "armeabi-v7a", "x86_64")
 val selectedAbis = providers.gradleProperty("csqtt.abis").orNull
     ?.split(',')?.map(String::trim)?.filter(String::isNotEmpty)?.distinct()
@@ -107,9 +111,9 @@ android {
 
     buildTypes {
         getByName("debug") {
-            if (providers.gradleProperty("csqtt.compactApk").orNull == "true") {
-                isMinifyEnabled = true
-                isShrinkResources = true
+            isMinifyEnabled = compactApk || debugMinify
+            isShrinkResources = compactApk
+            if (isMinifyEnabled) {
                 proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             }
             applicationIdSuffix = providers.gradleProperty("csqtt.debugApplicationIdSuffix")
@@ -180,6 +184,14 @@ android {
     sourceSets {
         getByName("main") {
             jniLibs.directories.add("src/main/jniLibs")
+        }
+    }
+}
+
+androidComponents {
+    onVariants(selector().withBuildType("debug")) { variant ->
+        if (debugVersionCode.isPresent) {
+            variant.outputs.forEach { it.versionCode.set(debugVersionCode) }
         }
     }
 }
