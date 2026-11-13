@@ -54,9 +54,13 @@ fun HappSettingsScreen(
     V2AdaptiveScreen(Modifier.fillMaxSize().padding(horizontal = V2Sizes.ScreenPadding)) {
         val layout = LocalV2AdaptiveMetrics.current
         V2TopBar(title = "Настройки", actions = {
-            IconButton(onClick = onBack) {
-                Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.action_close))
-            }
+            V2CircleIconButton(
+                icon = Icons.Filled.Close,
+                contentDescription = stringResource(R.string.action_close),
+                onClick = onBack,
+                size = 48.dp,
+                iconSize = 24.dp,
+            )
         })
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(bottom = layout.gap),
             verticalArrangement = Arrangement.spacedBy(layout.gap)) {
