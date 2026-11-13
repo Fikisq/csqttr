@@ -81,7 +81,10 @@ button { cursor: pointer; }
 .select-row select { padding: 7px; color: var(--fg); border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
 .account button:first-child { flex: 1; }
 .phone button:disabled { opacity: .55; cursor: default; }
-.hash-footer > button { flex: 1; }
+.hash-footer > button { flex: 1; width: 100%; }
+[data-panel="accounts"] .sheet { min-height: 0; }
+[data-panel="accounts"] .account { background: transparent; padding: 0; }
+[data-panel="accounts"] .account button:first-child[aria-pressed="true"] { background: var(--muted); color: var(--bg); border-color: transparent; }
 
 
 [data-design="modern"] .phone { --bg:#0b0b0c; --surface:#131315; --field:#131315; --line:#36363b; --fg:#f8f8fa; --muted:#c4c5cb; --accent:#1565d8; }
@@ -289,9 +292,10 @@ function accountsPanel(view) {
   }
   const rows = accounts.map((id,index) => '<div class="account"><button type="button" data-action="select-account" data-index="' + id +
     '" aria-pressed="' + (activeAccount===id) + '">Аккаунт ' + (index + 1) + (activeAccount===id ? " · выбран" : "") +
-    '</button><button type="button" data-action="remove-account" data-index="' + id + '" aria-label="Удалить аккаунт ' + (index+1) + '">×</button></div>').join("");
+    '</button><button type="button" data-action="remove-account" data-index="' + id + '" aria-label="Удалить аккаунт ' + (index+1) + '"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M4 6h16M9 6V4h6v2M6 6l1 14h10l1-14M10 9v8m4-8v8"/></svg></button></div>').join("");
   return '<p class="note">Личный аккаунт общий для ваших профилей</p>' +
     (rows || '<p class="note">Сохранённых аккаунтов пока нет</p>') +
+    '<p class="note">Сохранённый аккаунт можно выбрать здесь. Для другого аккаунта выполните новый вход.</p>' +
     '<button type="button" class="primary" data-action="add-account">Добавить / сменить аккаунт</button>';
 }
 
