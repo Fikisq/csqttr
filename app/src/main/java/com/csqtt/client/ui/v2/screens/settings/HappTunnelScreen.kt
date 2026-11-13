@@ -21,6 +21,9 @@ import com.csqtt.client.ui.legacy.GOOBY_HELP
 import com.csqtt.client.ui.legacy.ModeIndicator
 import com.csqtt.client.ui.legacy.SRTP_HELP
 import com.csqtt.client.ui.legacy.goobyIndicator
+import com.csqtt.client.ui.legacy.hashModeHelp
+import com.csqtt.client.ui.legacy.turnTransportHelp
+import com.csqtt.client.ui.legacy.workModeHelp
 import com.csqtt.client.ui.legacy.srtpModeHelp
 import com.csqtt.client.ui.v2.components.*
 import com.csqtt.client.ui.v2.design.V2Theme
@@ -180,21 +183,21 @@ internal fun HappTunnelScreen(
                 }
                 if (!linkTokenActive) HappChoice("Режим хешей", when(hashMode) { "auto_api" -> "Авто API"; "auto_js" -> "Авто ВК"; else -> "Ручные хеши" }, listOf("Ручные хеши", "Авто API", "Авто ВК"), ::changeHash,
                     compact = true, shape = pill, indicators = mapOf("Ручные хеши" to green, "Авто API" to green, "Авто ВК" to yellow), enabled = !busy,
-                    help = "Выберите источник хешей VK-звонков.",
+                    help = hashModeHelp().second,
                     optionHelp = mapOf(
-                        "Ручные хеши" to "До шести ссылок VK или готовых хешей. Вход в VK не требуется.",
-                        "Авто API" to "Хеши получаются через API VK.",
-                        "Авто ВК" to "Хеши получаются через авторизованный аккаунт VK.",
+                        "Ручные хеши" to hashModeHelp(CsqttConstants.VkAutoHash.MODE_MANUAL).second,
+                        "Авто API" to hashModeHelp(CsqttConstants.VkAutoHash.MODE_AUTO_API).second,
+                        "Авто ВК" to hashModeHelp(CsqttConstants.VkAutoHash.MODE_AUTO_JS).second,
                     ))
                 HappChoice("Режим кредов", when(authMode) { "auto_js" -> "Авто ВК"; "legacy" -> "Капча"; else -> "Авто" }, listOf("Авто", "Капча", "Авто ВК"), { label ->
                     val mode = when(label) { "Авто ВК" -> "auto_js"; "Капча" -> "legacy"; else -> "vkcalls" }
                     requestAutoJs(mode) { scope.launch { settingsStore.saveVkAuthMode(mode, forProfile = editingProfile) } }
                 },
-                    compact = true, shape = pill, indicators = mapOf("Авто" to green, "Капча" to red, "Авто ВК" to yellow), enabled = !busy, help = "Выберите способ получения TURN-кредов.",
+                    compact = true, shape = pill, indicators = mapOf("Авто" to green, "Капча" to red, "Авто ВК" to yellow), enabled = !busy, help = workModeHelp().second,
                     optionHelp = mapOf(
-                        "Авто" to "Гостевые TURN-креды VK Calls.",
-                        "Капча" to "Браузерный способ. Может потребоваться капча.",
-                        "Авто ВК" to "TURN-креды авторизованного аккаунта VK.",
+                        "Авто" to workModeHelp(CsqttConstants.VkAuth.MODE_CALLS).second,
+                        "Капча" to workModeHelp(CsqttConstants.VkAuth.MODE_CAPTCHA).second,
+                        "Авто ВК" to workModeHelp(CsqttConstants.VkAuth.MODE_AUTO_JS).second,
                     ))
                 if (authMode == "legacy") OutlinedButton(
                     onClick = { showCaptcha = true },
@@ -213,9 +216,9 @@ internal fun HappTunnelScreen(
                     if (shouldConfirmTcpTransport(transport, mode, tcpAcknowledged)) pendingTcp = apply else apply()
                 },
                     compact = true, shape = pill, indicators = mapOf("UDP" to green, "TCP" to yellow), enabled = !busy,
-                    help = "Выберите транспорт TURN.", optionHelp = mapOf(
-                        "UDP" to "Основной транспорт TURN.",
-                        "TCP" to "TURN через TCP/TLS. Подходит, если UDP недоступен.",
+                    help = turnTransportHelp().second, optionHelp = mapOf(
+                        "UDP" to turnTransportHelp(CsqttConstants.Tunnel.DEFAULT_TURN_TRANSPORT).second,
+                        "TCP" to turnTransportHelp(CsqttConstants.Tunnel.TURN_TRANSPORT_TCP_TLS).second,
                     ))
                 key(editingProfile, goobyAvailable, busy) {
                     HappChoice(
