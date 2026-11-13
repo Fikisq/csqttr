@@ -349,7 +349,7 @@ class HappInterfaceTest {
         runBlocking { check(store.vkHashes.first().split(',').drop(1) == hashes.drop(1)) }
     }
 
-    @Test fun logsCanFilterErrorsAndRemoveSeparatorLines() {
+    @Test fun logsShowErrorsAndSuccessWithoutFilterMenus() {
         compose.runOnIdle {
             TunnelManager.logs.clear()
             TunnelManager.logs.add(LogEntry("deploy_fixture_error", "[ERR] Тест: SSH отклонён", isError = true, level = LogLevel.ERR))
@@ -357,15 +357,11 @@ class HappInterfaceTest {
             TunnelManager.logs.add(LogEntry("fixture_separator", "────────────", level = LogLevel.LOG))
         }
         compose.onNodeWithText("Логи").performClick()
-        compose.onNodeWithText("Все уровни ▾").performClick()
-        compose.onNodeWithText("Ошибки").performClick()
+        compose.onNodeWithText("Все уровни ▾").assertDoesNotExist()
+        compose.onNodeWithText("Все события ▾").assertDoesNotExist()
         compose.onNodeWithText("Тест: SSH отклонён").assertIsDisplayed()
-        compose.onNodeWithText("Тест: соединение готово").assertDoesNotExist()
-        compose.onNodeWithText("────────────").assertDoesNotExist()
-        screenshot("ui-logs-review3.png")
-        compose.onNodeWithText("Ошибки ▾").performClick()
-        compose.onNodeWithText("Все уровни").performClick()
         compose.onNodeWithText("Тест: соединение готово").assertIsDisplayed()
+        compose.onNodeWithText("────────────").assertDoesNotExist()
     }
 
     @Test fun vpsEditorShowsPortsAndFormatHintsWithoutConnectionWorkers() {

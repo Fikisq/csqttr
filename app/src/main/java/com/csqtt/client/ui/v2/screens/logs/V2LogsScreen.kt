@@ -133,7 +133,7 @@ fun V2LogsScreen(
 @Composable
 private fun V2LogsTerminal() {
     val context = LocalContext.current
-    val currentLogs = TunnelManager.logs
+    val currentLogs = TunnelManager.logs.mapNotNull { filterLogEntry(it, "Все уровни", "Все события") }
     val listState = rememberLazyListState()
     val isDeploying by DeployManager.isDeploying.collectAsStateWithLifecycle()
 
