@@ -355,8 +355,10 @@ internal fun DeployTab(
                     privateKey = sshKeyArgs.first,
                     keyPassphrase = sshKeyArgs.second,
                 )
-                DeployManager.stopDeploy()
-                withContext(Dispatchers.Main) { onChecked(inventory) }
+                withContext(Dispatchers.Main) {
+                    DeployManager.stopDeploy()
+                    onChecked(inventory)
+                }
             } catch (e: CancellationException) {
                 DeployManager.stopDeploy("Проверка отменена")
                 throw e
@@ -391,7 +393,7 @@ internal fun DeployTab(
         val deploymentDraft = savedSettings.copy(ip = host, sshLogin = sshLogin, sshPassword = sshPassword,
             sshPort = effectiveSshPort.toString(), serverPeerPort = effectivePeerPort, serverWebPort = effectiveWebPort,
             mainPassword = effectiveMainPass, webLogin = savedWebLogin, webPassword = savedWebPassword, dockerInstall = dockerInstall)
-        DeployManager.startDeploy()
+        DeployManager.startDeploy(keepLogs = true)
         DeployManager.scope.launch {
             try {
                 settingsStore.saveDeployProfileDraft(deploymentDraft, restoreConnection = true, synchronizeDraftPassword = false)
@@ -467,7 +469,7 @@ internal fun DeployTab(
         val uninstallKeyPassphrase = if (savedSshKeysMode) savedSshKeyPassphrase else ""
         val uninstallCertificate = if (savedSshKeysMode) savedSshCertificate else ""
         val uninstallPassword = if (savedSshKeysMode) "" else sshPassword
-        DeployManager.startDeploy()
+        DeployManager.startDeploy(keepLogs = true)
         DeployManager.scope.launch {
             try {
                 context.startForegroundService(Intent(context, TunnelService::class.java).apply { action = "DEPLOY_START" })
@@ -572,13 +574,15 @@ internal fun DeployTab(
                     showValidation = true
                     if (state.canInstall) {
                         runServerCheck { inventory ->
-                            checkState.plan = planDeploy(
+                            val plan = planDeploy(
                                 inventory = inventory,
                                 manualPorts = if (savedManualPorts) resolveServerPorts(true, sshPort, peerPort, webPort) else null,
                                 profilePeerPort = resolveServerPorts(savedManualPorts, sshPort, peerPort, webPort).peer,
                                 dockerInstall = dockerInstall,
                                 appVersion = BuildConfig.VERSION_NAME.removePrefix("v"),
                             )
+                            val choice = plan.directInstall()
+                            if (choice != null) startDeploy(choice) else checkState.plan = plan
                         }
                     } else {
                         if (!state.mainPasswordConfigured) {
@@ -596,7 +600,18 @@ internal fun DeployTab(
                         }
                     }
                 }
-                DeployAction.Uninstall -> if (state.canUninstall) runServerCheck { checkState.removable = removableServers(it); checkState.removalNotes = removalNotes(it) }
+                DeployAction.Uninstall -> if (state.canUninstall) runServerCheck { inventory ->
+                    val servers = removableServers(inventory)
+                    val notes = removalNotes(inventory)
+                    val profilePort = resolveServerPorts(savedManualPorts, sshPort, peerPort, webPort).peer
+                    val server = directRemoval(servers, notes, profilePort)
+                    if (server != null) {
+                        startUninstall(server)
+                    } else {
+                        checkState.removable = servers
+                        checkState.removalNotes = notes
+                    }
+                }
                 DeployAction.PanelInfo -> showPanelInfoDialog = true
                 DeployAction.OpenControlPanel -> {
                     if (host.isBlank()) {

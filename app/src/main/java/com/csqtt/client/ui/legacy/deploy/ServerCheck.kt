@@ -106,6 +106,15 @@ internal data class DeployPlan(
     val notes: List<String>,
 )
 
+internal fun DeployPlan.directInstall(): PlanAction? =
+    actions.singleOrNull()?.takeUnless { action ->
+        action.destructive ||
+            (action.instance == DeployInstance.MAIN && servers.any { it.place == ServerPlace.LEFTOVER })
+    }
+
+internal fun directRemoval(servers: List<FoundServer>, notes: List<String>, profilePeerPort: Int): FoundServer? =
+    servers.singleOrNull()?.takeIf { notes.isEmpty() && it.peerPortOrDefault() == profilePeerPort }
+
 private fun runtimeLabel(runtime: String): String = when (runtime) {
     "systemd" -> "служба systemd"
     "docker" -> "Docker"

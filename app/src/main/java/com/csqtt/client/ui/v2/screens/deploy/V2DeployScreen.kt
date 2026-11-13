@@ -116,6 +116,8 @@ import com.csqtt.client.ui.legacy.ServerInventory
 import com.csqtt.client.ui.legacy.ServerPlace
 import com.csqtt.client.ui.legacy.deployInstance
 import com.csqtt.client.ui.legacy.describeServer
+import com.csqtt.client.ui.legacy.directInstall
+import com.csqtt.client.ui.legacy.directRemoval
 import com.csqtt.client.ui.legacy.peerPortOrDefault
 import com.csqtt.client.ui.legacy.webPortOrDefault
 import com.csqtt.client.ui.legacy.performServerCheck
@@ -616,7 +618,7 @@ internal fun V2DeployScreen(
         val deployCertificate = if (sshKeysMode) savedSshCertificate else ""
         val deployPassword = if (sshKeysMode) "" else sshPassword
 
-        DeployManager.startDeploy()
+        DeployManager.startDeploy(keepLogs = true)
         DeployManager.scope.launch {
             try {
                 settingsStore.saveDeployProfileDraft(deploymentDraft, restoreConnection = true, synchronizeDraftPassword = false)
@@ -712,8 +714,10 @@ internal fun V2DeployScreen(
                     privateKey = if (sshKeysMode) savedSshPrivateKey else "",
                     keyPassphrase = if (sshKeysMode) savedSshKeyPassphrase else "",
                 )
-                DeployManager.stopDeploy()
-                withContext(Dispatchers.Main) { onChecked(inventory) }
+                withContext(Dispatchers.Main) {
+                    DeployManager.stopDeploy()
+                    onChecked(inventory)
+                }
             } catch (e: CancellationException) {
                 DeployManager.stopDeploy("Проверка отменена")
                 throw e
@@ -727,17 +731,18 @@ internal fun V2DeployScreen(
         }
     }
 
-    /** Checks the server, then offers only what fits it (install, update, next to 2.1, replace — or nothing, and why). */
     fun checkThenDeploy() {
         runServerCheck { inventory ->
             val ports = resolveServerPorts(true, sshPort, peerPort, webPort)
-            checkState.plan = planDeploy(
+            val plan = planDeploy(
                 inventory = inventory,
                 manualPorts = if (manualPorts) CheckPorts(ports.ssh, ports.peer, ports.web) else null,
                 profilePeerPort = ports.peer,
                 dockerInstall = dockerInstall,
                 appVersion = BuildConfig.VERSION_NAME.removePrefix("v"),
             )
+            val action = plan.directInstall()
+            if (action != null) launchDeploy(action) else checkState.plan = plan
         }
     }
 
@@ -764,7 +769,6 @@ internal fun V2DeployScreen(
         checkThenDeploy()
     }
 
-    /** «Удалить CSQTT с сервера»: the check lists the servers this app installed, the user picks one. */
     fun requestUninstall() {
         if (DeployManager.isDeploying.value || isInspecting || isChangingSecretPath) return
         if (host.isBlank() || !sshAuthReady) {
@@ -773,9 +777,17 @@ internal fun V2DeployScreen(
             return
         }
         if (hostHasPortRefused()) return
-        runServerCheck {
-            checkState.removable = removableServers(it)
-            checkState.removalNotes = removalNotes(it)
+        runServerCheck { inventory ->
+            val servers = removableServers(inventory)
+            val notes = removalNotes(inventory)
+            val profilePort = resolveServerPorts(true, sshPort, peerPort, webPort).peer
+            val server = directRemoval(servers, notes, profilePort)
+            if (server != null) {
+                startUninstall(server)
+            } else {
+                checkState.removable = servers
+                checkState.removalNotes = notes
+            }
         }
     }
 
@@ -787,7 +799,7 @@ internal fun V2DeployScreen(
         val uninstallCertificate = if (sshKeysMode) savedSshCertificate else ""
         val uninstallPassword = if (sshKeysMode) "" else sshPassword
 
-        DeployManager.startDeploy()
+        DeployManager.startDeploy(keepLogs = true)
         DeployManager.scope.launch {
             try {
                 context.startForegroundService(

@@ -24,6 +24,33 @@ class ServerCheckTest {
     private fun DeployPlan.kinds() = actions.map { "${it.kind}:${it.instance}:${it.peerPort}/${it.webPort}" }
 
     @Test
+    fun `one install or update starts directly and replacement or multiple targets need a choice`() {
+        assertEquals(PlanKind.INSTALL, plan(inv()).directInstall()?.kind)
+        for (docker in listOf(false, true)) {
+            assertEquals(PlanKind.UPDATE, plan(inv(std250), docker = docker).directInstall()?.kind)
+        }
+        assertNull(plan(inv(std21)).directInstall())
+        assertNull(plan(inv(std250, side252)).directInstall())
+        val leftover = server("leftover", "?", 47000, 47002, state = "stopped", name = "csqtt47.service")
+        assertNull(plan(inv(std250, leftover)).directInstall())
+        val foreign = server("panel", "2.5.0", 47000, 47002)
+        assertNull(plan(inv(foreign)).directInstall())
+    }
+
+    @Test
+    fun `direct removal requires one permitted server on the profile port with no additional cleanup`() {
+        fun direct(inventory: ServerInventory, peer: Int = 46000) =
+            directRemoval(removableServers(inventory), removalNotes(inventory), peer)
+        assertEquals(ServerPlace.STANDARD, direct(inv(std250))?.place)
+        assertEquals(ServerPlace.SIDE, direct(inv(side252), 46100)?.place)
+        assertNull(direct(inv(side252)))
+        assertNull(direct(inv(std250, side252)))
+        assertNull(direct(inv()))
+        val leftover = server("leftover", "?", 47000, 47002, state = "stopped", name = "csqtt47.service")
+        assertNull(direct(inv(std250, leftover)))
+    }
+
+    @Test
     fun `the check result is trusted only when it finished`() {
         assertNull(parseServerInventory(std250))
         val parsed = inv("noise", std250 + "|future=1", "CSQTT_INV|server|place=nowhere|state=running", "CSQTT_INV|busy|proto=udp|port=46000|by=nginx (PID 9, /usr/sbin/nginx)")
