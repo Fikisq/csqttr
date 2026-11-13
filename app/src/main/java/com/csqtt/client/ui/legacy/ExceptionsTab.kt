@@ -493,19 +493,19 @@ fun ExceptionsTab(
                         overflow = TextOverflow.Ellipsis,
                     )
                     val statusText = if (domainIsWhitelist) {
-                        "Белый список: ${directDomainsList.size} в туннеле"
+                        "С VPN: ${directDomainsList.size} в туннеле"
                     } else {
                         when {
-                            directDomainsList.isEmpty() -> "Чёрный список: 0 доменов исключено"
+                            directDomainsList.isEmpty() -> "Без VPN: 0 доменов исключено"
                             templateDomainsEnabled -> {
                                 val customCount = directDomainsList.count { !templateDomains.contains(it) }
                                 if (customCount > 0) {
-                                    "Исключено: ${templateDomains.size} готовых + $customCount своих"
+                                    "Без VPN: ${templateDomains.size} готовых + $customCount своих"
                                 } else {
-                                    "Исключено: ${directDomainsList.size} (Готовый список RU)"
+                                    "Без VPN: ${directDomainsList.size} (Готовый список RU)"
                                 }
                             }
-                            else -> "Чёрный список: ${directDomainsList.size} исключено"
+                            else -> "Без VPN: ${directDomainsList.size} исключено"
                         }
                     }
                     Text(
@@ -574,9 +574,9 @@ fun ExceptionsTab(
                         overflow = TextOverflow.Ellipsis,
                     )
                     val statusText = if (ipIsWhitelist) {
-                        "Белый список: ${directIpsList.size} в туннеле"
+                        "С VPN: ${directIpsList.size} в туннеле"
                     } else {
-                        "Чёрный список: ${directIpsList.size} исключено"
+                        "Без VPN: ${directIpsList.size} исключено"
                     }
                     Text(
                         text = statusText,
@@ -833,7 +833,7 @@ fun ExceptionsTab(
                                     ),
                                 ) {
                                     Text(
-                                        text = "Чёрный список",
+                                        text = "Без VPN",
                                         fontWeight = FontWeight.SemiBold,
                                         maxLines = 1,
                                         softWrap = false,
@@ -857,7 +857,7 @@ fun ExceptionsTab(
                                     ),
                                 ) {
                                     Text(
-                                        text = "Чёрный список",
+                                        text = "Без VPN",
                                         fontWeight = FontWeight.SemiBold,
                                         maxLines = 1,
                                         softWrap = false,
@@ -879,7 +879,7 @@ fun ExceptionsTab(
                                     ),
                                 ) {
                                     Text(
-                                        text = "Белый список",
+                                        text = "С VPN",
                                         fontWeight = FontWeight.SemiBold,
                                         maxLines = 1,
                                         softWrap = false,
@@ -903,7 +903,7 @@ fun ExceptionsTab(
                                     ),
                                 ) {
                                     Text(
-                                        text = "Белый список",
+                                        text = "С VPN",
                                         fontWeight = FontWeight.SemiBold,
                                         maxLines = 1,
                                         softWrap = false,
@@ -1144,7 +1144,7 @@ fun ExceptionsTab(
                                     ),
                                 ) {
                                     Text(
-                                        text = "Чёрный список",
+                                        text = "Без VPN",
                                         fontWeight = FontWeight.SemiBold,
                                         maxLines = 1,
                                         softWrap = false,
@@ -1168,7 +1168,7 @@ fun ExceptionsTab(
                                     ),
                                 ) {
                                     Text(
-                                        text = "Чёрный список",
+                                        text = "Без VPN",
                                         fontWeight = FontWeight.SemiBold,
                                         maxLines = 1,
                                         softWrap = false,
@@ -1190,7 +1190,7 @@ fun ExceptionsTab(
                                     ),
                                 ) {
                                     Text(
-                                        text = "Белый список",
+                                        text = "С VPN",
                                         fontWeight = FontWeight.SemiBold,
                                         maxLines = 1,
                                         softWrap = false,
@@ -1214,7 +1214,7 @@ fun ExceptionsTab(
                                     ),
                                 ) {
                                     Text(
-                                        text = "Белый список",
+                                        text = "С VPN",
                                         fontWeight = FontWeight.SemiBold,
                                         maxLines = 1,
                                         softWrap = false,

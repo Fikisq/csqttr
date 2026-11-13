@@ -241,9 +241,9 @@ internal fun V2RoutingScreen(
                     tag = "IP",
                     title = "Маршрутизация адресов",
                     countLabel = if (ipIsWhitelist) {
-                        "Белый список: ${directIpsList.size} в туннеле"
+                        "С VPN: ${directIpsList.size} в туннеле"
                     } else {
-                        "Чёрный список: ${directIpsList.size} исключено"
+                        "Без VPN: ${directIpsList.size} исключено"
                     },
                     action = "Список адресов",
                     icon = painterResource(R.drawable.ic_ip),
@@ -359,11 +359,11 @@ private fun domainsCountLabel(
     templateSize: Int,
     customCount: Int,
 ): String = when {
-    isWhitelist -> "Белый список: $listSize в туннеле"
-    listSize == 0 -> "Чёрный список: 0 доменов исключено"
-    templateDomainsEnabled && customCount > 0 -> "Исключено: $templateSize готовых + $customCount своих"
-    templateDomainsEnabled -> "Исключено: $listSize (Готовый список RU)"
-    else -> "Чёрный список: $listSize исключено"
+    isWhitelist -> "С VPN: $listSize в туннеле"
+    listSize == 0 -> "Без VPN: 0 доменов исключено"
+    templateDomainsEnabled && customCount > 0 -> "Без VPN: $templateSize готовых + $customCount своих"
+    templateDomainsEnabled -> "Без VPN: $listSize (Готовый список RU)"
+    else -> "Без VPN: $listSize исключено"
 }
 
 @Composable

@@ -467,7 +467,7 @@ internal fun V2DomainsRoutingDialog(
                 horizontalArrangement = Arrangement.spacedBy(V2Spacing.Sm),
             ) {
                 V2PillButton(
-                    text = "Чёрный список",
+                    text = "Без VPN",
                     onClick = { modeIsWhitelist = false },
                     modifier = Modifier.weight(1f),
                     style = if (!modeIsWhitelist) V2PillStyle.Accent else V2PillStyle.Outline,
@@ -475,7 +475,7 @@ internal fun V2DomainsRoutingDialog(
                     horizontalPadding = 8.dp,
                 )
                 V2PillButton(
-                    text = "Белый список",
+                    text = "С VPN",
                     onClick = { modeIsWhitelist = true },
                     modifier = Modifier.weight(1f),
                     style = if (modeIsWhitelist) V2PillStyle.Accent else V2PillStyle.Outline,
@@ -660,7 +660,7 @@ internal fun V2IpsRoutingDialog(
                 horizontalArrangement = Arrangement.spacedBy(V2Spacing.Sm),
             ) {
                 V2PillButton(
-                    text = "Чёрный список",
+                    text = "Без VPN",
                     onClick = { modeIsWhitelist = false },
                     modifier = Modifier.weight(1f),
                     style = if (!modeIsWhitelist) V2PillStyle.Accent else V2PillStyle.Outline,
@@ -668,7 +668,7 @@ internal fun V2IpsRoutingDialog(
                     horizontalPadding = 8.dp,
                 )
                 V2PillButton(
-                    text = "Белый список",
+                    text = "С VPN",
                     onClick = { modeIsWhitelist = true },
                     modifier = Modifier.weight(1f),
                     style = if (modeIsWhitelist) V2PillStyle.Accent else V2PillStyle.Outline,
