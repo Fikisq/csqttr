@@ -143,8 +143,8 @@ internal fun HappTunnelScreen(
     }
     val parts = hashes.split(Regex("[,\\s]+" )).filter(String::isNotBlank)
     val green = ModeIndicator(1f, c.success)
-    val yellow = ModeIndicator(1f, Color(0xFFF1C232))
-    val red = ModeIndicator(1f, c.error)
+    val orange = ModeIndicator(1f, Color(0xFFF28C28))
+    val red = ModeIndicator(1f, Color(0xFFE53935))
     val goobyAvailable = GoobyMode.isAvailable(transport)
     V2AdaptiveScreen(Modifier.fillMaxSize().padding(horizontal = V2Sizes.ScreenPadding), dense = true) {
         val layout = LocalV2AdaptiveMetrics.current
@@ -184,7 +184,7 @@ internal fun HappTunnelScreen(
                 }
                 }
                 if (!linkTokenActive) HappChoice("Режим хешей", when(hashMode) { "auto_api" -> "Авто API"; "auto_js" -> "Авто ВК"; else -> "Ручные хеши" }, listOf("Ручные хеши", "Авто API", "Авто ВК"), ::changeHash,
-                    compact = true, shape = pill, indicators = mapOf("Ручные хеши" to green, "Авто API" to green, "Авто ВК" to yellow), enabled = !busy,
+                    compact = true, shape = pill, indicators = mapOf("Ручные хеши" to green, "Авто API" to green, "Авто ВК" to orange), enabled = !busy,
                     help = hashModeHelp().second,
                     optionHelp = mapOf(
                         "Ручные хеши" to hashModeHelp(CsqttConstants.VkAutoHash.MODE_MANUAL).second,
@@ -195,7 +195,7 @@ internal fun HappTunnelScreen(
                     val mode = when(label) { "Авто ВК" -> "auto_js"; "Капча" -> "legacy"; else -> "vkcalls" }
                     requestAutoJs(mode) { scope.launch { settingsStore.saveVkAuthMode(mode, forProfile = editingProfile) } }
                 },
-                    compact = true, shape = pill, indicators = mapOf("Авто" to green, "Капча" to red, "Авто ВК" to yellow), enabled = !busy, help = workModeHelp().second,
+                    compact = true, shape = pill, indicators = mapOf("Авто" to green, "Капча" to red, "Авто ВК" to orange), enabled = !busy, help = workModeHelp().second,
                     optionHelp = mapOf(
                         "Авто" to workModeHelp(CsqttConstants.VkAuth.MODE_CALLS).second,
                         "Капча" to workModeHelp(CsqttConstants.VkAuth.MODE_CAPTCHA).second,
@@ -217,7 +217,7 @@ internal fun HappTunnelScreen(
                     val apply = { scope.launch { settingsStore.saveTurnTransport(mode, forProfile = editingProfile) }; Unit }
                     if (shouldConfirmTcpTransport(transport, mode, tcpAcknowledged)) pendingTcp = apply else apply()
                 },
-                    compact = true, shape = pill, indicators = mapOf("UDP" to green, "TCP" to yellow), enabled = !busy,
+                    compact = true, shape = pill, indicators = mapOf("UDP" to green, "TCP" to orange), enabled = !busy,
                     help = turnTransportHelp().second, optionHelp = mapOf(
                         "UDP" to turnTransportHelp(CsqttConstants.Tunnel.DEFAULT_TURN_TRANSPORT).second,
                         "TCP" to turnTransportHelp(CsqttConstants.Tunnel.TURN_TRANSPORT_TCP_TLS).second,
