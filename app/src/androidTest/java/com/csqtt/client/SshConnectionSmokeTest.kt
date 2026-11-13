@@ -83,7 +83,7 @@ class SshConnectionSmokeTest {
                                 printf 'RESTORED_OK\n'
                             """.trimIndent()
                         }
-                        "passwords", "docker-fixture-add", "docker-fixture-remove" -> {
+                        "passwords", "docker-fixture-add", "docker-fixture-remove", "systemd-fixture-remove" -> {
                             if (check == "passwords") {
                                 val slot = deployStore.linkedConnectionProfile(saved.profile)
                                 val auth = SettingsStore(context, readOnlyProfile = slot)
@@ -109,7 +109,11 @@ class SshConnectionSmokeTest {
                                 printf 'PASSWORDS_OK\n'
                             """.trimIndent() else """
                                 set -eu
-                                test "${'$'}(docker inspect --format '{{.State.Running}}' csqtt)" = true
+                                if [ "$check" = systemd-fixture-remove ]; then
+                                    systemctl is-active --quiet csqtt.service
+                                else
+                                    test "${'$'}(docker inspect --format '{{.State.Running}}' csqtt)" = true
+                                fi
                                 python3 - <<'PY'
                                 import json
                                 import subprocess
@@ -173,10 +177,17 @@ class SshConnectionSmokeTest {
                                 PY
                             """.trimIndent()
                         }
-                        "docker-state" -> """
+                        "docker-state", "systemd-state" -> """
                             set -eu
-                            test "${'$'}(docker inspect --format '{{.State.Running}}' csqtt)" = true
-                            test "${'$'}(docker inspect --format '{{index .Config.Labels "com.csqtt.managed"}}' csqtt)" = true
+                            if [ "$check" = systemd-state ]; then
+                                systemctl is-active --quiet csqtt.service
+                                test -z "${'$'}(docker ps -q --filter 'name=^/csqtt${'$'}')"
+                                test -n "${'$'}(ss -H -lun 'sport = :46000')"
+                                test -n "${'$'}(ss -H -ltn 'sport = :46002')"
+                            else
+                                test "${'$'}(docker inspect --format '{{.State.Running}}' csqtt)" = true
+                                test "${'$'}(docker inspect --format '{{index .Config.Labels "com.csqtt.managed"}}' csqtt)" = true
+                            fi
                             python3 - <<'PY'
                             import hashlib
                             import json
@@ -209,6 +220,33 @@ class SshConnectionSmokeTest {
                             fingerprint("dns", [meta.get("dns"), meta.get("dns_provider")], int(bool(meta.get("dns"))))
                             PY
                         """.trimIndent()
+                        "certbot-state" -> """
+                            set -eu
+                            if certbot=${'$'}(command -v certbot); then
+                                printf 'CERTBOT_SYSTEM %s ' "${'$'}certbot"
+                                timeout 5 "${'$'}certbot" --version 2>&1
+                                sha256sum "${'$'}certbot" | awk '{print "CERTBOT_SYSTEM_SHA256 " ${'$'}1}'
+                                help=${'$'}(timeout 5 "${'$'}certbot" certonly --help all 2>&1 || true)
+                                if printf '%s\n' "${'$'}help" | grep -q -- --ip-address &&
+                                   printf '%s\n' "${'$'}help" | grep -q -- --no-directory-hooks; then
+                                    echo CERTBOT_SYSTEM_IP_SUPPORTED
+                                else
+                                    echo CERTBOT_SYSTEM_IP_UNSUPPORTED
+                                fi
+                            else
+                                echo CERTBOT_SYSTEM_MISSING
+                            fi
+                            if [ -x /opt/csqtt-certbot/bin/certbot ]; then
+                                printf 'CERTBOT_CSQTT '
+                                timeout 5 /opt/csqtt-certbot/bin/certbot --version 2>&1
+                            fi
+                            if [ -n "${'$'}(ss -H -ltn 'sport = :80')" ]; then
+                                echo CERTBOT_PORT_80_BUSY
+                            fi
+                            tac /var/log/csqtt-install.log | sed '/Повторная установка: данные клиентов и правила сохраняются/q' |
+                                tac | grep -E 'Используется (установленный системный|ранее установленный) Certbot|Системный Certbot не подходит|TCP/80 уже занят|IP-сертификат (действителен|активирован)|Let.s Encrypt не подтвердил IP|Подготовка Let.s Encrypt клиента|самоподписанный сертификат|Общее время deploy.sh' |
+                                sed 's/^/CERTBOT_LOG /' || true
+                        """.trimIndent()
                         else -> error("Unknown CSQTT state check")
                     }
                     ssh.startSession().use { session ->
@@ -216,12 +254,15 @@ class SshConnectionSmokeTest {
                             cmd.join(30, TimeUnit.SECONDS)
                             assertEquals("Scoped CSQTT state check", 0, cmd.exitStatus)
                             val result = cmd.inputStream.bufferedReader().readText().trim()
-                            if (check == "docker-state") {
+                            if (check == "docker-state" || check == "systemd-state") {
                                 val lines = result.lineSequence().toList()
                                 val record = Regex("STATE (clients|hashes|groups|token|rules|dns) [0-9]+ [0-9a-f]{64}")
                                 assertTrue("Expected six redacted fingerprints",
                                     lines.size == 6 && lines.all(record::matches) &&
                                         lines.map { it.split(' ')[1] }.distinct().size == 6)
+                            } else if (check == "certbot-state") {
+                                assertTrue("Expected scoped Certbot and installer evidence",
+                                    result.isNotBlank() && result.lineSequence().all { it.startsWith("CERTBOT_") })
                             } else {
                                 assertTrue(result in setOf("REMOVED_OK", "RESTORED_OK", "PASSWORDS_OK",
                                     "FIXTURE_ADDED", "FIXTURE_REMOVED") ||
