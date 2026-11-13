@@ -24,7 +24,7 @@ class SshConnectionSmokeTest {
         val args = InstrumentationRegistry.getArguments()
         assumeTrue("Pass -e sshSmokeTest true to use the configured VPS", args.getString("sshSmokeTest") == "true")
         val context = InstrumentationRegistry.getInstrumentation().targetContext
-        val saved = SettingsStore(context).deploySettingsSnapshot.first { it.isLoaded }
+        val saved = SettingsStore(context, deployScope = true).deploySettingsSnapshot.first { it.isLoaded }
         assertEquals(args.getString("expectedSshHost"), saved.ip)
         assertEquals(args.getString("expectedSshPort"), saved.sshPort)
         repeat(3) {
