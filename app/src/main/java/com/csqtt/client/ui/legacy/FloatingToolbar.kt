@@ -347,7 +347,7 @@ fun FloatingToolbar(
                         checked = extraWorkers,
                         enabled = !tunnelRunning && vkAuthMode != CsqttConstants.VkAuth.MODE_AUTO_JS,
                         onCheckedChange = { enabled ->
-                            scope.launch { settingsStore.saveExtraWorkers(enabled, forProfile = activeProfile) }
+                            scope.launch { settingsStore.saveExtraWorkers(enabled) }
                         },
                         onInfoClick = { showExtraWorkersInfo = true },
                     )

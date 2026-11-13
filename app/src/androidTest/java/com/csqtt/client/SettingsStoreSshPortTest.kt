@@ -16,24 +16,51 @@ class SettingsStoreSshPortTest {
         val store = SettingsStore(InstrumentationRegistry.getInstrumentation().targetContext)
         val original = store.activeProfile.first()
         val slot = checkNotNull(store.findFirstFreeProfile())
+        val originalExtra = store.extraWorkers.first()
         try {
             store.saveProfileConnectionSettings(slot, "203.0.113.77", 49400, "FixturePassword12", 100)
-            store.saveExtraWorkers(true, forProfile = slot)
+            store.saveExtraWorkers(true)
+            assertTrue(SettingsStore(InstrumentationRegistry.getInstrumentation().targetContext, readOnlyProfile = original).extraWorkers.first())
             store.saveActiveProfile(slot)
             val extra = store.tunnelAuthSnapshot.first { it.profile == slot }
             assertEquals("203.0.113.77", extra.peer)
             assertEquals(49400, extra.serverPeerPort)
             assertEquals(100, extra.workersMaximum)
             assertEquals(100, extra.workers)
-            store.saveExtraWorkers(false, forProfile = slot)
+            store.saveExtraWorkers(false)
             val regular = store.tunnelAuthSnapshot.first { it.profile == slot }
             assertEquals(70, regular.workersMaximum)
             assertEquals(70, regular.workers)
             assertEquals(extra.peer, regular.peer)
             assertEquals(extra.serverPeerPort, regular.serverPeerPort)
+            assertEquals(100, store.readProfileConnectionSettings(slot).workersPerHash)
+            store.saveExtraWorkers(true)
+            store.saveVkAuthMode(CsqttConstants.VkAuth.MODE_AUTO_JS)
+            assertEquals(70, store.workersMaximum.first())
+            assertTrue(store.extraWorkers.first())
         } finally {
+            store.saveExtraWorkers(originalExtra)
             store.saveActiveProfile(original)
             store.clearProfile(slot)
+        }
+    }
+
+    @Test fun extraWorkersRoundTripUsesGeneralSettingsAndReadsLegacyBackups() = runBlocking<Unit> {
+        val store = SettingsStore(InstrumentationRegistry.getInstrumentation().targetContext)
+        val original = store.extraWorkers.first()
+        try {
+            store.saveExtraWorkers(true)
+            val exported = store.exportConfigJson(false, false, false, true)
+            store.saveExtraWorkers(false)
+            assertTrue(store.importConfigJson(exported, false, false, false, true))
+            assertTrue(store.extraWorkers.first())
+            val legacy = """{"deploy":{"extra_workers":false}}"""
+            assertTrue(store.importConfigJson(legacy, false, true, false, false))
+            assertTrue(store.extraWorkers.first())
+            assertTrue(store.importConfigJson(legacy, false, false, false, true))
+            assertFalse(store.extraWorkers.first())
+        } finally {
+            store.saveExtraWorkers(original)
         }
     }
 
@@ -124,14 +151,12 @@ class SettingsStoreSshPortTest {
         store.saveSrtpMode(CsqttConstants.SrtpMode.WRAP)
         store.saveTurnTransport(CsqttConstants.Tunnel.TURN_TRANSPORT_TCP_TLS)
         store.saveSelectedTurnSubnet("fixture-subnet", "10")
-        store.saveExtraWorkers(true)
         store.saveProfileWorkersPerHash(26, 60)
         store.saveActiveProfile(27)
         store.saveVkHashMode("manual")
         store.saveSrtpMode(CsqttConstants.SrtpMode.DTLS)
         store.saveTurnTransport("udp")
         store.saveSelectedTurnSubnet("", "ALL")
-        store.saveExtraWorkers(false)
         store.saveProfileWorkersPerHash(27, 20)
         // A late callback belongs to its captured slot, even after selection moved.
         store.saveVkHashMode("auto_api", forProfile = 26)
@@ -142,14 +167,13 @@ class SettingsStoreSshPortTest {
         assertEquals(CsqttConstants.Tunnel.TURN_TRANSPORT_TCP_TLS, a.turnTransport.first())
         assertEquals("fixture-subnet", a.selectedTurnSubnet.first())
         assertEquals("10", a.turnSubnetIpLimit.first())
-        assertTrue(a.extraWorkers.first())
+
         assertEquals(60, a.workersPerHash.first())
         store.saveActiveProfile(27)
         assertEquals("manual", store.vkHashMode.first())
         assertEquals("udp", store.turnTransport.first())
         assertEquals(CsqttConstants.SrtpMode.DTLS, store.srtpMode.first())
         assertEquals("", store.selectedTurnSubnet.first())
-        assertFalse(store.extraWorkers.first())
         assertEquals(20, store.workersPerHash.first())
         store.saveActiveProfile(previous)
     }

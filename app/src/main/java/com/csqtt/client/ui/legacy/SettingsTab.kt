@@ -214,7 +214,7 @@ internal fun SettingsTabContent(
         allHashes.filter { it.isNotBlank() && it.length >= 16 }.distinct().joinToString(",")
     }
     // The slider stops where the tunnel does: 70, or 100 with «Экстра потоки», lower under a subscription
-    val extraWorkers by settingsStore.extraWorkers.collectAsStateWithLifecycle(initialValue = false)
+
     val selectableMaxWorkers = tunnelAuthSettings.workersMaximum.toFloat()
     var sniInput by rememberSaveable { mutableStateOf("") }
 
@@ -378,12 +378,6 @@ internal fun SettingsTabContent(
         }
     }
 
-    // As in V2: the auto-JS mode runs at most 70 workers, so «Экстра потоки» goes off there
-    LaunchedEffect(vkAuthMode, extraWorkers) {
-        if (vkAuthMode == CsqttConstants.VkAuth.MODE_AUTO_JS && extraWorkers) {
-            settingsStore.saveExtraWorkers(false)
-        }
-    }
 
     val scrollState = rememberScrollState()
 

@@ -82,7 +82,7 @@ fun HappSettingsScreen(
                 }
             }
             V2Card(contentPadding = PaddingValues(12.dp)) {
-                V2SwitchSetting("Экстра потоки", extra, { scope.launch { settingsStore.saveExtraWorkers(it, forProfile = profile) } },
+                V2SwitchSetting("Экстра потоки", extra, { scope.launch { settingsStore.saveExtraWorkers(it) } },
                     enabled = !running && authMode != "auto_js", onInfoClick = { extraHelp = true })
                 V2SettingRow(title = "Автопауза Wi-Fi", onClick = { wifiLists = true }) {
                     Text(if (wifi) "Включена" else "Выключена", color = V2Theme.colors.textSecondary,

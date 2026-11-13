@@ -138,9 +138,7 @@ internal fun HappTunnelScreen(
             scope.launch { settingsStore.saveVkHashMode(mode, forProfile = editingProfile) }
         }
     }
-    LaunchedEffect(profile, authMode, extraWorkers) {
-        if (authMode == "auto_js" && extraWorkers) settingsStore.saveExtraWorkers(false, forProfile = profile)
-    }
+
     val parts = hashes.split(Regex("[,\\s]+" )).filter(String::isNotBlank)
     val green = ModeIndicator(1f, c.success)
     val orange = ModeIndicator(1f, Color(0xFFF28C28))
