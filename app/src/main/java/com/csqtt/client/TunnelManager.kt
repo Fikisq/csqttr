@@ -240,13 +240,13 @@ object TunnelManager {
         }
     }
 
-    private fun stopUptimeTimer() {
+    private fun stopUptimeTimer(clearProcessStart: Boolean = true) {
         uptimeJob?.cancel()
         uptimeJob = null
         val start = processStartedAtMs
         if (start > 0L) {
             uptimeSeconds.value = (SystemClock.elapsedRealtime() - start) / 1000L
-            processStartedAtMs = 0L
+            if (clearProcessStart) processStartedAtMs = 0L
         } else {
             uptimeSeconds.value = null
         }
@@ -1615,8 +1615,8 @@ object TunnelManager {
                         }
                         val exitCode = initialExitCode
                             ?: runCatching { targetProcess.exitValue() }.getOrNull()
-                        val previousProcessStart = processStartedAtMs
-                        stopUptimeTimer()
+                        // The service watchdog still needs the start time after an unexpected exit.
+                        stopUptimeTimer(clearProcessStart = false)
                         val shouldRestart = lifecycleWantsRestart
                         if (lifecycleWantsRestart) {
                             VkAutoCallsManager.finishActiveCalls()
@@ -1648,7 +1648,7 @@ object TunnelManager {
                                 50,
                                 true,
                             )
-                            val uptimeMs = previousProcessStart
+                            val uptimeMs = processStartedAtMs
                                 .takeIf { it > 0 }
                                 ?.let { SystemClock.elapsedRealtime() - it }
                                 ?: Long.MAX_VALUE
