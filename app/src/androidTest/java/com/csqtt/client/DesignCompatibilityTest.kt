@@ -246,6 +246,64 @@ class DesignCompatibilityTest {
         }
     }
 
+    @Test fun tunnelOptionMenusMatchClassicGeometryAndShowTheRequestedColors() {
+        val store = SettingsStore(compose.activity)
+        val oldDesign = runBlocking { store.uiDesign.first() }
+        val oldTheme = runBlocking { store.themeMode.first() }
+        val oldAuth = runBlocking { store.vkAuthMode.first() }
+        try {
+            runBlocking { store.saveVkAuthMode(CsqttConstants.VkAuth.MODE_CALLS) }
+            for (theme in listOf("light", "dark")) {
+                runBlocking { store.saveThemeMode(theme) }
+                var classicGeometry: List<Int>? = null
+                for (design in listOf("classic", "v2", "old")) {
+                    runBlocking { store.saveUiDesign(design) }
+                    val tunnel = compose.onAllNodesWithText("Туннель")
+                    compose.waitUntil(10_000) { tunnel.fetchSemanticsNodes().isNotEmpty() }
+                    tunnel.onFirst().performClick()
+                    val credits = hasClickAction() and hasText("Авто") and
+                        hasAnySibling(hasText("Режим кредов"))
+                    compose.onNode(credits).performScrollTo().performClick()
+                    val popup = hasAnyAncestor(isPopup())
+                    val captcha = compose.onNode(hasText("Капча") and hasClickAction() and popup)
+                    val help = compose.onNodeWithContentDescription("Информация: Капча")
+                    val image = captcha.captureToImage()
+                    val pixels = image.toPixelMap()
+                    val red = 0xFFE53935.toInt()
+                    val stripe = (0 until pixels.height).map { y ->
+                        (0 until pixels.width).count { x -> pixels[x, y].toArgb() == red }
+                    }
+                    val geometry = listOf(
+                        image.width,
+                        image.height,
+                        help.captureToImage().width,
+                        stripe.max(),
+                        stripe.count { it >= stripe.max() / 2 },
+                    )
+                    check(stripe.max() > image.width / 2) { "Missing red stripe in $design / $theme" }
+                    if (classicGeometry == null) classicGeometry = geometry
+                    assertEquals("$design / $theme", classicGeometry, geometry)
+                    if (design != "classic") {
+                        val orange = 0xFFF28C28.toInt()
+                        val autoVk = compose.onNode(hasText("Авто ВК") and hasClickAction() and popup)
+                            .captureToImage().toPixelMap()
+                        check((0 until autoVk.height).any { y ->
+                            (0 until autoVk.width).count { x -> autoVk[x, y].toArgb() == orange } > autoVk.width / 2
+                        }) { "Missing orange stripe in $design / $theme" }
+                    }
+                    help.performClick()
+                    compose.onNodeWithText("Понятно").performClick()
+                }
+            }
+        } finally {
+            runBlocking {
+                store.saveVkAuthMode(oldAuth)
+                store.saveThemeMode(oldTheme)
+                store.saveUiDesign(oldDesign)
+            }
+        }
+    }
+
     @Test fun udpShowsGoobyOffAndTcpRestoresThePresetInEveryDesign() {
         val store = SettingsStore(compose.activity)
         val oldDesign = runBlocking { store.uiDesign.first() }
