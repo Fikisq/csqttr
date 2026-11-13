@@ -143,7 +143,7 @@ internal fun HappTunnelScreen(
     }
     val parts = hashes.split(Regex("[,\\s]+" )).filter(String::isNotBlank)
     val green = ModeIndicator(1f, c.success)
-    val yellow = ModeIndicator(1f, c.warning)
+    val yellow = ModeIndicator(1f, Color(0xFFF1C232))
     val red = ModeIndicator(1f, c.error)
     val goobyAvailable = GoobyMode.isAvailable(transport)
     V2AdaptiveScreen(Modifier.fillMaxSize().padding(horizontal = V2Sizes.ScreenPadding), dense = true) {

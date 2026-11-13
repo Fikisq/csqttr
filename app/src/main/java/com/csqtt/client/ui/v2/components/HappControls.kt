@@ -147,30 +147,41 @@ internal fun HappChoice(label: String, value: String, options: List<String>, onS
                         Text(value, modifier = Modifier.weight(1f), fontSize = V2TextSizes.Body, maxLines = valueMaxLines, overflow = TextOverflow.Ellipsis, color = c.textPrimary)
                         Icon(Icons.Default.KeyboardArrowDown, null, tint = c.textSecondary, modifier = Modifier.size(18.dp))
                     }
-                    indicators[value]?.let { ChoiceIndicator(it, c.outline) }
+                    val indicator = indicators[value]
+                    if (indicator != null) ChoiceIndicator(indicator, c.outline)
+                    else if (indicators.isNotEmpty()) Spacer(Modifier.height(7.dp))
                 }
             }
-            DropdownMenu(expanded, { expanded = false }, containerColor = c.surface) {
+            DropdownMenu(
+                expanded = expanded,
+                onDismissRequest = { expanded = false },
+                modifier = Modifier.width(208.dp),
+                containerColor = c.surface,
+                tonalElevation = 0.dp,
+            ) {
                 options.forEach { option ->
                     DropdownMenuItem(
                         text = {
-                            Column {
-                                Text(option, fontSize = V2TextSizes.Body)
-                                indicators[option]?.let { ChoiceIndicator(it, c.outline) }
+                            Column(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+                                Row(Modifier.fillMaxWidth().heightIn(min = 32.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    Text(option, modifier = Modifier.weight(1f), fontSize = V2TextSizes.Body)
+                                    if (option in optionHelp) {
+                                        IconButton(onClick = { expanded = false; helpOption = option }, modifier = Modifier.size(32.dp)) {
+                                            Icon(Icons.AutoMirrored.Outlined.HelpOutline, "Информация: $option",
+                                                tint = c.textSecondary, modifier = Modifier.size(18.dp))
+                                        }
+                                    }
+                                }
+                                val indicator = indicators[option]
+                                if (indicator != null) ChoiceIndicator(indicator, c.outline)
+                                else if (indicators.isNotEmpty()) Spacer(Modifier.height(7.dp))
                             }
                         },
                         onClick = {
                             expanded = false
                             onSelect(option)
                         },
-                        trailingIcon = optionHelp[option]?.let {
-                            {
-                                IconButton(onClick = { expanded = false; helpOption = option }, modifier = Modifier.size(32.dp)) {
-                                    Icon(Icons.AutoMirrored.Outlined.HelpOutline, "Информация: $option",
-                                        tint = c.textSecondary, modifier = Modifier.size(18.dp))
-                                }
-                            }
-                        },
+
                     )
                 }
             }
