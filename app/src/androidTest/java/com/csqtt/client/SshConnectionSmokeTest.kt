@@ -3,6 +3,7 @@ package com.csqtt.client
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.csqtt.client.ui.legacy.createSSHClient
+import com.csqtt.client.ui.legacy.rootCommand
 import com.csqtt.client.ui.legacy.writeDeployScript
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
@@ -15,7 +16,7 @@ import java.util.concurrent.TimeUnit
 import java.io.File
 import net.schmizz.sshj.xfer.FileSystemFile
 
-/** Opt-in read-only check against the active profile; credentials stay on the device. */
+/** Opt-in checks against the active profile; credentials stay on the device. */
 @RunWith(AndroidJUnit4::class)
 class SshConnectionSmokeTest {
     @Test
@@ -39,6 +40,59 @@ class SshConnectionSmokeTest {
                         cmd.join(10, TimeUnit.SECONDS)
                         assertEquals(0, cmd.exitStatus)
                         assertTrue(cmd.inputStream.bufferedReader().readText().contains("CSQTT_SSH_OK"))
+                    }
+                }
+                if (it == 0 && args.containsKey("serverStateCheck")) {
+                    assertEquals(46000, saved.serverPeerPort)
+                    assertEquals(46002, saved.serverWebPort)
+                    val check = args.getString("serverStateCheck")
+                    val command = when (check) {
+                        "backup" -> """
+                            set -eu
+                            umask 077
+                            backup=${'$'}(mktemp /root/csqtt-before-60.14-XXXXXXXX.tar)
+                            trap 'rm -f -- "${'$'}backup"' EXIT
+                            tar -C /etc -cf "${'$'}backup" csqtt
+                            tar -tf "${'$'}backup" | grep -Fxq csqtt/csqtt.env
+                            tar -tf "${'$'}backup" | grep -Fxq csqtt/csqtt.db
+                            trap - EXIT
+                            printf 'BACKUP_OK %s\n' "${'$'}backup"
+                        """.trimIndent()
+                        "removed" -> """
+                            set -eu
+                            test ! -e /etc/csqtt
+                            test ! -e /usr/local/bin/csqtt
+                            test -z "${'$'}(systemctl is-active csqtt 2>/dev/null | grep '^active${'$'}' || true)"
+                            if command -v docker >/dev/null; then
+                                test -z "${'$'}(docker ps -a -q --filter 'name=^/csqtt${'$'}')"
+                            fi
+                            test -z "${'$'}(ss -H -lun 'sport = :46000')"
+                            test -z "${'$'}(ss -H -ltn 'sport = :46002')"
+                            printf 'REMOVED_OK\n'
+                        """.trimIndent()
+                        "restore" -> {
+                            val backup = args.getString("csqttBackup").orEmpty()
+                            require(backup.matches(Regex("/root/csqtt-before-60\\.14-[A-Za-z0-9]{8}\\.tar")))
+                            """
+                                set -eu
+                                test ! -e /etc/csqtt
+                                test -f '$backup'
+                                tar -C /etc -xf '$backup'
+                                test -s /etc/csqtt/csqtt.db
+                                printf 'RESTORED_OK\n'
+                            """.trimIndent()
+                        }
+                        else -> error("Unknown CSQTT state check")
+                    }
+                    ssh.startSession().use { session ->
+                        session.exec(rootCommand(command, saved.sshPassword.takeUnless { saved.sshKeysMode })).use { cmd ->
+                            cmd.join(30, TimeUnit.SECONDS)
+                            assertEquals("Scoped CSQTT state check", 0, cmd.exitStatus)
+                            val result = cmd.inputStream.bufferedReader().readText().trim()
+                            assertTrue(result in setOf("REMOVED_OK", "RESTORED_OK") ||
+                                result.matches(Regex("BACKUP_OK /root/csqtt-before-60\\.14-[A-Za-z0-9]{8}\\.tar")))
+                            println(result)
+                        }
                     }
                 }
                 if (it == 0 && args.getString("installerSyntaxCheck") == "true") {
