@@ -13,6 +13,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import com.csqtt.client.SettingsStore
+import com.csqtt.client.defaultProfileName
 import com.csqtt.client.BatterySaver
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -80,6 +81,10 @@ fun FloatingToolbar(
         initialValue = CsqttConstants.VkAuth.MODE_CALLS,
     )
     val tunnelRunning by TunnelManager.running.collectAsStateWithLifecycle()
+    val tunnelStarting by TunnelManager.starting.collectAsStateWithLifecycle()
+    val tunnelStopping by TunnelManager.stopping.collectAsStateWithLifecycle()
+    val tunnelPaused by TunnelManager.autoPausedForWifi.collectAsStateWithLifecycle()
+    val tunnelBusy = tunnelRunning || tunnelStarting || tunnelStopping || tunnelPaused
     val extraWorkers by settingsStore.extraWorkers.collectAsStateWithLifecycle(false)
     val selectedTurnSubnet by settingsStore.selectedTurnSubnet.collectAsStateWithLifecycle(
         initialValue = "",
@@ -115,7 +120,9 @@ fun FloatingToolbar(
     val participantShowLogs by settingsStore.participantShowLogs.collectAsStateWithLifecycle(
         initialValue = SettingsStore.DEFAULT_PARTICIPANT_SHOW_LOGS,
     )
+    val occupiedProfiles by settingsStore.occupiedProfiles.collectAsStateWithLifecycle(emptySet())
     var editingProfileIndex by rememberSaveable { mutableStateOf<Int?>(null) }
+    var deletingProfileIndex by rememberSaveable { mutableStateOf<Int?>(null) }
     var editingProfileName by rememberSaveable { mutableStateOf("") }
     val isDarkTheme = MaterialTheme.colorScheme.surface.luminance() < 0.5f
     val settingsIconTint = if (isDarkTheme) Color.White else Color.Black
@@ -273,7 +280,7 @@ fun FloatingToolbar(
                         title = "Профиль конфигурации",
                         selectedKey = activeProfile.toString(),
                         options = (CsqttConstants.Profiles.MIN_INDEX..CsqttConstants.Profiles.MAX_INDEX)
-                            .map { profile -> profile.toString() to (profileNames[profile] ?: "Профиль $profile") },
+                            .map { profile -> profile.toString() to (profileNames[profile] ?: defaultProfileName(profile)) },
                         enabled = true,
                         onSelected = { profile ->
                             profile.toIntOrNull()?.let(onActiveProfileChange)
@@ -281,7 +288,7 @@ fun FloatingToolbar(
                         onItemEdit = { key ->
                             val p = key.toIntOrNull() ?: 0
                             editingProfileIndex = p
-                            editingProfileName = profileNames[p] ?: "Профиль $p"
+                            editingProfileName = profileNames[p] ?: defaultProfileName(p)
                         },
                     )
 
@@ -581,9 +588,38 @@ fun FloatingToolbar(
                             overflow = TextOverflow.Ellipsis,
                         )
                     }
+                    if (p in occupiedProfiles) {
+                        TextButton(
+                            onClick = { deletingProfileIndex = p },
+                            enabled = !tunnelBusy,
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                        ) { Text("Удалить профиль") }
+                    }
                 }
             }
         }
+    }
+    deletingProfileIndex?.let { profile ->
+        AlertDialog(
+            onDismissRequest = { deletingProfileIndex = null },
+            containerColor = MaterialTheme.colorScheme.surface,
+            tonalElevation = 0.dp,
+            title = { Text("Удалить профиль?") },
+            text = { Text("Профиль «${profileNames[profile] ?: defaultProfileName(profile)}» будет удалён с устройства.") },
+            confirmButton = {
+                TextButton(
+                    enabled = !tunnelBusy && profile in occupiedProfiles,
+                    onClick = {
+                        deletingProfileIndex = null
+                        editingProfileIndex = null
+                        scope.launch { settingsStore.clearProfile(profile) }
+                    },
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                ) { Text("Удалить") }
+            },
+            dismissButton = { TextButton(onClick = { deletingProfileIndex = null }) { Text("Отмена") } },
+        )
     }
 }
 
