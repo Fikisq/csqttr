@@ -482,6 +482,7 @@ internal fun DeployTab(
                     pass = uninstallPassword,
                     port = effectiveSshPort,
                     peerPort = effectivePeerPort,
+                    webPort = server.webPortOrDefault(),
                     onProgress = DeployManager::updateProgress,
                     privateKey = uninstallPrivateKey,
                     keyPassphrase = uninstallKeyPassphrase,
@@ -710,14 +711,7 @@ internal fun DeployTab(
         val (name, _) = describeServer(server, profilePeer)
         UninstallConfirmDialog(
             title = "Удаление: $name",
-            text = if (server.place == ServerPlace.SIDE) {
-                "Будет удалён второй сервер csqtt25: его бинарник, сервис или контейнер и только его правила firewall/NAT. " +
-                    "Остальное на этом VPS не затрагивается. База пользователей остаётся в /etc/csqtt25.\n\nЭто действие необратимо."
-            } else {
-                "Будут удалены: бинарник, systemd-сервис или контейнер, конфигурация CSQTT и только помеченные правила " +
-                    "firewall/NAT для CSQTT. Второй сервер (csqtt25), если он есть, не затрагивается. База пользователей " +
-                    "остаётся в /etc/csqtt.\n\nЭто действие необратимо."
-            },
+            text = "Будут удалены выбранный экземпляр CSQTT, его клиенты, хеши, общий токен, правила маршрутизации, DNS и настройки панели. Это действие необратимо.",
             onDismiss = { pendingRemove = null },
             onConfirm = {
                 pendingRemove = null

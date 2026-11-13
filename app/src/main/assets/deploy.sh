@@ -2688,7 +2688,11 @@ csqtt_instance_installed() {
 
 do_uninstall() {
     log_step "Удаление CSQTT..."
-    csqtt_instance_installed || die "Сервер ${CSQTT_NAME} на этом VPS не установлен — удалять нечего"
+    csqtt_instance_installed || csqtt_persistent_state_exists || die "Сервер ${CSQTT_NAME} на этом VPS не установлен — удалять нечего"
+    refuse_anothers_server
+    refuse_foreign_port_holder u "$PEER_PORT" "UDP-порт"
+    refuse_foreign_port_holder t "$WEB_PORT" "TCP-порт WEB-панели"
+    prog 0.20 "Остановка экземпляра CSQTT..."
     if [ "$CSQTT_ROLE" = main ]; then
         # this removal's cleanup stops, kills and deletes every csqtt unit, container and process it matches
         local strangers
@@ -2710,7 +2714,8 @@ do_uninstall() {
         stop_csqtt_docker_prereq
         stop_all_running_csqtt_systemd_units
     fi
-    force_stop_csqtt_processes || log_warn "Не все процессы CSQTT завершились до удаления runtime"
+    force_stop_csqtt_processes || die "Не удалось остановить все процессы удаляемого CSQTT"
+    prog 0.60 "Удаление сетевых правил и файлов CSQTT..."
     remove_all_csqtt_systemd_units
     rm -f "/etc/systemd/system/${CSQTT_DOCKER_PREREQ_SERVICE}"
     rm -f "/etc/systemd/system/docker.service.requires/${CSQTT_DOCKER_PREREQ_SERVICE}"
@@ -2730,7 +2735,6 @@ do_uninstall() {
     fi
     secure_persistent_state
     rm -f "$CSQTT_SYSCTL_FILE" "$CSQTT_UDP_SYSCTL_FILE"
-    sysctl --system >/dev/null 2>&1 || true
 
     log_info "CSQTT${CSQTT_ROLE_LABEL} удалён. SQLite state и конфигурация сохранены в ${CSQTT_CONFIG_DIR}"
     echo "CSQTT_UNINSTALL_OK"
@@ -3067,8 +3071,11 @@ main() {
         purge|--purge|-p)
             DEPLOY_PHASE="validation"
             validate_port "CSQTT_PEER_PORT" "$PEER_PORT"
+            validate_port "CSQTT_WEB_PORT" "$WEB_PORT"
             do_uninstall
-            rm -rf -- "$CSQTT_CONFIG_DIR"
+            prog 0.90 "Удаление базы и настроек CSQTT..."
+            rm -rf -- "$CSQTT_CONFIG_DIR" || die "Не удалось удалить данные выбранного CSQTT"
+            [ ! -e "$CSQTT_CONFIG_DIR" ] || die "Данные выбранного CSQTT остались на сервере"
             log_info "Конфигурация, SQLite-база и сертификаты CSQTT удалены"
             echo "CSQTT_PURGE_OK"
             ;;

@@ -117,6 +117,7 @@ import com.csqtt.client.ui.legacy.ServerPlace
 import com.csqtt.client.ui.legacy.deployInstance
 import com.csqtt.client.ui.legacy.describeServer
 import com.csqtt.client.ui.legacy.peerPortOrDefault
+import com.csqtt.client.ui.legacy.webPortOrDefault
 import com.csqtt.client.ui.legacy.performServerCheck
 import com.csqtt.client.ui.legacy.planDeploy
 import com.csqtt.client.ui.legacy.removableServers
@@ -802,6 +803,7 @@ internal fun V2DeployScreen(
                     pass = uninstallPassword,
                     port = ports.ssh,
                     peerPort = server.peerPortOrDefault(),
+                    webPort = server.webPortOrDefault(),
                     onProgress = DeployManager::updateProgress,
                     privateKey = uninstallPrivateKey,
                     keyPassphrase = uninstallKeyPassphrase,
@@ -1283,14 +1285,7 @@ internal fun V2DeployScreen(
                 startUninstall(server)
             },
             title = "Удаление: $name",
-            description = if (server.place == ServerPlace.SIDE) {
-                "Будет удалён второй сервер csqtt25: его бинарник, сервис или контейнер и только его правила firewall/NAT. " +
-                    "Остальное на этом VPS не затрагивается. База пользователей остаётся в /etc/csqtt25.\n\nЭто действие необратимо."
-            } else {
-                "Будут удалены: бинарник, systemd-сервис или контейнер, конфигурация CSQTT и только помеченные правила " +
-                    "firewall/NAT для CSQTT. Второй сервер (csqtt25), если он есть, не затрагивается. База пользователей " +
-                    "остаётся в /etc/csqtt.\n\nЭто действие необратимо."
-            },
+            description = "Будут удалены выбранный экземпляр CSQTT, его клиенты, хеши, общий токен, правила маршрутизации, DNS и настройки панели. Это действие необратимо.",
         )
     }
 

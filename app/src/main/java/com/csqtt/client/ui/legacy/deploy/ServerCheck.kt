@@ -269,6 +269,8 @@ internal fun removalNotes(inventory: ServerInventory): List<String> {
 internal fun FoundServer.deployInstance(): DeployInstance =
     if (place == ServerPlace.SIDE) DeployInstance.SIDE else DeployInstance.MAIN
 
+internal fun FoundServer.webPortOrDefault(): Int = webPort ?: deployInstance().defaultWebPort
+
 internal fun FoundServer.peerPortOrDefault(): Int =
     peerPort ?: if (place == ServerPlace.SIDE) CsqttConstants.Network.DEFAULT_SIDE_SERVER_PEER_PORT
     else CsqttConstants.Network.DEFAULT_SERVER_PEER_PORT

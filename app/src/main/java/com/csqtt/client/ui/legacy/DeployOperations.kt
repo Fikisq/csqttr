@@ -42,7 +42,7 @@ internal fun isSuccessfulDeployResult(exitStatus: Int, output: String): Boolean 
 private const val UNINSTALL_TIMEOUT = 120_000L
 
 internal fun isSuccessfulUninstallResult(exitStatus: Int, output: String): Boolean =
-    exitStatus == 0 && output.lineSequence().any { it.trim() == "CSQTT_UNINSTALL_OK" }
+    exitStatus == 0 && output.lineSequence().any { it.trim() == "CSQTT_PURGE_OK" }
 
 internal fun uninstallFailureMessage(output: String): String =
     deployFailureDetail(output)?.let { "Удаление не завершено. Причина: $it" }
@@ -135,6 +135,7 @@ internal fun parseDeployOutputLine(rawLine: String): DeployOutputLine? {
             raw.startsWith("CSQTT_INV|") ||
             raw == "CSQTT_DEPLOY_OK" ||
             raw == "CSQTT_UNINSTALL_OK" ||
+            raw == "CSQTT_PURGE_OK" ||
             raw == "CSQTT_DEPLOY_ROLLED_BACK" ||
             raw == "CSQTT_DEPLOY_ROLLBACK_FAILED"
     ) return null
@@ -862,6 +863,7 @@ internal suspend fun performUninstall(
     context: Context,
     host: String, user: String, pass: String, port: Int,
     peerPort: Int,
+    webPort: Int,
     onProgress: (Float, String) -> Unit,
     privateKey: String = "",
     keyPassphrase: String = "",
@@ -893,7 +895,7 @@ internal suspend fun performUninstall(
         TunnelManager.addDeployInfoLog("Запуск серверного удаления")
         // the instance the form is set to: «Рядом с 2.1.9» removes only the csqtt25 server, «Вместо 2.1.9» the stock one
         val uninstallResult = sshClient.execResult(
-            rootCommand("env CSQTT_PEER_PORT=$peerPort CSQTT_SSH_PORT=$port CSQTT_INSTANCE=${instance.wire} bash /tmp/deploy.sh uninstall", pass),
+            rootCommand("env CSQTT_PEER_PORT=$peerPort CSQTT_WEB_PORT=$webPort CSQTT_SSH_PORT=$port CSQTT_INSTANCE=${instance.wire} bash /tmp/deploy.sh purge", pass),
             timeout = UNINSTALL_TIMEOUT,
             onProgress = { fraction, step -> onProgress(0.30f + 0.69f * fraction.coerceIn(0f, 1f), step) },
         )
