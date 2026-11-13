@@ -272,7 +272,7 @@ internal fun TunnelDropdownMenu(
                                 IconButton(
                                     onClick = {
                                         onDismiss()
-                                        onInfo?.invoke(key)
+                                        onInfo(key)
                                     },
                                     modifier = Modifier.size(32.dp),
                                 ) {
