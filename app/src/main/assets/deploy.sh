@@ -450,7 +450,7 @@ assert_peer_port_is_available() {
     local listeners
     listeners="$(peer_port_listeners)"
     [ -z "$listeners" ] && return 0
-    [ "$CSQTT_ROLE" = side ] && refuse_foreign_port_holder u "$PEER_PORT" "UDP-порт"
+    refuse_foreign_port_holder u "$PEER_PORT" "UDP-порт" "UDP-порт"
     log_warn "UDP/${PEER_PORT} занят; выполняется принудительное освобождение"
     force_release_peer_port || die "Не удалось принудительно освободить UDP/${PEER_PORT}"
     [ -z "$(peer_port_listeners)" ] || die "UDP/${PEER_PORT} остался занят после принудительной очистки"
@@ -835,7 +835,6 @@ fw_add_input_tcp() {
 fw_add_forward() {
     ipt_add_or_ensure filter INPUT -i "$CSQTT_IFACE" -s "$CSQTT_SUBNET" -m comment --comment "$IPT_COMMENT" -j ACCEPT || \
         die "Не удалось установить INPUT -i $CSQTT_IFACE"
-    ipt_add_or_ensure filter FORWARD -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT || true
     ipt_add_or_ensure filter FORWARD -i "$CSQTT_IFACE" -m comment --comment "$IPT_COMMENT" -j ACCEPT || \
         die "Не удалось установить FORWARD -i $CSQTT_IFACE"
     ipt_add_or_ensure filter FORWARD -o "$CSQTT_IFACE" -m comment --comment "$IPT_COMMENT" -j ACCEPT || \
@@ -1123,65 +1122,8 @@ csqtt_cleanup() {
 }
 
 setup_sysctl() {
-    echo "⚙️  Настройка сетевых параметров..."
-
-    modprobe tcp_bbr 2>/dev/null || true
-    if [ -d /etc/modules-load.d ]; then
-        echo "tcp_bbr" > /etc/modules-load.d/bbr.conf 2>/dev/null || true
-    fi
-
-    echo 1 > /proc/sys/net/ipv4/ip_forward 2>/dev/null || true
-    echo 2 > /proc/sys/net/ipv4/conf/all/rp_filter 2>/dev/null || true
-    echo 2 > /proc/sys/net/ipv4/conf/default/rp_filter 2>/dev/null || true
-    echo 0 > /proc/sys/net/ipv6/conf/all/disable_ipv6 2>/dev/null || true
-    echo 0 > /proc/sys/net/ipv6/conf/default/disable_ipv6 2>/dev/null || true
-    echo 1 > /proc/sys/net/ipv6/conf/all/forwarding 2>/dev/null || true
-    echo 1 > /proc/sys/net/ipv6/conf/default/forwarding 2>/dev/null || true
-    echo 2 > /proc/sys/net/ipv6/conf/all/accept_ra 2>/dev/null || true
-    echo 2 > /proc/sys/net/ipv6/conf/default/accept_ra 2>/dev/null || true
-    for dev in /proc/sys/net/ipv6/conf/*; do
-        if [ -d "$dev" ]; then
-            echo 0 > "$dev/disable_ipv6" 2>/dev/null || true
-            echo 2 > "$dev/accept_ra" 2>/dev/null || true
-        fi
-    done
-    mkdir -p /etc/sysctl.d
-    cat > "$CSQTT_SYSCTL_FILE" << 'SYSEOF'
-net.ipv4.ip_forward = 1
-net.ipv4.conf.all.rp_filter = 2
-net.ipv4.conf.default.rp_filter = 2
-net.ipv6.conf.all.disable_ipv6 = 0
-net.ipv6.conf.default.disable_ipv6 = 0
-net.ipv6.conf.all.forwarding = 1
-net.ipv6.conf.default.forwarding = 1
-net.ipv6.conf.all.accept_ra = 2
-net.ipv6.conf.default.accept_ra = 2
-net.core.default_qdisc = fq
-net.ipv4.tcp_congestion_control = bbr
-net.core.netdev_max_backlog = 10000
-net.core.somaxconn = 65535
-net.ipv4.tcp_rmem = 4096 131072 67108864
-net.ipv4.tcp_wmem = 4096 131072 67108864
-net.ipv4.tcp_mtu_probing = 1
-net.ipv4.tcp_slow_start_after_idle = 0
-net.ipv4.tcp_window_scaling = 1
-net.ipv4.tcp_sack = 1
-net.ipv4.tcp_timestamps = 1
-net.ipv4.tcp_fastopen = 3
-SYSEOF
-
-    cat > "$CSQTT_UDP_SYSCTL_FILE" << 'SYSEOF'
-net.core.rmem_max = 67108864
-net.core.wmem_max = 67108864
-SYSEOF
-
-    sysctl -p "$CSQTT_SYSCTL_FILE" >>"$LOG_FILE" 2>&1 || log_warn "Не удалось применить обязательные параметры маршрутизации"
-    sysctl -p "$CSQTT_UDP_SYSCTL_FILE" >>"$LOG_FILE" 2>&1 || log_warn "Ядро ограничило лимиты сетевых буферов; сервер продолжит работу с доступными значениями"
-
     [ "$(cat /proc/sys/net/ipv4/ip_forward 2>/dev/null || echo 0)" = "1" ] || \
-        die "IPv4 forwarding невозможно включить на этом VPS"
-
-    echo "✓ Sysctl настроен (IPv4/IPv6 forwarding + BBR + буферы)"
+        die "На VPS должен быть включён IPv4 forwarding. Установщик не меняет глобальные сетевые параметры." "$EXIT_PREFLIGHT_FAILED"
 }
 
 # 2.5.0 added "mitigations=off nowatchdog" to the GRUB kernel command line here: it switched the kernel's CPU-vulnerability
@@ -1201,19 +1143,9 @@ setup_nat_and_firewall() {
     ip link show "$iface" >/dev/null 2>&1 || die "Определённый WAN-интерфейс $iface не существует"
 
     log_info "WAN-интерфейс: $iface"
-    sysctl -w "net.ipv4.conf.${iface}.rp_filter=2" >>"$LOG_FILE" 2>&1 || true
-    sysctl -w "net.ipv6.conf.${iface}.disable_ipv6=0" >>"$LOG_FILE" 2>&1 || true
-    sysctl -w "net.ipv6.conf.${iface}.accept_ra=2" >>"$LOG_FILE" 2>&1 || true
-    sysctl -w "net.ipv6.conf.${iface}.forwarding=1" >>"$LOG_FILE" 2>&1 || true
     # 2.5.0 ran `netplan apply` here. It re-applies the whole network configuration mid-install (the uplink can drop, and on a
     # box running other software networkd may remove routes it did not configure), and on a netplan box it undoes the line
     # above: networkd resets accept_ra on the links it manages. The server is IPv4-only; 2.1.9 never did it. Dropped in 2.5.2.
-
-    local gw_ip
-    gw_ip="$(ip -4 route show default 2>/dev/null | awk '/default/ {for(i=1;i<=NF;i++) if($i=="via") {print $(i+1); break}}')"
-    if [ -n "$gw_ip" ]; then
-        ip route replace "$gw_ip" dev "$iface" scope link >>"$LOG_FILE" 2>&1 || true
-    fi
 
     fw_add_input_udp "$PEER_PORT"
     fw_add_input_tcp "$WEB_PORT"
@@ -1248,12 +1180,7 @@ NETWORK_READY_FILE="$CSQTT_DOCKER_NETWORK_READY"
 
 command -v ip >/dev/null 2>&1 || exit 20
 command -v iptables >/dev/null 2>&1 || exit 21
-[ -w /proc/sys/net/ipv4/ip_forward ] && echo 1 > /proc/sys/net/ipv4/ip_forward 2>/dev/null || true
-[ -w /proc/sys/net/ipv6/conf/all/forwarding ] && echo 1 > /proc/sys/net/ipv6/conf/all/forwarding 2>/dev/null || true
-[ -w /proc/sys/net/ipv4/conf/all/rp_filter ] && echo 2 > /proc/sys/net/ipv4/conf/all/rp_filter 2>/dev/null || true
-[ -w /proc/sys/net/ipv4/conf/default/rp_filter ] && echo 2 > /proc/sys/net/ipv4/conf/default/rp_filter 2>/dev/null || true
-[ -w /proc/sys/net/ipv4/tcp_notsent_lowat ] && echo 131072 > /proc/sys/net/ipv4/tcp_notsent_lowat 2>/dev/null || true
-
+[ "$(cat /proc/sys/net/ipv4/ip_forward 2>/dev/null || echo 0)" = "1" ] || exit 21[ "$(cat /proc/sys/net/ipv4/ip_forward 2>/dev/null || echo 0)" = "1" ] || exit 21[ "$(cat /proc/sys/net/ipv4/ip_forward 2>/dev/null || echo 0)" = "1" ] || exit 21[ "$(cat /proc/sys/net/ipv4/ip_forward 2>/dev/null || echo 0)" = "1" ] || exit 21[ "$(cat /proc/sys/net/ipv4/ip_forward 2>/dev/null || echo 0)" = "1" ] || exit 21
 is_ignored_wan_interface() {
     ignored_iface="\${1%%@*}"
     case "\$ignored_iface" in
@@ -1310,14 +1237,7 @@ while [ "\$network_waited" -lt 90 ]; do
     sleep 1
 done
 [ -n "\$WAN_IFACE" ] || exit 22
-[ -w "/proc/sys/net/ipv4/conf/\$WAN_IFACE/rp_filter" ] && echo 2 > "/proc/sys/net/ipv4/conf/\$WAN_IFACE/rp_filter" 2>/dev/null || true
 [ -w "/proc/sys/net/ipv4/conf/\$CSQTT_IFACE/rp_filter" ] && echo 2 > "/proc/sys/net/ipv4/conf/\$CSQTT_IFACE/rp_filter" 2>/dev/null || true
-
-# Для /32 сетей с onlink-шлюзом обеспечиваем явный host route к шлюзу
-gw=\$(ip -4 route show default 2>/dev/null | awk '/default/ {for(i=1;i<=NF;i++) if(\$i=="via") {print \$(i+1); break}}')
-if [ -n "\$gw" ]; then
-    ip route replace "\$gw" dev "\$WAN_IFACE" scope link 2>/dev/null || true
-fi
 
 if ip link show "\$CSQTT_IFACE" >/dev/null 2>&1; then
     ip link set dev "\$CSQTT_IFACE" txqueuelen 1000 2>/dev/null || true
@@ -1328,7 +1248,6 @@ ipt -C INPUT -p udp --dport "\$PEER_PORT" -m comment --comment "\$IPT_COMMENT" -
 ipt -C INPUT -p tcp --dport "\$WEB_PORT" -m comment --comment "\$IPT_COMMENT" -j ACCEPT 2>/dev/null || ipt -I INPUT -p tcp --dport "\$WEB_PORT" -m comment --comment "\$IPT_COMMENT" -j ACCEPT
 ipt -C INPUT -p tcp --dport "\$LE_HTTP_PORT" -m comment --comment "\$IPT_COMMENT" -j ACCEPT 2>/dev/null || ipt -I INPUT -p tcp --dport "\$LE_HTTP_PORT" -m comment --comment "\$IPT_COMMENT" -j ACCEPT
 ipt -C INPUT -i "\$CSQTT_IFACE" -s "\$SUBNET" -m comment --comment "\$IPT_COMMENT" -j ACCEPT 2>/dev/null || ipt -I INPUT -i "\$CSQTT_IFACE" -s "\$SUBNET" -m comment --comment "\$IPT_COMMENT" -j ACCEPT
-ipt -C FORWARD -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT 2>/dev/null || ipt -I FORWARD 1 -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
 ipt -C FORWARD -i "\$CSQTT_IFACE" -m comment --comment "\$IPT_COMMENT" -j ACCEPT 2>/dev/null || ipt -I FORWARD -i "\$CSQTT_IFACE" -m comment --comment "\$IPT_COMMENT" -j ACCEPT
 ipt -C FORWARD -o "\$CSQTT_IFACE" -m comment --comment "\$IPT_COMMENT" -j ACCEPT 2>/dev/null || ipt -I FORWARD -o "\$CSQTT_IFACE" -m comment --comment "\$IPT_COMMENT" -j ACCEPT
 ipt -t nat -C POSTROUTING -s "\$SUBNET" -o "\$WAN_IFACE" -m comment --comment "\$IPT_COMMENT" -j MASQUERADE 2>/dev/null || ipt -t nat -A POSTROUTING -s "\$SUBNET" -o "\$WAN_IFACE" -m comment --comment "\$IPT_COMMENT" -j MASQUERADE || true
@@ -1343,7 +1262,6 @@ ipt -t mangle -C FORWARD -d "\$SUBNET" -p tcp -m tcp --tcp-flags SYN,RST SYN -m 
 
 if command -v ip6tables >/dev/null 2>&1 && ip -6 route show default 2>/dev/null | grep -q .; then
     ip6t() { ip6tables -w "\$XT_WAIT" "\$@"; }
-    ip6t -C FORWARD -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT 2>/dev/null || ip6t -I FORWARD 1 -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
     ip6t -C FORWARD -i "\$CSQTT_IFACE" -m comment --comment "\$IPT_COMMENT" -j ACCEPT 2>/dev/null || ip6t -I FORWARD -i "\$CSQTT_IFACE" -m comment --comment "\$IPT_COMMENT" -j ACCEPT
     ip6t -C FORWARD -o "\$CSQTT_IFACE" -m comment --comment "\$IPT_COMMENT" -j ACCEPT 2>/dev/null || ip6t -I FORWARD -o "\$CSQTT_IFACE" -m comment --comment "\$IPT_COMMENT" -j ACCEPT
     ip6t -t nat -C POSTROUTING -s "\$SUBNET6" ! -o "\$CSQTT_IFACE" -m comment --comment "\$IPT_COMMENT" -j MASQUERADE 2>/dev/null || ip6t -t nat -A POSTROUTING -s "\$SUBNET6" ! -o "\$CSQTT_IFACE" -m comment --comment "\$IPT_COMMENT" -j MASQUERADE || true
@@ -1411,7 +1329,7 @@ release_owned_peer_port() {
         for pid in \$pids; do
             # next to a stock server: only our own stale runtime is ours to stop; anything else holding the port is
             # refused (the deploy picked a free one), so this start fails loudly instead of killing a neighbour
-            if [ "\$CSQTT_ROLE" = side ] && ! csqtt_process_is_owned "\$pid"; then
+            if ! csqtt_process_is_owned "\$pid"; then
                 echo "[CSQTT] UDP/\$PEER_PORT is held by PID \$pid, which is not this server; not touching it" >&2
                 return 24
             fi
