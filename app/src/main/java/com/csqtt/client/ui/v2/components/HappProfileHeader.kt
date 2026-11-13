@@ -35,7 +35,7 @@ internal fun happProfileHeaderHeight(): Dp =
 @Composable
 internal fun HappProfileHeader(
     title: String,
-    subtitle: String,
+    subtitle: String?,
     onSelect: () -> Unit,
     onEdit: () -> Unit,
     enabled: Boolean,
@@ -60,8 +60,10 @@ internal fun HappProfileHeader(
                 Column(Modifier.weight(1f).padding(end = 4.dp)) {
                     Text(title, color = colors.textPrimary, fontSize = V2TextSizes.Body,
                         lineHeight = 22.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    Text(subtitle, color = colors.textSecondary, fontSize = V2TextSizes.Secondary,
-                        lineHeight = 18.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    if (subtitle != null) {
+                        Text(subtitle, color = colors.textSecondary, fontSize = V2TextSizes.Secondary,
+                            lineHeight = 18.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
                 }
                 Icon(Icons.Default.KeyboardArrowDown, null, Modifier.size(18.dp), tint = colors.textSecondary)
             }

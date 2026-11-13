@@ -2,8 +2,6 @@
 
 package com.csqtt.client.ui.v2.screens.deploy
 
-import android.content.ClipData
-import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.os.Handler
@@ -246,7 +244,6 @@ internal fun V2DeployScreen(
     val changeSecretPathStage by ServerMaintenanceState.changeSecretPathStage.collectAsStateWithLifecycle()
 
     var showConfigSheet by remember { mutableStateOf(false) }
-    var showActionsMenu by rememberSaveable { mutableStateOf(false) }
     var showRenameDialog by rememberSaveable(savedSettings.profile) { mutableStateOf(false) }
     var showServerMenu by remember { mutableStateOf(false) }
     var addingServer by remember { mutableStateOf(false) }
@@ -859,14 +856,6 @@ internal fun V2DeployScreen(
         return "https://${host.trim()}:${ports.web}$panelPath"
     }
 
-    fun copyPanelLink() {
-        val effectiveHost = host.trim()
-        val text = if (effectiveHost.isNotBlank()) panelUrl() else savedSecretPathUuid
-        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-        clipboard.setPrimaryClip(ClipData.newPlainText("csqtt_web_panel", text))
-        showDeployToast("Ссылка скопирована")
-    }
-
     fun openPanel() {
         if (host.isBlank()) {
             showDeployToast("Сначала укажите IP или домен сервера")
@@ -956,7 +945,7 @@ internal fun V2DeployScreen(
         Column(Modifier.fillMaxWidth().imePadding().verticalScroll(rememberScrollState()).testTag("deploy-settings"), verticalArrangement = Arrangement.spacedBy(layout.gap)) {
             HappProfileHeader(
                 title = serverTitle,
-                subtitle = if (host.isBlank()) "Сервер не настроен" else "$host:${sshPort.ifBlank { "22" }}",
+                subtitle = if (host.isBlank()) "Сервер не настроен" else null,
                 onSelect = { showServerMenu = true },
                 onEdit = { showRenameDialog = true },
                 enabled = !actionsBusy,
@@ -1013,7 +1002,7 @@ internal fun V2DeployScreen(
                 Text("Секретный путь и ссылка панели", color = colors.textSecondary, fontSize = V2TextSizes.Secondary)
                 Surface(shape = pill, color = colors.field, border = androidx.compose.foundation.BorderStroke(1.dp, colors.outline), modifier = Modifier.fillMaxWidth().padding(top = 4.dp)) {
                     Row(Modifier.heightIn(min = 58.dp).padding(start = 12.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Text(panelDisplayUrl, Modifier.weight(1f).clickable(enabled = !actionsBusy) { showActionsMenu = true }.padding(vertical = 8.dp), color = colors.accent, fontSize = V2TextSizes.Body, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                        Text(panelDisplayUrl, Modifier.weight(1f).clickable(enabled = !actionsBusy && host.isNotBlank(), onClick = ::openPanel).padding(vertical = 8.dp), color = colors.accent, fontSize = V2TextSizes.Body, maxLines = 2, overflow = TextOverflow.Ellipsis)
                         androidx.compose.material3.IconButton(onClick = {
                             showRegenConfirmDialog = true
                         }, enabled = !actionsBusy && host.isNotBlank() && sshAuthReady, modifier = Modifier.size(48.dp)) {
@@ -1047,6 +1036,13 @@ internal fun V2DeployScreen(
     }
     if(showServerMenu) androidx.compose.material3.AlertDialog(onDismissRequest = { showServerMenu = false }, title = { Text("Серверы VPS") }, text = {
         Column(Modifier.verticalScroll(rememberScrollState())) {
+            if (host.isNotBlank()) {
+                TextButton(onClick = {
+                    showServerMenu = false
+                    addingServer = false
+                    showConfigSheet = true
+                }) { Text("Редактировать VPS") }
+            }
             deployServers.forEach { server -> HappActionRow(server.name, server.ip, {
                 showServerMenu = false
                 if (!actionsBusy) scope.launch {
@@ -1060,18 +1056,6 @@ internal fun V2DeployScreen(
             }) }
         }
     }, confirmButton = { androidx.compose.material3.TextButton(onClick = { showServerMenu = false; openAddServerSheet() }) { Text("Добавить VPS") } })
-
-    if (showActionsMenu) androidx.compose.material3.AlertDialog(
-        onDismissRequest = { showActionsMenu = false }, title = { Text("Веб-панель") },
-        text = { Column {
-            androidx.compose.material3.TextButton(onClick = { showActionsMenu = false; openPanel() }, enabled = host.isNotBlank()) { Text("Открыть веб-панель") }
-            androidx.compose.material3.TextButton(onClick = { showActionsMenu = false; addingServer = false; showConfigSheet = true }, enabled = host.isNotBlank()) { Text("Редактировать VPS") }
-            androidx.compose.material3.TextButton(onClick = { showActionsMenu = false; showSecretsDialog = true }) { Text("Настройки веб-панели") }
-            androidx.compose.material3.TextButton(onClick = { showActionsMenu = false; copyPanelLink() }, enabled = host.isNotBlank()) { Text("Копировать ссылку панели") }
-            androidx.compose.material3.TextButton(onClick = { showActionsMenu = false; showRegenConfirmDialog = true }, enabled = host.isNotBlank() && sshAuthReady) { Text("Сменить путь панели") }
-        } },
-        confirmButton = { androidx.compose.material3.TextButton(onClick = { showActionsMenu = false }) { Text("Закрыть") } },
-    )
 
     // Модалка (ModalBottomSheet) для заполнения и сохранения данных сервера
     if (showConfigSheet) {
