@@ -390,7 +390,7 @@ internal fun resolveActiveNavIds(csqttLinkMode: Boolean, participantShowLogs: Bo
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun MainScreen(
     settingsStore: SettingsStore,
@@ -617,7 +617,7 @@ fun MainScreen(
                             .then(
                                 if (selectedTab == 1 || selectedTab == 2) {
                                     Modifier.windowInsetsPadding(
-                                        WindowInsets.ime.exclude(WindowInsets(bottom = navOverlayReserve)),
+                                        WindowInsets.imeAnimationTarget.exclude(WindowInsets(bottom = navOverlayReserve)),
                                     )
                                 } else {
                                     Modifier
