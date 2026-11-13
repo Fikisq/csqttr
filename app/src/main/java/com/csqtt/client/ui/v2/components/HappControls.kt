@@ -8,7 +8,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.HelpOutline
-import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material.icons.outlined.VisibilityOff
@@ -34,6 +34,8 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.csqtt.client.ui.legacy.ModeIndicator
+import com.csqtt.client.ui.legacy.ModeProgressBar
+import com.csqtt.client.ui.legacy.TunnelDropdownMenu
 import com.csqtt.client.ui.v2.design.V2Theme
 
 @Composable
@@ -145,46 +147,25 @@ internal fun HappChoice(label: String, value: String, options: List<String>, onS
                 Column(Modifier.heightIn(min = LocalV2AdaptiveMetrics.current.fieldHeight).padding(horizontal = 10.dp, vertical = 6.dp), verticalArrangement = Arrangement.Center) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(value, modifier = Modifier.weight(1f), fontSize = V2TextSizes.Body, maxLines = valueMaxLines, overflow = TextOverflow.Ellipsis, color = c.textPrimary)
-                        Icon(Icons.Default.KeyboardArrowDown, null, tint = c.textSecondary, modifier = Modifier.size(18.dp))
+                        Icon(Icons.Default.ArrowDropDown, null, tint = c.textSecondary, modifier = Modifier.size(20.dp))
                     }
                     val indicator = indicators[value]
-                    if (indicator != null) ChoiceIndicator(indicator, c.outline)
-                    else if (indicators.isNotEmpty()) Spacer(Modifier.height(7.dp))
+                    if (indicator != null) {
+                        Spacer(Modifier.height(2.dp))
+                        ModeProgressBar(indicator.progress, indicator.color, Modifier.fillMaxWidth())
+                    }
+                    else if (indicators.isNotEmpty()) Spacer(Modifier.height(6.dp))
                 }
             }
-            DropdownMenu(
+            TunnelDropdownMenu(
                 expanded = expanded,
-                onDismissRequest = { expanded = false },
-                modifier = Modifier.width(208.dp),
-                containerColor = c.surface,
-                tonalElevation = 0.dp,
-            ) {
-                options.forEach { option ->
-                    DropdownMenuItem(
-                        text = {
-                            Column(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
-                                Row(Modifier.fillMaxWidth().heightIn(min = 32.dp), verticalAlignment = Alignment.CenterVertically) {
-                                    Text(option, modifier = Modifier.weight(1f), fontSize = V2TextSizes.Body)
-                                    if (option in optionHelp) {
-                                        IconButton(onClick = { expanded = false; helpOption = option }, modifier = Modifier.size(32.dp)) {
-                                            Icon(Icons.AutoMirrored.Outlined.HelpOutline, "Информация: $option",
-                                                tint = c.textSecondary, modifier = Modifier.size(18.dp))
-                                        }
-                                    }
-                                }
-                                val indicator = indicators[option]
-                                if (indicator != null) ChoiceIndicator(indicator, c.outline)
-                                else if (indicators.isNotEmpty()) Spacer(Modifier.height(7.dp))
-                            }
-                        },
-                        onClick = {
-                            expanded = false
-                            onSelect(option)
-                        },
-
-                    )
-                }
-            }
+                onDismiss = { expanded = false },
+                options = options.map { it to it },
+                onSelected = onSelect,
+                onInfo = { helpOption = it },
+                hasInfo = { it in optionHelp },
+                indicatorProvider = indicators::get,
+            )
         }
     }
     helpOption?.let { option ->
@@ -200,14 +181,6 @@ internal fun HappChoice(label: String, value: String, options: List<String>, onS
             },
             confirmButton = { TextButton(onClick = { helpOption = null }) { Text("Понятно") } },
         )
-    }
-}
-
-@Composable
-private fun ChoiceIndicator(indicator: ModeIndicator, track: Color) {
-    val shape = RoundedCornerShape(2.dp)
-    Box(Modifier.padding(top = 4.dp).fillMaxWidth().height(3.dp).background(track, shape)) {
-        Box(Modifier.fillMaxWidth(indicator.progress).fillMaxHeight().background(indicator.color, shape))
     }
 }
 

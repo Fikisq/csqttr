@@ -22,7 +22,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.HelpOutline
 import androidx.compose.material.icons.filled.ArrowDropDown
-import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -194,83 +193,106 @@ internal fun CompactDropdownSetting(
                     }
                 }
             }
-            DropdownMenu(
+            TunnelDropdownMenu(
                 expanded = expanded,
-                onDismissRequest = { expanded = false },
-                modifier = Modifier.widthIn(min = 160.dp, max = 220.dp),
-                containerColor = MaterialTheme.colorScheme.surface,
-                tonalElevation = 0.dp,
-            ) {
-                options.forEach { (key, label) ->
-                    val itemIndicator = indicatorProvider?.invoke(key)
-                    DropdownMenuItem(
-                        text = {
-                            Column(
-                                modifier = Modifier.fillMaxWidth().padding(start = 5.dp, top = 2.dp, bottom = 2.dp),
-                                verticalArrangement = Arrangement.spacedBy(3.dp),
-                            ) {
-                                Text(
-                                    text = label,
-                                    maxLines = 1,
-                                    softWrap = false,
-                                    overflow = TextOverflow.Ellipsis,
-                                )
-                                if (itemIndicator != null) {
-                                    ModeProgressBar(
-                                        progress = itemIndicator.progress,
-                                        color = itemIndicator.color,
-                                        modifier = Modifier.fillMaxWidth(),
+                onDismiss = { expanded = false },
+                options = options,
+                onSelected = onSelected,
+                onInfo = onInfo,
+                onItemEdit = onItemEdit,
+                indicatorProvider = indicatorProvider,
+            )
+        }
+    }
+}
+
+@Composable
+internal fun TunnelDropdownMenu(
+    expanded: Boolean,
+    onDismiss: () -> Unit,
+    options: List<Pair<String, String>>,
+    onSelected: (String) -> Unit,
+    onInfo: ((String) -> Unit)? = null,
+    onItemEdit: ((String) -> Unit)? = null,
+    indicatorProvider: ((String) -> ModeIndicator?)? = null,
+    hasInfo: (String) -> Boolean = { true },
+) {
+    DropdownMenu(
+        expanded = expanded,
+        onDismissRequest = onDismiss,
+        modifier = Modifier.widthIn(min = 160.dp, max = 220.dp),
+        containerColor = MaterialTheme.colorScheme.surface,
+        tonalElevation = 0.dp,
+    ) {
+        options.forEach { (key, label) ->
+            val itemIndicator = indicatorProvider?.invoke(key)
+            val showInfo = onInfo != null && hasInfo(key)
+            DropdownMenuItem(
+                text = {
+                    Column(
+                        modifier = Modifier.fillMaxWidth().padding(start = 5.dp, top = 2.dp, bottom = 2.dp),
+                        verticalArrangement = Arrangement.spacedBy(3.dp),
+                    ) {
+                        Text(
+                            text = label,
+                            maxLines = 1,
+                            softWrap = false,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        if (itemIndicator != null) {
+                            ModeProgressBar(
+                                progress = itemIndicator.progress,
+                                color = itemIndicator.color,
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                        }
+                    }
+                },
+                trailingIcon = if (onItemEdit != null || showInfo) {
+                    {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            if (onItemEdit != null) {
+                                IconButton(
+                                    onClick = {
+                                        onDismiss()
+                                        onItemEdit(key)
+                                    },
+                                    modifier = Modifier.size(32.dp),
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Edit,
+                                        contentDescription = "Редактировать: $label",
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.size(18.dp),
                                     )
                                 }
                             }
-                        },
-                        trailingIcon = if (onItemEdit != null || onInfo != null) {
-                            {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    if (onItemEdit != null) {
-                                        IconButton(
-                                            onClick = {
-                                                expanded = false
-                                                onItemEdit(key)
-                                            },
-                                            modifier = Modifier.size(32.dp),
-                                        ) {
-                                            Icon(
-                                                imageVector = Icons.Default.Edit,
-                                                contentDescription = "Редактировать: $label",
-                                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                                modifier = Modifier.size(18.dp),
-                                            )
-                                        }
-                                    }
-                                    if (onInfo != null) {
-                                        IconButton(
-                                            onClick = {
-                                                expanded = false
-                                                onInfo(key)
-                                            },
-                                            modifier = Modifier.size(32.dp),
-                                        ) {
-                                            Icon(
-                                                imageVector = Icons.AutoMirrored.Filled.HelpOutline,
-                                                contentDescription = "Информация: $label",
-                                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                                modifier = Modifier.size(18.dp),
-                                            )
-                                        }
-                                    }
+                            if (showInfo) {
+                                IconButton(
+                                    onClick = {
+                                        onDismiss()
+                                        onInfo?.invoke(key)
+                                    },
+                                    modifier = Modifier.size(32.dp),
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.AutoMirrored.Filled.HelpOutline,
+                                        contentDescription = "Информация: $label",
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.size(18.dp),
+                                    )
                                 }
                             }
-                        } else {
-                            null
-                        },
-                        onClick = {
-                            expanded = false
-                            onSelected(key)
-                        },
-                    )
-                }
-            }
+                        }
+                    }
+                } else {
+                    null
+                },
+                onClick = {
+                    onDismiss()
+                    onSelected(key)
+                },
+            )
         }
     }
 }
