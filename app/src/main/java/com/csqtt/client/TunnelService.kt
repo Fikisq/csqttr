@@ -1041,11 +1041,31 @@ class TunnelService : Service() {
     }
 
     private fun prepareForDeploy() {
+        val tunnelWasActive = TunnelManager.running.value || TunnelManager.starting.value || autoPauseRequested
+        startJob?.cancel()
+        startJob = null
+        startGeneration++
+        stopWifiAutoPauseWatch()
+        autoPauseRequested = false
+        TunnelManager.starting.value = false
         updateJob?.cancel()
         updateJob = null
+        networkSwapJob?.cancel()
+        networkSwapJob = null
+        vkRecoveryJob?.cancel()
+        vkRecoveryJob = null
         CaptchaWebViewManager.onTunnelStop()
-        TunnelManager.stop(notifyController = false)
+        TunnelManager.stop(finishVkCalls = true, notifyController = false)
         releaseWifiLock()
+        if (tunnelWasActive) {
+            serviceScope.launch {
+                autoPauseMutex.withLock {
+                    autoPausedForWifi = false
+                    TunnelManager.leaveWifiAutoPause()
+                    SettingsStore(applicationContext).saveTunnelWasRunning(false)
+                }
+            }
+        }
     }
 
     private fun releaseTunnelResources(finishVkCalls: Boolean = false) {
