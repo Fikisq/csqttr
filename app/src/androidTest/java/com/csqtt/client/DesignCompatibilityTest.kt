@@ -122,17 +122,18 @@ class DesignCompatibilityTest {
                 }
                 compose.onNodeWithText("Импорт").performClick()
                 compose.waitUntil(5000) {
-                    runBlocking {
-                        store.excludedApps.first() == "com.example.direct" &&
-                            store.whitelistApps.first() == "com.example.vpn" &&
-                            store.isWhitelist.first() &&
-                            store.directDomainsBlack.first() == "direct.example" &&
-                            store.directDomainsWhite.first() == "vpn.example" &&
-                            store.domainIsWhitelist.first() &&
-                            store.directIpsBlack.first() == "192.0.2.10" &&
-                            store.directIpsWhite.first() == "198.51.100.20" &&
-                            store.ipIsWhitelist.first()
-                    }
+                    !compose.onNodeWithText("Импорт").isDisplayed()
+                }
+                runBlocking {
+                    assertEquals("$design excluded apps", "com.example.direct", store.excludedApps.first())
+                    assertEquals("$design VPN apps", "com.example.vpn", store.whitelistApps.first())
+                    assertEquals("$design app mode", true, store.isWhitelist.first())
+                    assertEquals("$design excluded domains", "direct.example", store.directDomainsBlack.first())
+                    assertEquals("$design VPN domains", "vpn.example", store.directDomainsWhite.first())
+                    assertEquals("$design domain mode", true, store.domainIsWhitelist.first())
+                    assertEquals("$design excluded IPs", "192.0.2.10", store.directIpsBlack.first())
+                    assertEquals("$design VPN IPs", "198.51.100.20", store.directIpsWhite.first())
+                    assertEquals("$design IP mode", true, store.ipIsWhitelist.first())
                 }
             }
         } finally {
