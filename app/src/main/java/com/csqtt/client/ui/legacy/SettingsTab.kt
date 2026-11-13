@@ -61,9 +61,6 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.map
-
-private const val WORKERS_PER_GROUP = CsqttConstants.Tunnel.WORKERS_PER_GROUP
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -95,13 +92,6 @@ internal fun SettingsTabContent(
     validationRequest: Int,
     onVkAuthRequested: () -> Unit,
 ) {
-    val workersPerHash = remember(settingsStore) {
-        settingsStore.workersPerHash
-        .map<Int, Int?> { it }
-    }
-    val savedWorkersPerHash by workersPerHash
-        .collectAsStateWithLifecycle(initialValue = SettingsStore.cachedWorkersPerHash)
-
     val activeProfile = tunnelAuthSettings.profile
     val csqttLinkMode = tunnelAuthSettings.csqttLinkMode
     val csqttLink = tunnelAuthSettings.csqttLink
@@ -232,15 +222,12 @@ internal fun SettingsTabContent(
         allHashes.filter { it.isNotBlank() && it.length >= 16 }.distinct().joinToString(",")
     }
     // The slider stops where the tunnel does: 70, or 100 with «Экстра потоки», lower under a subscription
-    val workersMaximum by settingsStore.workersMaximum.collectAsStateWithLifecycle(
-        initialValue = CsqttConstants.Tunnel.DEFAULT_MAX_WORKERS,
-    )
     val extraWorkers by settingsStore.extraWorkers.collectAsStateWithLifecycle(initialValue = false)
-    val selectableMaxWorkers = workersMaximum.toFloat()
+    val selectableMaxWorkers = tunnelAuthSettings.workersMaximum.toFloat()
     var sniInput by rememberSaveable { mutableStateOf("") }
 
     val currentWorkers = roundToGroup(
-        (savedWorkersPerHash ?: WORKERS_PER_GROUP).toFloat()
+        tunnelAuthSettings.workers.toFloat()
             .coerceIn(5f, selectableMaxWorkers),
         selectableMaxWorkers,
     )
@@ -408,13 +395,6 @@ internal fun SettingsTabContent(
     LaunchedEffect(vkAuthMode, extraWorkers) {
         if (vkAuthMode == CsqttConstants.VkAuth.MODE_AUTO_JS && extraWorkers) {
             settingsStore.saveExtraWorkers(false)
-        }
-    }
-
-    LaunchedEffect(initialized, currentWorkers, savedWorkersPerHash) {
-        val savedWorkers = savedWorkersPerHash
-        if (initialized && savedWorkers != null && currentWorkers.toInt() != savedWorkers) {
-            scope.launch { settingsStore.saveWorkersPerHash(currentWorkers.toInt()) }
         }
     }
 
@@ -781,7 +761,7 @@ internal fun SettingsTabContent(
                     onValueChange = { value ->
                         val newWorkers = value.toInt()
                         scope.launch {
-                            settingsStore.saveWorkersPerHash(newWorkers)
+                            settingsStore.saveWorkersPerHash(newWorkers, forProfile = activeProfile)
                         }
                     },
                     onInfo = { showWorkersInfoDialog = true },

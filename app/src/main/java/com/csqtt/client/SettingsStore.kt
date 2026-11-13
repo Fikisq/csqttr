@@ -74,6 +74,8 @@ internal data class TunnelAuthSnapshot(
     val connectionPasswordState: StoredSecretState = StoredSecretState.Missing,
     val csqttLink: String = "",
     val csqttLinkMode: Boolean = false,
+    val workers: Int = CsqttConstants.Tunnel.WORKERS_PER_GROUP,
+    val workersMaximum: Int = CsqttConstants.Tunnel.DEFAULT_MAX_WORKERS,
 ) {
     val isLoaded: Boolean
         get() = profile >= 0
@@ -558,9 +560,12 @@ private val DEPLOY_LAST_INSPECTION_PANEL = booleanPreferencesKey("deploy_last_in
     }
     val workersMaximum: Flow<Int> = dataStore.data.map { prefs -> workersMaximum(prefs) }
     val workersPerHash: Flow<Int> = dataStore.data.map { prefs ->
+        readWorkersPerHash(prefs, workersMaximum(prefs))
+    }
+
+    private fun readWorkersPerHash(prefs: Preferences, maximum: Int): Int {
         val profile = prefs[ACTIVE_PROFILE] ?: 0
-        val current = prefs[getProfileKey(WORKERS_PER_HASH, profile)] ?: 18
-        WorkerCountPolicy.normalize(current, maximum = workersMaximum(prefs))
+        return WorkerCountPolicy.normalize(prefs[getProfileKey(WORKERS_PER_HASH, profile)] ?: 18, maximum)
     }
     val protocol: Flow<String> = dataStore.data.map { prefs ->
         val profile = prefs[ACTIVE_PROFILE] ?: 0
@@ -638,14 +643,17 @@ private val DEPLOY_LAST_INSPECTION_PANEL = booleanPreferencesKey("deploy_last_in
     internal val tunnelAuthSnapshot: Flow<TunnelAuthSnapshot> = dataStore.data.map { prefs ->
         val profile = prefs[ACTIVE_PROFILE] ?: 0
         val connectionPassword = readConnectionPasswordState(prefs, profile)
+        val maximum = workersMaximum(prefs)
         TunnelAuthSnapshot(
             profile = profile,
             connectionPassword = connectionPassword.value,
             connectionPasswordState = connectionPassword.state,
             csqttLink = prefs[getProfileKey(CSQTT_LINK, profile)] ?: "",
             csqttLinkMode = prefs[getProfileKey(CSQTT_LINK_MODE, profile)] ?: false,
+            workers = readWorkersPerHash(prefs, maximum),
+            workersMaximum = maximum,
         )
-    }.onIo()
+    }.distinctUntilChanged().onIo()
     val excludedApps: Flow<String> = dataStore.data.map { prefs ->
         val profile = prefs[ACTIVE_PROFILE] ?: 0
         prefs[getProfileKey(EXCLUDED_APPS, profile)] ?: ""
@@ -1798,9 +1806,9 @@ private val DEPLOY_LAST_INSPECTION_PANEL = booleanPreferencesKey("deploy_last_in
         }
     }
 
-    suspend fun saveWorkersPerHash(workersPerHash: Int) {
+    suspend fun saveWorkersPerHash(workersPerHash: Int, forProfile: Int? = null) {
         dataStore.edit { prefs ->
-            val profile = prefs[ACTIVE_PROFILE] ?: 0
+            val profile = forProfile ?: prefs[ACTIVE_PROFILE] ?: 0
             prefs[getProfileKey(WORKERS_PER_HASH, profile)] = WorkerCountPolicy.normalize(workersPerHash, maximum = CsqttConstants.Tunnel.MAX_WORKERS)
         }
     }
