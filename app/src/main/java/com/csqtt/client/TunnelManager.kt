@@ -9,7 +9,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.isActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
@@ -230,15 +229,13 @@ object TunnelManager {
         uptimeSeconds.value = 0L
         uptimeJob?.cancel()
         uptimeJob = scope.launch(Dispatchers.Default) {
-            while (isActive) {
+            publishObservedUptime(uptimeSeconds) {
                 val start = processStartedAtMs
-                val isProcessActive = running.value || process != null
-                if (start > 0L && isProcessActive) {
-                    uptimeSeconds.value = (SystemClock.elapsedRealtime() - start) / 1000L
-                } else if (!isProcessActive && !starting.value) {
-                    break
+                if (start > 0L && (running.value || process != null)) {
+                    (SystemClock.elapsedRealtime() - start) / 1000L
+                } else {
+                    uptimeSeconds.value
                 }
-                delay(1000L)
             }
         }
     }
@@ -1618,6 +1615,8 @@ object TunnelManager {
                         }
                         val exitCode = initialExitCode
                             ?: runCatching { targetProcess.exitValue() }.getOrNull()
+                        val previousProcessStart = processStartedAtMs
+                        stopUptimeTimer()
                         val shouldRestart = lifecycleWantsRestart
                         if (lifecycleWantsRestart) {
                             VkAutoCallsManager.finishActiveCalls()
@@ -1649,7 +1648,7 @@ object TunnelManager {
                                 50,
                                 true,
                             )
-                            val uptimeMs = processStartedAtMs
+                            val uptimeMs = previousProcessStart
                                 .takeIf { it > 0 }
                                 ?.let { SystemClock.elapsedRealtime() - it }
                                 ?: Long.MAX_VALUE
@@ -1727,6 +1726,7 @@ object TunnelManager {
             process = null
             processIdentity = null
             nativeProcessPid = null
+            if (uptimeJob != null) stopUptimeTimer()
             activeWorkers.value = 0
             return
         }
