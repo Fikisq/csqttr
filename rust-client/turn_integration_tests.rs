@@ -397,28 +397,30 @@ async fn connect(
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn tcp_turn_transport_allocates_without_udp_fallback() {
-    check_tcp_turn_flow(false).await;
+    check_tcp_turn_transport(None).await;
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn gooby_tcp_turn_allocates_sends_and_deallocates_without_local_dns() {
-    check_tcp_turn_flow(true).await;
+async fn tcp_turn_allocation_and_data_work_with_all_gooby_presets() {
+    use csqtt_gooby::{ConfigBundle, Preset, Runtime};
+
+    for preset in [Preset::Gentle, Preset::Current, Preset::Extended] {
+        let bundle = ConfigBundle::builtin_turn().unwrap().with_preset(preset);
+        let runtime = Runtime::start(bundle, true).await.unwrap();
+        check_tcp_turn_transport(Some(runtime.address().to_string().parse().unwrap())).await;
+        // TURN sends an initial Allocate and then retries with credentials after the challenge.
+        assert_eq!(runtime.stats().turn_allocate_requests, 2, "{preset:?}");
+        runtime.shutdown().await;
+    }
 }
 
-async fn check_tcp_turn_flow(use_gooby: bool) {
+async fn check_tcp_turn_transport(gooby_proxy: Option<crate::gooby::GoobyProxy>) {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let server_address = listener.local_addr().unwrap();
     let relay: SocketAddr = "127.0.0.1:49009".parse().unwrap();
     let (data_tx, data_rx) = oneshot::channel();
     let server_task = tokio::spawn(async move {
         let (mut stream, _) = listener.accept().await.unwrap();
-        if use_gooby {
-            crate::gooby::tests::accept_request(&mut stream, "turn-test.invalid", 3478).await;
-            stream
-                .write_all(&[5, 0, 0, 1, 127, 0, 0, 1, 0, 80])
-                .await
-                .unwrap();
-        }
         let first = recv_stream_message(&mut stream).await;
         let initial = StunMessage::decode(&first).unwrap();
         assert_eq!(initial.class(), StunClass::Request);
@@ -463,18 +465,14 @@ async fn check_tcp_turn_flow(use_gooby: bool) {
             .await
             .unwrap();
     });
-    let endpoint = if use_gooby {
-        "turn:turn-test.invalid:3478?transport=tcp".to_owned()
-    } else {
-        format!("turn:127.0.0.1:{}?transport=tcp", server_address.port())
-    };
+    let endpoint = format!("turn:127.0.0.1:{}?transport=tcp", server_address.port());
     let allocation = TurnAllocation::connect(
         TurnConnectTarget {
             address: &endpoint,
             override_host: None,
             override_port: None,
             transport_mode: TurnTransportMode::TcpTls,
-            gooby_proxy: use_gooby.then(|| server_address.to_string().parse().unwrap()),
+            gooby_proxy,
         },
         Arc::from(USERNAME),
         Arc::from(PASSWORD),

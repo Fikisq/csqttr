@@ -211,7 +211,7 @@ private fun showDeployToast(context: android.content.Context, message: String) {
 internal fun DeployTab(
     settingsStore: SettingsStore,
     savedSettings: DeploySettingsSnapshot,
-    checkState: LegacyDeployCheckState = remember(savedSettings.profile) { LegacyDeployCheckState() },
+    checkState: DeployCheckState,
 ) {
     val context = LocalContext.current.applicationContext
     val scope = rememberCoroutineScope()
@@ -220,6 +220,7 @@ internal fun DeployTab(
     LaunchedEffect(Unit) { DeployManager.init(context) }
 
     if (!savedSettings.isLoaded) return
+    LaunchedEffect(savedSettings.profile) { settingsStore.ensureDeployProfileDefaults(savedSettings.profile) }
 
     val savedIp = savedSettings.ip
     val savedLogin = savedSettings.sshLogin
@@ -260,15 +261,7 @@ internal fun DeployTab(
     var showPanelInfoDialog by rememberSaveable(savedSettings.profile) { mutableStateOf(false) }
     var showSshKeysDialog by rememberSaveable(savedSettings.profile) { mutableStateOf(false) }
     var showDockerInfoDialog by rememberSaveable(savedSettings.profile) { mutableStateOf(false) }
-    var checkPlan by checkState.plan
-    var removable by remember(savedSettings.profile) { mutableStateOf<List<FoundServer>?>(null) }
-    var removeNotes by remember(savedSettings.profile) { mutableStateOf<List<String>>(emptyList()) }
-    var pendingReplace by checkState.replacement
-    var pendingRemove by remember(savedSettings.profile) { mutableStateOf<FoundServer?>(null) }
-    var showRemovalRequest by remember(savedSettings.profile) { mutableStateOf(false) }
-    var showRemovalProgress by remember(savedSettings.profile) { mutableStateOf(false) }
-    var removalError by remember(savedSettings.profile) { mutableStateOf<String?>(null) }
-    var removalJob by remember(savedSettings.profile) { mutableStateOf<kotlinx.coroutines.Job?>(null) }
+    // the server check's result while its dialog is open (a rotation closes it: the check is run again)
     // the server presented another SSH key than the remembered one: the change and the check to run again if trusted
     var keyChange by remember(savedSettings.profile) {
         mutableStateOf<Pair<SshHostKeyStore.KeyChange, (ServerInventory) -> Unit>?>(null)
@@ -346,28 +339,26 @@ internal fun DeployTab(
     val sshKeyArgs = Pair(if (savedSshKeysMode) savedSshPrivateKey else "", if (savedSshKeysMode) savedSshKeyPassphrase else "")
 
     // The read-only server check (deploy.sh inventory) every install and removal starts with: it decides what is offered.
-    fun runServerCheck(onChecked: (ServerInventory) -> Unit): kotlinx.coroutines.Job? {
-        if (DeployManager.isDeploying.value) return null
+    fun runServerCheck(onChecked: (ServerInventory) -> Unit) {
+        if (DeployManager.isDeploying.value) return
         val ssh = resolveServerPorts(savedManualPorts, sshPort, peerPort, webPort).ssh
-        val target = host
-        val user = sshLogin
-        val pass = if (savedSshKeysMode) "" else sshPassword
-        val keys = sshKeyArgs
         DeployManager.startDeploy()
         DeployManager.updateProgress(0.1f, "Проверка сервера…")
-        return DeployManager.scope.launch {
+        DeployManager.scope.launch {
             try {
                 val inventory = performServerCheck(
                     context = context,
-                    host = target,
-                    user = user,
-                    pass = pass,
+                    host = host,
+                    user = sshLogin,
+                    pass = if (savedSshKeysMode) "" else sshPassword,
                     port = ssh,
-                    privateKey = keys.first,
-                    keyPassphrase = keys.second,
+                    privateKey = sshKeyArgs.first,
+                    keyPassphrase = sshKeyArgs.second,
                 )
-                DeployManager.stopDeploy()
-                withContext(Dispatchers.Main) { onChecked(inventory) }
+                withContext(Dispatchers.Main) {
+                    DeployManager.stopDeploy()
+                    onChecked(inventory)
+                }
             } catch (e: CancellationException) {
                 DeployManager.stopDeploy("Проверка отменена")
                 throw e
@@ -376,11 +367,10 @@ internal fun DeployTab(
                 DeployManager.writeError("Server check error (${e.javaClass.simpleName}): ${e.message}")
                 TunnelManager.addDeployErrorLog(message)
                 DeployManager.stopDeploy(message)
-                val change = SshHostKeyStore.takeKeyChange(target, ssh)
+                val change = SshHostKeyStore.takeKeyChange(host, ssh)
                 if (change != null) {
                     withContext(Dispatchers.Main) { keyChange = change to onChecked }
                 } else {
-                    withContext(Dispatchers.Main) { if (showRemovalProgress) removalError = message }
                     scope.launch { snackbarHostState.showSnackbar(message) }
                 }
             }
@@ -403,10 +393,10 @@ internal fun DeployTab(
         val deploymentDraft = savedSettings.copy(ip = host, sshLogin = sshLogin, sshPassword = sshPassword,
             sshPort = effectiveSshPort.toString(), serverPeerPort = effectivePeerPort, serverWebPort = effectiveWebPort,
             mainPassword = effectiveMainPass, webLogin = savedWebLogin, webPassword = savedWebPassword, dockerInstall = dockerInstall)
-        DeployManager.startDeploy()
+        DeployManager.startDeploy(keepLogs = true)
         DeployManager.scope.launch {
             try {
-                settingsStore.saveDeployProfileDraft(deploymentDraft, restoreConnection = true)
+                settingsStore.saveDeployProfileDraft(deploymentDraft, restoreConnection = true, synchronizeDraftPassword = false)
                 context.startForegroundService(Intent(context, TunnelService::class.java).apply { action = "DEPLOY_START" })
                 val success = performDeploy(
                     context = context,
@@ -424,11 +414,9 @@ internal fun DeployTab(
                     keyPassphrase = deployKeyPassphrase,
                     certificate = deployCertificate,
                     installInDocker = dockerInstall,
-                    secretPath = savedSecretPathUuid.ifBlank { "" },
+                    secretPath = savedSecretPathUuid,
+                    mode = chosen.actionMode,
                     instance = instance,
-                    onServerPassword = { password ->
-                        settingsStore.saveDeployedServer(deployProfile, host, effectivePeerPort, effectiveWebPort, password)
-                    },
                 )
                 if (success) {
                     passwordToSynchronizeAfterDeploy(success, effectiveMainPass)?.let { mainPassword ->
@@ -481,7 +469,7 @@ internal fun DeployTab(
         val uninstallKeyPassphrase = if (savedSshKeysMode) savedSshKeyPassphrase else ""
         val uninstallCertificate = if (savedSshKeysMode) savedSshCertificate else ""
         val uninstallPassword = if (savedSshKeysMode) "" else sshPassword
-        DeployManager.startDeploy()
+        DeployManager.startDeploy(keepLogs = true)
         DeployManager.scope.launch {
             try {
                 context.startForegroundService(Intent(context, TunnelService::class.java).apply { action = "DEPLOY_START" })
@@ -492,6 +480,7 @@ internal fun DeployTab(
                     pass = uninstallPassword,
                     port = effectiveSshPort,
                     peerPort = effectivePeerPort,
+                    webPort = server.webPortOrDefault(),
                     onProgress = DeployManager::updateProgress,
                     privateKey = uninstallPrivateKey,
                     keyPassphrase = uninstallKeyPassphrase,
@@ -592,13 +581,8 @@ internal fun DeployTab(
                                 dockerInstall = dockerInstall,
                                 appVersion = BuildConfig.VERSION_NAME.removePrefix("v"),
                             )
-                            val automaticAction = plan.actions.singleOrNull()?.takeUnless { it.destructive }
-                            if (automaticAction != null) {
-                                startDeploy(automaticAction)
-                            } else {
-                                checkPlan = plan
-                                TunnelManager.addDeployInfoLog("Для продолжения откройте «Деплой» и выберите действие в результате проверки")
-                            }
+                            val choice = plan.directInstall()
+                            if (choice != null) startDeploy(choice) else checkState.plan = plan
                         }
                     } else {
                         if (!state.mainPasswordConfigured) {
@@ -616,7 +600,18 @@ internal fun DeployTab(
                         }
                     }
                 }
-                DeployAction.Uninstall -> if (state.canUninstall) showRemovalRequest = true
+                DeployAction.Uninstall -> if (state.canUninstall) runServerCheck { inventory ->
+                    val servers = removableServers(inventory)
+                    val notes = removalNotes(inventory)
+                    val profilePort = resolveServerPorts(savedManualPorts, sshPort, peerPort, webPort).peer
+                    val server = directRemoval(servers, notes, profilePort)
+                    if (server != null) {
+                        startUninstall(server)
+                    } else {
+                        checkState.removable = servers
+                        checkState.removalNotes = notes
+                    }
+                }
                 DeployAction.PanelInfo -> showPanelInfoDialog = true
                 DeployAction.OpenControlPanel -> {
                     if (host.isBlank()) {
@@ -649,6 +644,7 @@ internal fun DeployTab(
     if (showSecretsDialog) {
         DeploySecretsDialog(
             settingsStore = settingsStore,
+            deployProfile = savedSettings.profile,
             initialMainPass = savedMainPass,
             initialSshLogin = sshLogin,
             initialSshPass = sshPassword,
@@ -659,34 +655,8 @@ internal fun DeployTab(
         )
     }
 
-    if (showRemovalRequest) ServerRemovalRequestDialog(
-        name = savedSettings.serverName.ifBlank { "Сервер CSQTT" }, host = host, sshPort = sshPort, sshReady = state.canUninstall,
-        onDismiss = { showRemovalRequest = false },
-        onConfigure = { showRemovalRequest = false; showSecretsDialog = true },
-        onContinue = {
-            showRemovalRequest = false
-            showRemovalProgress = true
-            removalError = null
-            removalJob = runServerCheck {
-                if (showRemovalProgress) {
-                    showRemovalProgress = false
-                    removable = removableServers(it)
-                    removeNotes = removalNotes(it)
-                }
-            }
-        },
-    )
-    if (showRemovalProgress) ServerRemovalProgressDialog(
-        name = savedSettings.serverName.ifBlank { "Сервер CSQTT" }, host = host, sshPort = sshPort,
-        busy = removalError == null && (isDeploying || removalJob?.isActive == true), error = removalError,
-        onDismiss = {
-            removalJob?.cancel()
-            if (isDeploying) runCatching { DeployManager.activeSession?.close() }
-            showRemovalProgress = false
-        },
-    )
     val profilePeer = resolveServerPorts(savedManualPorts, sshPort, peerPort, webPort).peer
-    checkPlan?.let { plan ->
+    checkState.plan?.let { plan ->
         ServerCheckDialog(
             title = "На сервере",
             servers = plan.servers.map { describeServer(it, profilePeer) },
@@ -705,21 +675,21 @@ internal fun DeployTab(
             },
             onChoose = { index ->
                 val action = plan.actions[index]
-                checkPlan = null
-                if (action.destructive) pendingReplace = action else startDeploy(action)
+                checkState.plan = null
+                if (action.destructive) checkState.replacement = action else startDeploy(action)
             },
-            onDismiss = { checkPlan = null },
+            onDismiss = { checkState.plan = null },
         )
     }
-    pendingReplace?.let { action ->
+    checkState.replacement?.let { action ->
         AlertDialog(
-            onDismissRequest = { pendingReplace = null },
+            onDismissRequest = { checkState.replacement = null },
             title = { Text("Заменить сервер?") },
             text = { Text(action.detail) },
             confirmButton = {
                 Button(
                     onClick = {
-                        pendingReplace = null
+                        checkState.replacement = null
                         startDeploy(action)
                     },
                     colors = ButtonDefaults.buttonColors(
@@ -728,41 +698,34 @@ internal fun DeployTab(
                     ),
                 ) { Text("Заменить") }
             },
-            dismissButton = { TextButton(onClick = { pendingReplace = null }) { Text("Отмена") } },
+            dismissButton = { TextButton(onClick = { checkState.replacement = null }) { Text("Отмена") } },
         )
     }
-    removable?.let { servers ->
+    checkState.removable?.let { servers ->
         ServerCheckDialog(
             title = "Удаление с сервера",
             servers = emptyList(),
-            emptyText = if (servers.isEmpty() && removeNotes.isEmpty()) "Серверов, установленных этим приложением, здесь нет" else "",
-            notes = removeNotes,
+            emptyText = if (servers.isEmpty() && checkState.removalNotes.isEmpty()) "Серверов, установленных этим приложением, здесь нет" else "",
+            notes = checkState.removalNotes,
             choices = servers.map { server ->
                 val (name, detail) = describeServer(server, profilePeer)
                 CheckChoice("Удалить: $name", detail, CheckChoiceStyle.DESTRUCTIVE)
             },
             onChoose = { index ->
-                pendingRemove = servers[index]
-                removable = null
+                checkState.removal = servers[index]
+                checkState.removable = null
             },
-            onDismiss = { removable = null },
+            onDismiss = { checkState.removable = null },
         )
     }
-    pendingRemove?.let { server ->
+    checkState.removal?.let { server ->
         val (name, _) = describeServer(server, profilePeer)
         UninstallConfirmDialog(
             title = "Удаление: $name",
-            text = if (server.place == ServerPlace.SIDE) {
-                "Будет удалён второй сервер csqtt25: его бинарник, сервис или контейнер и только его правила firewall/NAT. " +
-                    "Остальное на этом VPS не затрагивается. Клиенты, конфигурация и сертификаты этого экземпляра будут удалены. Профиль на телефоне сохранится.\n\nЭто действие необратимо."
-            } else {
-                "Будут удалены: бинарник, systemd-сервис или контейнер, конфигурация CSQTT и только помеченные правила " +
-                    "firewall/NAT для CSQTT. Второй сервер (csqtt25), если он есть, не затрагивается. Клиенты, конфигурация " +
-                    "и сертификаты этого экземпляра будут удалены. Профиль на телефоне сохранится.\n\nЭто действие необратимо."
-            },
-            onDismiss = { pendingRemove = null },
+            text = "Будут удалены выбранный экземпляр CSQTT, его клиенты, хеши, общий токен, правила маршрутизации, DNS и настройки панели. Это действие необратимо.",
+            onDismiss = { checkState.removal = null },
             onConfirm = {
-                pendingRemove = null
+                checkState.removal = null
                 startUninstall(server)
             },
         )

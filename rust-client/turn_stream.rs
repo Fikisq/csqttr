@@ -58,39 +58,15 @@ pub async fn connect(
     TurnStreamReader,
     TurnStreamWriteFailure,
 )> {
-    connect_inner(endpoint, server, gooby_proxy, None).await
-}
-
-async fn connect_inner(
-    endpoint: &TurnEndpoint,
-    server: SocketAddr,
-    gooby_proxy: Option<crate::gooby::GoobyProxy>,
-    tls: Option<Arc<ClientConfig>>,
-) -> Result<(
-    Arc<TurnStreamWriter>,
-    TurnStreamReader,
-    TurnStreamWriteFailure,
-)> {
-    if endpoint.transport == TurnWireTransport::Udp {
-        bail!("UDP endpoint cannot create a TURN stream");
-    }
     let socket = timeout(STREAM_CONNECT_TIMEOUT, async {
         match gooby_proxy {
             Some(proxy) => crate::gooby::connect(proxy, &endpoint.host, endpoint.port).await,
-            None => TcpStream::connect(server)
-                .await
-                .context("TURN TCP socket connect"),
+            None => Ok(TcpStream::connect(server).await?),
         }
     })
-    .await
-    .context("TURN TCP/Gooby connect timed out")?
-    .with_context(|| {
-        format!(
-            "TURN {} connect {}",
-            endpoint.transport.as_str(),
-            endpoint.socket_authority()
-        )
-    })?;
+        .await
+        .context("TURN TCP connect timed out")?
+        .with_context(|| format!("TURN {} connect {server}", endpoint.transport.as_str()))?;
     socket
         .set_nodelay(true)
         .context("TURN TCP_NODELAY configuration failed")?;
@@ -105,7 +81,7 @@ async fn connect_inner(
         TurnWireTransport::Tls => {
             let server_name = ServerName::try_from(endpoint.tls_server_name()?.to_owned())
                 .context("TURN TLS server name is invalid")?;
-            let connector = TlsConnector::from(tls.unwrap_or_else(tls_config));
+            let connector = TlsConnector::from(tls_config());
             let stream = timeout(
                 STREAM_CONNECT_TIMEOUT,
                 connector.connect(server_name, socket),
@@ -329,10 +305,6 @@ fn tls_config() -> Arc<ClientConfig> {
         })
         .clone()
 }
-
-#[cfg(test)]
-#[path = "turn_stream_gooby_tests.rs"]
-mod gooby_tests;
 
 #[cfg(test)]
 mod tests {

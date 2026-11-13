@@ -1,0 +1,430 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CSQTTR · Ручные хеши и аккаунты VK</title>
+<style>
+* { box-sizing: border-box; }
+:root { color-scheme: dark; font-family: Roboto, "Segoe UI", sans-serif; color: #eaf0f8; background: #0e1219; }
+body { margin: 0; }
+header { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 16px; padding: 20px max(18px, calc((100vw - 1150px) / 2)); background: #151b25; border-bottom: 1px solid #2a3546; }
+h1 { font-size: 23px; margin: 0 0 5px; font-weight: 650; }
+header p { margin: 0; color: #aab7c9; font-size: 13px; }
+.controls { display: flex; flex-wrap: wrap; align-items: end; gap: 10px; }
+.controls label { display: grid; gap: 4px; color: #bac7d8; font-size: 12px; }
+button, select, input { font: inherit; }
+.controls select { color: #f4f7fc; background: #212b3b; border: 1px solid #3a4a61; border-radius: 8px; padding: 7px 9px; }
+.controls input { width: 100px; accent-color: #74a5f5; }
+:focus-visible { outline: 2px solid #5a97f3; outline-offset: 3px; }
+.viewport { width: 100%; min-height: calc(100vh - 106px); overflow: auto; padding: 20px 16px 32px; }
+.board { --scale: .88; display: flex; gap: 26px; width: max-content; margin: 0 auto; align-items: start; zoom: var(--scale); }
+.example { width: 385px; }
+.example h2 { margin: 0 0 4px; font-size: 17px; }
+.example > p { margin: 0 0 11px; color: #aab7c9; font-size: 13px; }
+.phone {
+  --bg:#101216; --surface:#191c22; --field:#242830; --line:#343942; --fg:#f1f3f7;
+  --muted:#aeb3bd; --accent:#1769e2; --on:#fff; --soft:#15345c; --radius:16px;
+  position: relative; isolation: isolate; height: 710px; overflow: hidden;
+  border: 1px solid var(--line); border-radius: 29px; background: var(--bg); color: var(--fg);
+  box-shadow: 0 18px 45px #0005; color-scheme: dark;
+}
+[data-design="classic"] .phone { --bg:#0b0b0c; --surface:#161618; --field:#222225; --line:#37373c; --fg:#f4f4f5; --muted:#babac2; --accent:#1565d8; --soft:#162d55; --radius:20px; }
+[data-design="old"] .phone { --bg:#0b0d10; --surface:#1c222c; --field:#252e3b; --line:#39475b; --fg:#edf2f9; --muted:#b3bfd0; --accent:#3a69a0; --soft:#263b55; }
+[data-theme="light"] .phone {
+  --bg:#fdfdfe; --surface:#fff; --field:#f2f2f4; --line:#d9dce2; --fg:#161a21; --muted:#4f5868;
+  --accent:#125ecb; --soft:#dfebfb; color-scheme: light;
+}
+[data-theme="light"] [data-design="classic"] .phone { --bg:#f7f7f8; --surface:#fbfbfc; --field:#eeeef0; --line:#d7d7db; --fg:#1b1b1d; --muted:#555561; --accent:#145ec5; --soft:#e2ecfb; }
+[data-theme="light"] [data-design="old"] .phone { --bg:#eef2f7; --surface:#f7f9fc; --field:#e6ebf3; --line:#cbd4e2; --fg:#192332; --muted:#455468; --accent:#345d92; --soft:#dbe7f8; }
+.status { height: 30px; padding: 7px 17px 0; font-size: 12px; display: flex; justify-content: space-between; }
+.app { padding: 12px 16px; }
+.app h3 { margin: 0 0 14px; font-size: 17px; }
+.summary { display: grid; gap: 9px; padding: 12px; background: var(--field); border-radius: var(--radius); }
+.summary div { display: flex; justify-content: space-between; gap: 6px; font-size: 12px; }
+.summary span { color: var(--muted); }
+.summary button { justify-self: start; }
+.nav { position: absolute; inset: auto 0 17px; display: flex; justify-content: space-around; color: var(--muted); font-size: 11px; }
+.nav strong { color: var(--fg); }
+.scrim { position: absolute; inset: 30px 0 0; background: #0007; }
+.sheet { position: absolute; inset: auto 0 0; padding: 9px 15px 18px; background: var(--surface); border-radius: 24px 24px 0 0; border-top: 1px solid var(--line); min-height: 462px; max-height: 620px; display: flex; flex-direction: column; }
+.handle { width: 34px; height: 4px; border-radius: 4px; background: var(--line); margin: 0 auto 10px; }
+.sheet-title { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.sheet-title h3 { margin: 0; font-size: 18px; }
+.sheet-content { margin: 12px 0 16px; display: grid; gap: 11px; overflow: auto; min-height: 0; }
+fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
+legend, .field-label { font-size: 12px; font-weight: 650; margin-bottom: 5px; color: var(--muted); }
+.source-list, .account-list { display: grid; gap: 5px; }
+.account { display: flex; align-items: center; gap: 9px; border-radius: 11px; padding: 7px 10px; min-height: 40px; background: var(--field); font-size: 13px; }
+.account input { accent-color: var(--accent); width: 16px; height: 16px; margin: 0; }
+.hash-actions, .actions, .modes { display: flex; gap: 7px; align-items: center; }
+.actions { justify-content: space-between; }
+.modes > button, .hash-actions input { flex: 1; min-width: 0; }
+.modes > button { padding-inline: 5px; }
+button { cursor: pointer; }
+.phone button { color: var(--fg); border: 1px solid var(--line); background: var(--field); border-radius: var(--radius); padding: 8px 11px; min-height: 35px; font-size: 12px; font-weight: 650; }
+.phone button.primary, .phone button[aria-pressed="true"] { background: var(--accent); color: var(--on); border-color: var(--accent); }
+.phone button.text-button { background: transparent; border-color: transparent; }
+.phone button.close { border-radius: 50%; width: 34px; padding: 0; font-size: 20px; }
+.phone input[type="text"] { min-height: 35px; background: var(--field); border: 1px solid var(--line); border-radius: 11px; color: var(--fg); font-size: 12px; padding: 7px 9px; width: 100%; }
+.phone input::placeholder { color: var(--muted); }
+.note { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.35; }
+.account-cta { display: grid; gap: 6px; }
+.feedback { color: var(--muted); font-size: 12px; min-height: 1.2em; margin: 8px 0 0; }
+[hidden] { display: none !important; }
+@media (max-width: 540px) { header { align-items: start; } .controls { gap: 7px; } .viewport { padding-inline: 10px; } }
+
+.board { --scale: .76; }
+.example h2 { margin-bottom: 10px; }
+.summary label { color: var(--muted); }
+.select-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 12px; }
+.select-row select { padding: 7px; color: var(--fg); border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+.account button:first-child { flex: 1; }
+.phone button:disabled { opacity: .55; cursor: default; }
+.hash-footer > button { flex: 1; width: 100%; }
+[data-panel="accounts"] .sheet { min-height: 0; }
+[data-panel="accounts"] .account { background: transparent; padding: 0; }
+[data-panel="accounts"] .account button:first-child[aria-pressed="true"] { background: var(--muted); color: var(--bg); border-color: transparent; }
+
+
+[data-design="modern"] .phone { --bg:#0b0b0c; --surface:#131315; --field:#131315; --line:#36363b; --fg:#f8f8fa; --muted:#c4c5cb; --accent:#1565d8; }
+[data-design="old"] .phone { --bg:#101216; --surface:#191c22; --field:#191c22; --line:#343942; --fg:#f1f3f7; --muted:#aeb3bd; --accent:#1769e2; }
+[data-theme="light"] [data-design="modern"] .phone { --bg:#fdfdfe; --surface:#fff; --field:#f2f2f4; --line:#d9dce2; --fg:#161a21; --muted:#4f5868; --accent:#125ecb; }
+[data-theme="light"] [data-design="old"] .phone { --bg:#e5e8ee; --surface:#f0f2f6; --field:#e1e5ed; --line:#c0c0cb; --fg:#151519; --muted:#444958; --accent:#1769e2; }
+[data-panel="hashes"] .sheet { inset: 50% 4% auto; transform: translateY(-50%); border: 1px solid var(--line); border-radius: 24px; max-height: calc(100% - 48px); min-height: 0; padding: 12px 16px 16px; }
+[data-design="classic"][data-panel="hashes"] .sheet { border-radius: 34px; }
+[data-panel="hashes"] .handle { display: none; }
+[data-panel="hashes"] .sheet-content { margin-block: 8px 10px; }
+[data-panel="hashes"] .modes button { border-radius: 999px; }
+[data-design="classic"] .hash-footer { display: grid; gap: 8px; }
+[data-design="classic"] .hash-footer button { border-radius: 999px; min-height: 46px; }
+.source-list { gap: 8px; }
+.own-field { display: grid; align-items: center; grid-template-columns: auto minmax(0,1fr); column-gap: 10px; height: 50px; padding: 0 10px; border: 1px solid var(--line); border-radius: 14px; color: var(--accent); background: var(--field); font-size: 13px; }
+.phone .own-field input { height: 100%; min-width: 0; padding: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
+.own-field:focus-within { outline: 1px solid var(--accent); }
+.own-field[data-check="valid"] { border-color: #728879; }
+.own-field[data-check="invalid"] { border-color: #936f74; }
+[data-theme="light"] .own-field[data-check="valid"] { border-color: #507859; }
+[data-theme="light"] .own-field[data-check="invalid"] { border-color: #a05d65; }
+[data-design="classic"] .own-field { border-radius: 999px; height: 55px; padding-inline: 15px; color: var(--muted); background: var(--surface); }
+[data-design="classic"] .own-field:not([data-filled]) > span { display: none; }
+[data-design="classic"] .own-field:not([data-filled]) { grid-template-columns: minmax(0,1fr) auto; }
+[data-design="classic"] .own-field[data-filled] { position: relative; grid-template-columns: minmax(0,1fr) auto; }
+[data-design="classic"] .own-field[data-filled] > span { position: absolute; top: -8px; left: 17px; padding-inline: 3px; background: var(--surface); font-size: 11px; }
+.own-field:has(.hash-icons) { grid-template-columns: auto minmax(0,1fr) auto; }
+.hash-icons { display: flex; gap: 3px; }
+.phone .hash-icons button { display: grid; place-items: center; min-height: 30px; width: 28px; padding: 0; border: 0; border-radius: 9px; background: transparent; color: var(--muted); }
+.phone .hash-icons button svg { width: 17px; height: 17px; }
+[data-design="classic"] .hash-icons button:first-child { color: var(--accent); }
+[data-design="classic"] .hash-icons button:last-child { color: #936f74; }
+[data-preview="lines"] [data-design="classic"] { display: none; }
+[data-preview="lines"] .phone { height: auto; min-height: 690px; }
+[data-preview="lines"] .nav { display: none; }
+.indicator-card { background: var(--surface); border-radius: 24px; padding: 12px; display: grid; gap: 13px; }
+.indicator-group { display: grid; grid-template-columns: 1fr minmax(0,1.15fr); gap: 6px 10px; align-items: start; }
+.indicator-title { font-size: 14px; font-weight: 500; margin: 12px 0 0; }
+.indicator-options { grid-column: 2; border: 1px solid var(--line); border-radius: 9px; overflow: hidden; background: var(--surface); }
+.phone .indicator-value, .phone .indicator-option { display: grid; gap: 5px; width: 100%; text-align: left; font-size: 13px; font-weight: 500; }
+.phone .indicator-value { padding: 8px 11px; border-radius: 999px; background: var(--field); }
+.phone .indicator-option { padding: 7px 11px; border: 0; border-radius: 0; background: var(--surface); }
+.phone .indicator-option:hover, .phone .indicator-option[aria-current="true"] { background: color-mix(in srgb, var(--line) 35%, var(--surface)); }
+.indicator-caption { display: flex; align-items: center; justify-content: space-between; gap: 4px; }
+.indicator-caption b { font-size: 11px; color: var(--muted); font-weight: 500; }
+.indicator-track { display: block; height: 3px; border-radius: 99px; background: var(--line); overflow: hidden; }
+.indicator-fill { display: block; height: 100%; width: var(--fill,100%); background: var(--signal); border-radius: 99px; }
+.indicator-card { --green:#58b96f; --yellow:#d4ad42; --red:#eb6670; }
+[data-theme="light"] .indicator-card { --green:#27874c; --yellow:#957000; --red:#c53f49; }
+</style>
+</head>
+<body>
+<header>
+  <div><h1>Ручные хеши и аккаунты VK</h1><p>Интерактивный макет · демонстрационные данные и статусы проверки</p></div>
+  <div class="controls">
+
+    <label>Экран<select id="preview"><option value="hashes">Ручные хеши</option><option value="accounts">Аккаунты VK</option><option value="lines">Цветовые полосы</option></select></label>
+    <label>Тема<select id="theme"><option value="dark">Тёмная</option><option value="light">Светлая</option></select></label>
+    <label>Заполнить шесть полей<select id="fixture"><option value="">Пустые поля</option><option value="links">Шесть ссылок</option><option value="hashes">Шесть хешей</option><option value="mixed">Три ссылки и три хеша</option></select></label>
+    <label>Масштаб <output id="zoom-value">76%</output><input type="range" id="zoom" min="45" max="115" value="76"></label>
+  </div>
+</header>
+<main class="viewport">
+  <div class="board" id="board" data-theme="dark" data-preview="hashes">
+    <article class="example" data-design="classic"><h2>CSQTT 2.5.0</h2></article>
+    <article class="example" data-design="modern"><h2>CSQTTR 2.5.3</h2></article>
+    <article class="example" data-design="old"><h2>Старый</h2></article>
+  </div>
+</main>
+<template id="screen">
+  <div class="phone">
+    <div class="status" aria-hidden="true"><span>12:00</span><span>▮▮ ◢ ▰</span></div>
+    <div class="app">
+      <h3>Туннель</h3>
+      <div class="summary">
+        <div><span>Профиль</span><strong>Тестовый</strong></div>
+        <div><span>IP и порт</span><strong>203.0.113.25:54321</strong></div>
+        <label class="select-row">Режим хешей
+          <select data-mode aria-label="Режим хешей">
+            <option value="manual">Ручные хеши</option><option value="api">Авто API</option><option value="vk">Авто ВК</option>
+          </select>
+        </label>
+        <button type="button" data-action="open">Настроить хеши</button>
+        <button type="button" data-action="manage" hidden>Аккаунты VK</button>
+      </div>
+      <div class="indicator-card" hidden></div>
+    </div>
+    <div class="nav" aria-hidden="true"><span>Подкл.</span><strong>Туннель</strong><span>Деплой</span><span>Логи</span><span>Маршрут</span></div>
+    <div class="scrim"></div>
+    <section class="sheet" aria-label="Настройки хешей">
+      <div class="handle"></div>
+      <div class="sheet-title">
+        <h3></h3>
+        <button type="button" class="close" data-action="close" aria-label="Закрыть">×</button>
+      </div>
+      <div class="sheet-content"></div>
+      <div class="actions hash-footer">
+        <button type="button" data-action="check">Проверить</button>
+        <button type="button" class="primary" data-action="save">Сохранить</button>
+      </div>
+    </section>
+  </div>
+</template>
+<script>
+const board = document.querySelector("#board");
+const modeNames = {manual:"Ручные хеши",api:"Авто API",vk:"Авто ВК"};
+const checks = ["valid", "invalid", null];
+
+const indicators = [
+  {title:"Режим хешей", selected:0, options:[["Ручные хеши","green"],["Авто API","green"],["Авто ВК","yellow"]]},
+  {title:"Режим кредов", selected:0, options:[["Авто","green"],["Капча","red"],["Авто ВК","yellow"]]},
+  {title:"Режим SRTP", selected:2, options:[["Авто","green"],["DTLS-SRTP","green"],["WRAP-SRTP","green",50]]},
+];
+const hashIcons = '<span class="hash-icons"><button type="button" data-action="paste" aria-label="Вставить хеш"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M8 5H5v16h14V5h-3M9 7h6V5a3 3 0 0 0-6 0z"/></svg></button><button type="button" data-action="clear" aria-label="Очистить хеш"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M4 6h16M9 6V4h6v2M6 6l1 14h10l1-14M10 9v8m4-8v8"/></svg></button></span>';
+
+function indicatorStrip([label, tone, fill=100]) {
+  return '<span class="indicator-track" aria-hidden="true"><span class="indicator-fill" style="--signal:var(--' +
+    tone + ');--fill:' + fill + '%"></span></span>';
+}
+
+function indicatorsPanel(view) {
+  return indicators.map(({title, selected, options}, group) => {
+    const index = view.indicatorSelection[group] ?? selected;
+    const expanded = !view.collapsedIndicators.has(group);
+    return '<section class="indicator-group"><h4 class="indicator-title">' + title + '</h4>' +
+      '<button class="indicator-value" type="button" data-action="toggle-indicator" data-group="' + group +
+      '" aria-label="' + title + ': ' + options[index][0] + '" aria-expanded="' + expanded + '">' +
+      '<span class="indicator-caption">' + options[index][0] + '<b aria-hidden="true">⌄</b></span>' +
+      indicatorStrip(options[index]) + '</button>' +
+      (expanded ? '<div class="indicator-options">' + options.map((option, i) =>
+        '<button class="indicator-option" type="button" data-action="pick-indicator" data-group="' + group +
+        '" data-index="' + i + '" aria-current="' + (i === index) + '">' + option[0] + indicatorStrip(option) + '</button>'
+      ).join("") + '</div>' : "") + '</section>';
+  }).join("");
+}
+const sampleHashes = Array.from({length:6}, (_, i) => "DemoVKHash-1234567" + (i + 1));
+const ownerHashes = ["DemoOwnerHash-12345671", "DemoOwnerHash-12345672"];
+let accounts = [1, 2];
+let activeAccount = 1;
+let nextAccount = 3;
+
+const views = [...board.querySelectorAll(".example")].map(example => {
+  example.append(document.querySelector("#screen").content.cloneNode(true));
+  return {example, mode:"manual", panel:"hashes", returnPanel:"tunnel", source:"owner", savedSource:"owner",
+    fields:Array(6).fill(""), checked:false, removing:null, indicatorSelection:{}, collapsedIndicators:new Set()};
+});
+
+function escape(value) {
+  return value.replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"})[c]);
+}
+
+function normalize(value) {
+  return value.trim()
+    .replace(/^(?:https?:\/\/)?(?:m\.)?vk\.(?:com|ru)\/call\/join\//i, "")
+    .split(/[?#]/,1)[0].replace(/\/+$/,"");
+}
+
+function selectedValues(view) {
+  return view.source === "owner" ? ownerHashes : view.fields;
+}
+
+function checkCount(view) {
+  return new Set(selectedValues(view).map(normalize).filter(hash => hash.length >= 16)).size;
+}
+
+function hashRows(view) {
+  const values = selectedValues(view);
+  const fromOwner = view.source === "owner";
+  return Array.from({length:6}, (_, index) => {
+    const value = values[index] || "";
+    const hash = normalize(value);
+    const short = hash && hash.length < 16;
+    const check = view.checked && hash.length >= 16 ? checks[index % 3] : null;
+    const description = check === "valid" ? "Хеш активен" : "Хеш недействителен";
+
+    const classic = view.example.dataset.design === "classic";
+    const number = index + 1;
+    const title = classic ? "VK Хеш " + number + (index === 0 && !fromOwner ? " *" : "") : String(number);
+    const placeholder = classic ? title : "Ссылка VK или хеш · от 16 знаков";
+    const checkAttrs = check ? ' data-check="' + check + '"' : '';
+    const checkDescription = check ? ' aria-description="' + description + '"' : '';
+    return '<div class="own-field"' + checkAttrs + (value ? ' data-filled' : '') + '><span aria-hidden="true">' + title + '</span>' +
+      '<input type="text" data-field="' + index + '" aria-label="Хеш ' + number +
+      '" value="' + escape(value) + '" placeholder="' + placeholder + '" spellcheck="false"' +
+      (fromOwner ? ' readonly' : '') + checkDescription + '>' + (fromOwner ? '' : hashIcons) + '</div>' +
+      (short ? '<small class="note">Минимум 16 символов</small>' : '');
+  }).join("");
+}
+
+function hashesPanel(view) {
+  const tabs = [["owner","От владельца"],["own","Свои"]].map(([key,label]) =>
+    '<button type="button" data-action="source" data-source="' + key + '" aria-pressed="' + (view.source===key) + '">' + label + '</button>').join("");
+  return '<div class="modes" role="group" aria-label="Источник ручных хешей">' + tabs + '</div>' +
+    '<p class="note">Ссылки на VK-звонки или готовые хеши</p><div class="source-list">' +
+    hashRows(view) + '</div>' +
+    (view.checked && selectedValues(view).some((value, index) => index % 3 === 2 && normalize(value).length >= 16)
+      ? '<p class="note" role="status" data-check-message>Не удалось проверить часть хешей</p>' : "");
+}
+
+function accountsPanel(view) {
+  if (view.removing !== null) {
+    return '<p class="note">Профили серверов и остальные аккаунты сохранятся.</p>' +
+      '<div class="actions"><button type="button" data-action="cancel-remove">Отмена</button>' +
+      '<button type="button" class="primary" data-action="confirm-remove">Удалить</button></div>';
+  }
+  const rows = accounts.map((id,index) => '<div class="account"><button type="button" data-action="select-account" data-index="' + id +
+    '" aria-pressed="' + (activeAccount===id) + '">Аккаунт ' + (index + 1) + (activeAccount===id ? " · выбран" : "") +
+    '</button><button type="button" data-action="remove-account" data-index="' + id + '" aria-label="Удалить аккаунт ' + (index+1) + '"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M4 6h16M9 6V4h6v2M6 6l1 14h10l1-14M10 9v8m4-8v8"/></svg></button></div>').join("");
+  return '<p class="note">Личный аккаунт общий для ваших профилей</p>' +
+    (rows || '<p class="note">Сохранённых аккаунтов пока нет</p>') +
+    '<p class="note">Сохранённый аккаунт можно выбрать здесь. Для другого аккаунта выполните новый вход.</p>' +
+    '<button type="button" class="primary" data-action="add-account">Добавить / сменить аккаунт</button>';
+}
+
+function render(view) {
+  const root = view.example;
+  root.dataset.panel = view.panel;
+  const isClassic = root.dataset.design === "classic";
+  const inHashes = view.panel === "hashes";
+  const showIndicators = view.panel === "lines";
+  root.querySelector(".summary").hidden = showIndicators;
+  const indicatorCard = root.querySelector(".indicator-card");
+  indicatorCard.hidden = !showIndicators;
+  if (showIndicators) indicatorCard.innerHTML = indicatorsPanel(view);
+  root.querySelector(".scrim").hidden = root.querySelector(".sheet").hidden = view.panel === "tunnel" || showIndicators;
+  root.querySelector(".hash-footer").hidden = !inHashes;
+  root.querySelector(".sheet-title h3").textContent = inHashes ? isClassic ? "VK Хеши" : "Ручные хеши" :
+    view.removing === null ? "Аккаунты VK" : "Удалить аккаунт из CSQTT?";
+  root.querySelector("[data-mode]").value = view.mode;
+  root.querySelector(".summary [data-action=open]").hidden = view.mode !== "manual";
+  root.querySelector(".summary [data-action=manage]").hidden = view.mode === "manual";
+  root.querySelector(".summary [data-action=manage]").textContent = activeAccount ? "Аккаунт VK подключён" : "Войти в VK";
+  root.querySelector(".sheet-content").innerHTML = inHashes ? hashesPanel(view) : accountsPanel(view);
+
+  const count = checkCount(view);
+  const check = root.querySelector("[data-action=check]");
+  check.disabled = !count;
+  check.textContent = isClassic ? "Проверить актив" : "Проверить (" + count + ")";
+}
+
+for (const view of views) {
+  view.example.addEventListener("input", event => {
+    if (event.target.dataset.field === undefined) return;
+    view.fields[Number(event.target.dataset.field)] = event.target.value;
+    view.checked = false;
+    view.example.querySelectorAll("[data-check]").forEach(input => {
+      input.removeAttribute("data-check");
+      input.removeAttribute("aria-description");
+    });
+    view.example.querySelector("[data-check-message]")?.remove();
+    const count = checkCount(view);
+    const check = view.example.querySelector("[data-action=check]");
+    check.disabled = !count;
+    if (view.example.dataset.design !== "classic") check.textContent = "Проверить (" + count + ")";
+  });
+  view.example.addEventListener("change", event => {
+    if (!event.target.matches("[data-mode]") || !modeNames[event.target.value]) return;
+    view.mode = event.target.value;
+    render(view);
+  });
+  view.example.addEventListener("click", event => {
+    const button = event.target.closest("button[data-action]");
+    if (!button) return;
+    const index = Number(button.dataset.index);
+    switch(button.dataset.action) {
+      case "open": view.panel = "hashes"; view.source = view.savedSource; view.checked = false; break;
+      case "close":
+        view.panel = view.panel === "accounts" ? view.returnPanel : "tunnel";
+        view.removing = null;
+        break;
+      case "save": view.fields = view.fields.map(normalize); view.savedSource = view.source; view.panel = "tunnel"; break;
+      case "check": if (view.source === "own") view.fields = view.fields.map(normalize); view.checked = true; break;
+      case "toggle-indicator": {
+        const group = Number(button.dataset.group);
+        if (view.collapsedIndicators.has(group)) view.collapsedIndicators.delete(group);
+        else view.collapsedIndicators.add(group);
+        break;
+      }
+      case "pick-indicator": {
+        const group = Number(button.dataset.group);
+        view.indicatorSelection[group] = index;
+        view.collapsedIndicators.add(group);
+        break;
+      }
+      case "paste":
+      case "clear": {
+        const input = button.closest(".own-field").querySelector("input");
+        view.fields[Number(input.dataset.field)] = button.dataset.action === "paste" ? sampleHashes[Number(input.dataset.field)] : "";
+        view.checked = false;
+        break;
+      }
+      case "source": view.source = button.dataset.source; view.checked = false; break;
+      case "manage": view.returnPanel = view.panel; view.panel = "accounts"; break;
+      case "select-account": activeAccount = index; view.panel = view.returnPanel; views.forEach(render); return;
+      case "add-account": accounts.push(nextAccount); activeAccount = nextAccount++; views.forEach(render); return;
+      case "remove-account": view.removing = index; break;
+      case "cancel-remove": view.removing = null; break;
+      case "confirm-remove":
+        accounts = accounts.filter(id => id !== view.removing);
+        if (activeAccount === view.removing) activeAccount = null;
+        view.removing = null;
+        views.forEach(render);
+        return;
+    }
+    render(view);
+  });
+}
+
+document.querySelector("#theme").addEventListener("change", e => { board.dataset.theme = e.target.value; });
+document.querySelector("#zoom").addEventListener("input", e => {
+  board.style.setProperty("--scale", Number(e.target.value) / 100);
+  document.querySelector("#zoom-value").value = e.target.value + "%";
+});
+document.querySelector("#fixture").addEventListener("change", e => {
+  const kind = e.target.value;
+  for (const view of views) {
+    view.fields = sampleHashes.map((hash,i) => !kind ? "" : kind === "links" || (kind === "mixed" && i % 2 === 0)
+      ? "https://" + (i % 2 === 0 ? "vk.com" : "m.vk.ru") + "/call/join/" + hash : hash);
+    view.panel = "hashes";
+    view.source = "own";
+    view.checked = false;
+    render(view);
+  }
+});
+const previewControl = document.querySelector("#preview");
+function showPreview(panel) {
+  previewControl.value = panel;
+  board.dataset.preview = panel;
+  document.querySelector("#fixture").closest("label").hidden = panel !== "hashes";
+  for (const view of views) {
+    view.mode = panel === "accounts" ? "api" : "manual";
+    view.panel = panel;
+    view.returnPanel = "tunnel";
+    view.removing = null;
+    render(view);
+  }
+}
+previewControl.addEventListener("change", event => showPreview(event.target.value));
+const initialPanel = new URLSearchParams(location.search).get("view");
+showPreview(["hashes", "accounts", "lines"].includes(initialPanel) ? initialPanel : "hashes");
+</script>
+</body>
+</html>

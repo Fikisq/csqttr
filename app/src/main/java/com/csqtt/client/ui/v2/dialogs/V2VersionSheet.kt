@@ -119,7 +119,7 @@ fun V2VersionSheet(
                         text = "У вас установлена",
                         style = MaterialTheme.typography.headlineSmall.copy(
                             fontFamily = V2DisplayFamily,
-                            fontWeight = FontWeight.Normal,
+                            fontWeight = FontWeight.Bold,
                             fontSize = 20.sp,
                         ),
                         color = colors.textPrimary,
@@ -135,7 +135,7 @@ fun V2VersionSheet(
                             modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
                             style = MaterialTheme.typography.labelLarge.copy(
                                 fontFamily = V2VersionFamily,
-                                fontWeight = FontWeight.Normal,
+                                fontWeight = FontWeight.Bold,
                                 fontSize = 14.sp,
                             ),
                             color = Color(0xFF0F172A),
@@ -178,7 +178,7 @@ fun V2VersionSheet(
                             text = "Что нового в",
                             style = MaterialTheme.typography.titleMedium.copy(
                                 fontFamily = V2DisplayFamily,
-                                fontWeight = FontWeight.Normal,
+                                fontWeight = FontWeight.Bold,
                                 fontSize = 17.sp,
                             ),
                             color = colors.textPrimary,
@@ -193,7 +193,7 @@ fun V2VersionSheet(
                                 modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp),
                                 style = MaterialTheme.typography.labelMedium.copy(
                                     fontFamily = V2VersionFamily,
-                                    fontWeight = FontWeight.Normal,
+                                    fontWeight = FontWeight.Bold,
                                     fontSize = 12.sp,
                                 ),
                                 color = Color(0xFF0F172A),
@@ -218,7 +218,7 @@ fun V2VersionSheet(
                             Text(
                                 text = "•",
                                 style = MaterialTheme.typography.titleMedium.copy(
-                                    fontWeight = FontWeight.Normal,
+                                    fontWeight = FontWeight.Bold,
                                     fontSize = 16.sp,
                                 ),
                                 color = colors.textPrimary,
@@ -288,7 +288,7 @@ fun V2VersionSheet(
                                 text = "Быстрый переход к GitHub Issues",
                                 style = MaterialTheme.typography.titleMedium.copy(
                                     fontFamily = V2DisplayFamily,
-                                    fontWeight = FontWeight.Normal,
+                                    fontWeight = FontWeight.Bold,
                                     fontSize = 16.sp,
                                 ),
                                 color = colors.textPrimary,

@@ -23,29 +23,31 @@ import com.csqtt.client.CsqttConstants
 import com.csqtt.client.ui.legacy.design.CsqttShapes
 import com.csqtt.client.ui.legacy.design.CsqttSizes
 
+internal fun turnTransportHelp(mode: String? = null): Pair<String, String> = when (mode) {
+    CsqttConstants.Tunnel.DEFAULT_TURN_TRANSPORT -> "Транспорт UDP" to """
+        UDP — обычный и рекомендуемый путь от устройства до VK TURN. Он даёт наименьшую задержку, не создаёт очередь TCP и лучше подходит для игр, звонков и коротких пакетов.
+
+        Выбирайте его по умолчанию. Между VK TURN и вашим VPS также всегда используется UDP.
+    """.trimIndent()
+    CsqttConstants.Tunnel.TURN_TRANSPORT_TCP_TLS -> "Транспорт TCP" to """
+        Этот режим нужен только если оператор режет или блокирует UDP, например в отдельных сетях Ростелекома.
+
+        TCP действует только на участке между вашим устройством и выданным VK TURN-узлом. Между VK TURN и вашим VPS трафик всегда передаётся по UDP.
+
+        Для обычного TURN-адреса это не TLS; если VK когда-либо выдаст turns-адрес, он будет использовать TLS. На UDP этот режим автоматически не переключается. TCP может увеличить ping и просадки при нагрузке из-за очереди TCP.
+    """.trimIndent()
+    else -> "Транспорт TURN" to """
+        По умолчанию CSQTT использует UDP: это лучший выбор по скорости, задержке и отзывчивости.
+
+        TCP — отдельный режим для сетей, где UDP ограничен. Он влияет только на путь устройства до VK TURN; участок между VK TURN и VPS всегда использует UDP. В TCP-режиме нет скрытого перехода на UDP на участке устройства до TURN.
+
+        Изменение применяется при следующем подключении.
+    """.trimIndent()
+}
+
 @Composable
 internal fun TurnTransportInfoDialog(mode: String? = null, onDismiss: () -> Unit) {
-    val (title, text) = when (mode) {
-        CsqttConstants.Tunnel.DEFAULT_TURN_TRANSPORT -> "Транспорт UDP" to """
-            UDP — обычный и рекомендуемый путь от устройства до VK TURN. Он даёт наименьшую задержку, не создаёт очередь TCP и лучше подходит для игр, звонков и коротких пакетов.
-
-            Выбирайте его по умолчанию. Между VK TURN и вашим VPS также всегда используется UDP.
-        """.trimIndent()
-        CsqttConstants.Tunnel.TURN_TRANSPORT_TCP_TLS -> "Транспорт TCP" to """
-            Этот режим нужен только если оператор режет или блокирует UDP, например в отдельных сетях Ростелекома.
-
-            TCP действует только на участке между вашим устройством и выданным VK TURN-узлом. Между VK TURN и вашим VPS трафик всегда передаётся по UDP.
-
-            Для обычного TURN-адреса это не TLS; если VK когда-либо выдаст turns-адрес, он будет использовать TLS. На UDP этот режим автоматически не переключается. TCP может увеличить ping и просадки при нагрузке из-за очереди TCP.
-        """.trimIndent()
-        else -> "Транспорт TURN" to """
-            По умолчанию CSQTT использует UDP: это лучший выбор по скорости, задержке и отзывчивости.
-
-            TCP — отдельный режим для сетей, где UDP ограничен. Он влияет только на путь устройства до VK TURN; участок между VK TURN и VPS всегда использует UDP. В TCP-режиме нет скрытого перехода на UDP на участке устройства до TURN.
-
-            Изменение применяется при следующем подключении.
-        """.trimIndent()
-    }
+    val (title, text) = turnTransportHelp(mode)
 
     Dialog(
         onDismissRequest = onDismiss,

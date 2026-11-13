@@ -33,6 +33,28 @@ class TunnelPendingLogTest {
         }
     }
 
+    @Test fun foregroundMessagesKeepTheirOriginalRefreshInterval() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        try {
+            TunnelManager.clearLogs()
+            runCurrent()
+            TunnelManager.setUiForeground(true)
+            TunnelManager.updateLog("foreground_timer", "Normal", 99)
+            runCurrent()
+            advanceTimeBy(119)
+            runCurrent()
+            assertFalse(TunnelManager.logs.any { it.key == "foreground_timer" })
+            advanceTimeBy(1)
+            runCurrent()
+            assertEquals(1, TunnelManager.logs.single { it.key == "foreground_timer" }.count)
+        } finally {
+            TunnelManager.setUiForeground(false)
+            TunnelManager.clearLogs()
+            runCurrent()
+            Dispatchers.resetMain()
+        }
+    }
+
     @Test fun backgroundFlushesWithoutOpeningUiAndErrorsDoNotWait() = runTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         try {

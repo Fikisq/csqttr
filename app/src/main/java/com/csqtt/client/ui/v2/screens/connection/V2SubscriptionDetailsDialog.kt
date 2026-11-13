@@ -290,7 +290,7 @@ internal fun V2SubscriptionDetailsDialog(
                     text = "Узлов: $nodeCount",
                     style = MaterialTheme.typography.bodySmall.copy(
                         fontFamily = V2BodyFamily,
-                        fontWeight = FontWeight.Normal,
+                        fontWeight = FontWeight.SemiBold,
                         fontSize = 12.sp,
                     ),
                     color = colors.textSecondary,

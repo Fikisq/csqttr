@@ -1,4 +1,3 @@
-use crate::traffic_diagnostics::{add as traffic_add, Metric as TM, WaitTimer};
 #[cfg(test)]
 use crate::turn_core::{AF_IPV4, NativeAddress};
 use crate::{
@@ -38,7 +37,7 @@ use tokio::{
 const CONTROL_MAX: usize = 2048;
 const MAGIC_COOKIE: [u8; 4] = [0x21, 0x12, 0xa4, 0x42];
 const UDP_RECEIVE_BUFFER_BYTES: usize = 32 * 1024;
-const UDP_SEND_BUFFER_BYTES: usize = 32 * 1024;
+const UDP_SEND_BUFFER_BYTES: usize = 16 * 1024;
 const _: () = assert!(UDP_RECEIVE_BUFFER_BYTES + UDP_SEND_BUFFER_BYTES <= 512 * 1024);
 const INCOMING_QUEUE_CAPACITY: usize = 16;
 const CONTROL_TIMEOUT: Duration = Duration::from_secs(12);
@@ -233,14 +232,11 @@ async fn outbound_writer_loop(queue: Arc<OutboundQueue>) {
         while let Some(mut packet) = queue.queue.pop() {
             queue.space.notify_one();
             if queue.shared.closing.load(Ordering::Acquire) {
-                traffic_add(TM::UdpClosingDrops, 1);
                 drop(packet);
                 continue;
             }
-            let mut delivered = false;
             let channel = queue.shared.channel.load(Ordering::Acquire);
             if channel == 0 || encode_channel_data(&mut packet, channel).is_err() {
-                traffic_add(TM::UdpSendDrops, 1);
                 queue
                     .shared
                     .outbound_queue_full_drops
@@ -249,10 +245,8 @@ async fn outbound_writer_loop(queue: Arc<OutboundQueue>) {
                 continue;
             }
             match queue.socket.try_send(packet.as_slice()) {
-                Ok(n) => { delivered = true; traffic_add(TM::UdpSocketBytes, n as u64); traffic_add(TM::UdpSocketPackets, 1); }
+                Ok(_) => {}
                 Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {
-                    traffic_add(TM::UdpWouldBlock, 1);
-                    let _wait = WaitTimer::new(TM::UdpWaitUs, TM::UdpWaitMaxUs);
                     // Backpressure: ждём, пока send-буфер сокета освободится,
                     // вместо тихого сброса при переполнении.
                     while !queue.shared.closing.load(Ordering::Acquire) {
@@ -264,7 +258,7 @@ async fn outbound_writer_loop(queue: Arc<OutboundQueue>) {
                             break;
                         }
                         match queue.socket.try_send(packet.as_slice()) {
-                            Ok(n) => { delivered = true; traffic_add(TM::UdpSocketBytes, n as u64); traffic_add(TM::UdpSocketPackets, 1); break; },
+                            Ok(_) => break,
                             Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {
                                 tokio::time::sleep(Duration::from_micros(50)).await;
                             }
@@ -284,9 +278,6 @@ async fn outbound_writer_loop(queue: Arc<OutboundQueue>) {
                         .outbound_queue_full_drops
                         .fetch_add(1, Ordering::Relaxed);
                 }
-            }
-            if !delivered {
-                traffic_add(if queue.shared.closing.load(Ordering::Acquire) { TM::UdpClosingDrops } else { TM::UdpSendDrops }, 1);
             }
             drop(packet);
         }
@@ -348,17 +339,6 @@ impl TurnAllocation {
         peer: SocketAddr,
         pool: Arc<PacketPool>,
     ) -> Result<Arc<Self>> {
-        Self::connect_diagnosed(target, username, password, peer, pool, None).await
-    }
-
-    pub async fn connect_diagnosed(
-        target: TurnConnectTarget<'_>,
-        username: Arc<str>,
-        password: Arc<str>,
-        peer: SocketAddr,
-        pool: Arc<PacketPool>,
-        mut diagnostic: Option<&mut crate::stream_diagnostics::StreamDiagnostics>,
-    ) -> Result<Arc<Self>> {
         if username.len() > 512 {
             bail!("TURN username превышает 512 байт");
         }
@@ -372,12 +352,8 @@ impl TurnAllocation {
             target.transport_mode,
         )?;
         let (outbound, inbound, server, transport) =
-            connect_transport(&endpoints, target.gooby_proxy, diagnostic.as_deref_mut()).await?;
-        if let Some(d) = diagnostic.as_deref_mut() { d.begin("allocate"); }
+            connect_transport(&endpoints, target.gooby_proxy).await?;
         crate::log_error!("[TURN] Транспорт: {}", transport.as_str());
-        if let Some(proxy) = target.gooby_proxy {
-            crate::log_error!("[TURN] Через Gooby {proxy}; назначение: {}", target.address);
-        }
         let control_transport = if transport == TurnWireTransport::Udp {
             TurnControlTransport::Datagram
         } else {
@@ -466,7 +442,6 @@ impl TurnAllocation {
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner()) = relay_address;
         crate::log_error!("[TURN] Аллокация активна: relay {relay_address}");
-        if let Some(d) = diagnostic { d.record("ok", &format!("relay={relay_address}")); }
         Ok(allocation)
     }
 
@@ -574,20 +549,13 @@ impl TurnAllocation {
                 None
             }
             Err(returned) => {
-                traffic_add(TM::TurnQueueFull, 1);
                 packet = returned;
                 Some(packet)
             }
         }
     }
 
-    pub async fn send(&self, packet: PacketBuf) -> Result<()> {
-        let result = self.send_inner(packet).await;
-        if result.is_err() { traffic_add(TM::TurnEnqueueErrors, 1); }
-        result
-    }
-
-    async fn send_inner(&self, mut packet: PacketBuf) -> Result<()> {
+    pub async fn send(&self, mut packet: PacketBuf) -> Result<()> {
         self.ensure_open()?;
         let channel = self.shared.channel.load(Ordering::Acquire);
         if channel == 0 {
@@ -600,7 +568,6 @@ impl TurnAllocation {
                     .as_ref()
                     .context("TURN UDP outbound queue missing")?;
                 let mut packet = packet;
-                let mut queue_wait = None;
                 loop {
                     match queue.queue.push(packet) {
                         Ok(()) => {
@@ -609,8 +576,6 @@ impl TurnAllocation {
                         }
                         Err(returned) => {
                             packet = returned;
-                            traffic_add(TM::TurnQueueFull, 1);
-                            if queue_wait.is_none() { queue_wait = Some(WaitTimer::new(TM::TurnQueueWaitUs, TM::TurnQueueWaitMaxUs)); }
                         }
                     }
                     // Backpressure вместо тихого сброса: ждём место в очереди
@@ -620,7 +585,6 @@ impl TurnAllocation {
                         || self.shared.closing.load(Ordering::Acquire)
                         || self.shared.terminal().is_some()
                     {
-                        traffic_add(TM::TurnClosingDrops, 1);
                         return Ok(());
                     }
                     let space = queue.space.notified();
@@ -803,35 +767,21 @@ impl Drop for TurnAllocation {
 async fn connect_transport(
     endpoints: &[TurnEndpoint],
     gooby_proxy: Option<crate::gooby::GoobyProxy>,
-    mut diagnostic: Option<&mut crate::stream_diagnostics::StreamDiagnostics>,
 ) -> Result<(TurnOutbound, TurnInbound, SocketAddr, TurnWireTransport)> {
     if gooby_proxy.is_some()
-        && endpoints
-            .iter()
-            .any(|endpoint| endpoint.transport == TurnWireTransport::Udp)
+        && endpoints.iter().any(|endpoint| endpoint.transport == TurnWireTransport::Udp)
     {
-        bail!("Gooby supports TURN TCP/TLS only; UDP cannot use a SOCKS5 CONNECT proxy");
+        bail!("Gooby requires TURN TCP/TLS");
     }
     let mut failures = Vec::with_capacity(endpoints.len());
     for endpoint in endpoints {
         let authority = endpoint.socket_authority();
-        if let Some(d) = diagnostic.as_deref_mut() {
-            d.endpoint(authority.clone(), endpoint.transport.as_str());
-            d.begin("transport");
-        }
         let attempt = match tokio::time::timeout(TRANSPORT_CONNECT_TIMEOUT, async {
-            // In proxy mode the stream is already connected to its destination.
-            // NativeCore uses this address only to tag queued stream output; it
-            // does not resolve or dial it. Let Gooby resolve the original host.
+            // Gooby resolves the original TURN host. This address only tags stream output.
             let server = match gooby_proxy {
                 Some(proxy) => proxy.address(),
                 None => dns::resolve_socket(&authority).await?,
             };
-            if gooby_proxy.is_none() {
-                if let Some(d) = diagnostic.as_deref_mut() {
-                    d.endpoint(server.to_string(), endpoint.transport.as_str());
-                }
-            }
             match endpoint.transport {
                 TurnWireTransport::Udp => {
                     let bind = if server.is_ipv4() {
@@ -874,14 +824,8 @@ async fn connect_transport(
             )),
         };
         match attempt {
-            Ok(value) => {
-                if let Some(d) = diagnostic.as_deref_mut() { d.record("ok", ""); }
-                return Ok(value);
-            }
-            Err(error) => {
-                if let Some(d) = diagnostic.as_deref_mut() { d.record("error", &format!("{error:#}")); }
-                failures.push(format!("{}: {error:#}", endpoint.transport.as_str()));
-            }
+            Ok(value) => return Ok(value),
+            Err(error) => failures.push(format!("{}: {error:#}", endpoint.transport.as_str())),
         }
     }
     bail!(
@@ -1274,7 +1218,6 @@ async fn driver_loop_stream(
             }
             StreamDriverEvent::Frame(Ok(TurnStreamFrame::DataDropped)) => {
                 shared.pool_deficit_drops.fetch_add(1, Ordering::Relaxed);
-                traffic_add(TM::RelayPoolDrops, 1);
             }
             StreamDriverEvent::Frame(Err(error)) => {
                 if !shared.closing.load(Ordering::Acquire) {
@@ -1538,13 +1481,10 @@ fn process_packet(
         if packet.trim_front(4).is_err() || packet.truncate(payload_length).is_err() {
             return PacketAction::Wait;
         }
-        traffic_add(TM::RelayBytes, packet.len() as u64);
-        traffic_add(TM::RelayPackets, 1);
         match incoming.try_send(packet) {
             Ok(()) => PacketAction::Wait,
             Err(TrySendError::Full(_)) => {
                 shared.queue_full_drops.fetch_add(1, Ordering::Relaxed);
-                traffic_add(TM::RelayQueueDrops, 1);
                 PacketAction::Wait
             }
         }
@@ -1561,7 +1501,6 @@ fn process_deficit_packet(core: &NativeCore, shared: &DriverShared, wire: &[u8])
     if let Some((channel, _)) = channel_data_header(wire) {
         if channel == shared.channel.load(Ordering::Acquire) {
             shared.pool_deficit_drops.fetch_add(1, Ordering::Relaxed);
-                traffic_add(TM::RelayPoolDrops, 1);
         }
         PacketAction::Wait
     } else if is_stun(wire) {
@@ -1632,39 +1571,8 @@ fn channel_data_padding(packet: &PacketBuf, channel: u16) -> Result<usize> {
 
 fn configure_udp_socket_buffers(socket: &UdpSocket) {
     let socket = SockRef::from(socket);
-    for (direction, requested, result) in [
-        (
-            "приём",
-            UDP_RECEIVE_BUFFER_BYTES,
-            socket.set_recv_buffer_size(UDP_RECEIVE_BUFFER_BYTES),
-        ),
-        (
-            "отправка",
-            UDP_SEND_BUFFER_BYTES,
-            socket.set_send_buffer_size(UDP_SEND_BUFFER_BYTES),
-        ),
-    ] {
-        if let Err(error) = result {
-            crate::log_error!(
-                "[TURN] UDP буфер ({direction}): установка {requested} байт не удалась: {error}"
-            );
-        }
-    }
-    // Read back each socket once at creation, never on the packet path.
-    // Linux reports doubled limits including kernel bookkeeping, not payload capacity.
-    for (direction, requested, actual) in [
-        ("приём", UDP_RECEIVE_BUFFER_BYTES, socket.recv_buffer_size()),
-        ("отправка", UDP_SEND_BUFFER_BYTES, socket.send_buffer_size()),
-    ] {
-        match actual {
-            Ok(actual) => crate::log_info!(
-                "[TURN] UDP буфер ({direction}): запрос={requested} байт; ОС={actual} байт (лимит памяти сокета, не размер очереди пакетов)"
-            ),
-            Err(error) => crate::log_error!(
-                "[TURN] UDP буфер ({direction}): не удалось прочитать размер: {error}"
-            ),
-        }
-    }
+    let _ = socket.set_recv_buffer_size(UDP_RECEIVE_BUFFER_BYTES);
+    let _ = socket.set_send_buffer_size(UDP_SEND_BUFFER_BYTES);
 }
 
 fn method_name(method: u32) -> &'static str {
@@ -1693,7 +1601,7 @@ mod tests {
     #[test]
     fn turn_socket_buffer_budget_is_bounded_per_worker() {
         assert_eq!(UDP_RECEIVE_BUFFER_BYTES, 32 * 1024);
-        assert_eq!(UDP_SEND_BUFFER_BYTES, 32 * 1024);
+        assert_eq!(UDP_SEND_BUFFER_BYTES, 16 * 1024);
         assert_eq!(INCOMING_QUEUE_CAPACITY, 16);
     }
 

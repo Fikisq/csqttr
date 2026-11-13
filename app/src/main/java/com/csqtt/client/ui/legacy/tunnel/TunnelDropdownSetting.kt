@@ -1,5 +1,8 @@
 package com.csqtt.client.ui.legacy
 
+import com.csqtt.client.GoobyMode
+import com.csqtt.client.CsqttConstants
+
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -19,8 +22,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.HelpOutline
 import androidx.compose.material.icons.filled.ArrowDropDown
-import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.outlined.ErrorOutline
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ButtonDefaults
@@ -47,6 +51,32 @@ data class ModeIndicator(
     val progress: Float,
     val color: Color,
 )
+
+internal const val GOOBY_HELP =
+    "Gooby меняет отправку первых данных при подключении по TCP/TLS. После установления соединения трафик передаётся без этих задержек. При UDP выбранный режим сохраняется, а Gooby отключён."
+
+internal fun goobyModeHelp(mode: GoobyMode): String = when (mode) {
+    GoobyMode.OFF -> "Первые данные TCP/TLS отправляются без обработки Gooby."
+    GoobyMode.GENTLE -> "Заголовок TURN Allocate делится на 2 части с паузой 1 мс. Имя сервера в TLS ClientHello разбивается на фрагменты до 8 байт с паузой 1 мс. TTL не уменьшается."
+    GoobyMode.CURRENT -> "Заголовок TURN Allocate делится на 4 части с паузами 5 мс. Имя сервера в TLS ClientHello разбивается на фрагменты до 2 байт с паузами 10 мс. При первой отправке TLS используется пониженный TTL."
+    GoobyMode.EXTENDED -> "Заголовок TURN Allocate делится на 6 частей с паузами 10 мс. Имя сервера в TLS ClientHello разбивается по одному байту с паузами 15 мс. При первой отправке TLS используется пониженный TTL."
+}
+
+internal const val SRTP_HELP = "SRTP определяет, как пакеты туннеля выглядят для сети."
+
+internal fun srtpModeHelp(mode: String): String = when (mode) {
+    CsqttConstants.SrtpMode.DTLS -> "Полное DTLS-рукопожатие и защищённый SRTP."
+    CsqttConstants.SrtpMode.WRAP -> "SRTP-обёртка без DTLS-рукопожатия."
+    else -> "Сначала DTLS-SRTP. При неудаче — WRAP-SRTP."
+}
+
+internal fun goobyIndicator(mode: GoobyMode, color: Color): ModeIndicator? =
+    when (mode) {
+        GoobyMode.OFF -> null
+        GoobyMode.GENTLE -> ModeIndicator(1f / 3f, color)
+        GoobyMode.CURRENT -> ModeIndicator(2f / 3f, color)
+        GoobyMode.EXTENDED -> ModeIndicator(1f, color)
+    }
 
 @Composable
 internal fun ModeProgressBar(
@@ -82,6 +112,7 @@ internal fun CompactDropdownSetting(
     onSelected: (String) -> Unit,
     modifier: Modifier = Modifier,
     onTitleInfo: (() -> Unit)? = null,
+    titleInfoIcon: ImageVector = Icons.AutoMirrored.Filled.HelpOutline,
     onInfo: ((String) -> Unit)? = null,
     onItemEdit: ((String) -> Unit)? = null,
     leadingContent: (@Composable RowScope.() -> Unit)? = null,
@@ -115,7 +146,7 @@ internal fun CompactDropdownSetting(
                     modifier = Modifier.size(24.dp),
                 ) {
                     Icon(
-                        imageVector = Icons.AutoMirrored.Filled.HelpOutline,
+                        imageVector = titleInfoIcon,
                         contentDescription = "Информация: $title",
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.size(16.dp),
@@ -139,101 +170,130 @@ internal fun CompactDropdownSetting(
                 ),
             ) {
                 Column(
-                    modifier = Modifier.weight(1f).padding(start = 5.dp),
+                    modifier = Modifier.fillMaxWidth().padding(start = 5.dp),
                     verticalArrangement = Arrangement.Center,
                 ) {
-                    Text(
-                        text = selectedLabel,
-                        maxLines = 1,
-                        softWrap = false,
-                        overflow = TextOverflow.Ellipsis,
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = selectedLabel,
+                            modifier = Modifier.weight(1f),
+                            maxLines = 1,
+                            softWrap = false,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        Icon(Icons.Default.ArrowDropDown, contentDescription = null, modifier = Modifier.size(20.dp))
+                    }
                     if (currentIndicator != null) {
                         Spacer(Modifier.height(2.dp))
                         ModeProgressBar(
                             progress = currentIndicator.progress,
                             color = currentIndicator.color,
-                            modifier = Modifier.fillMaxWidth(0.9f),
+                            modifier = Modifier.fillMaxWidth(),
                         )
                     }
                 }
-                Icon(Icons.Default.ArrowDropDown, contentDescription = null, modifier = Modifier.size(20.dp))
             }
-            DropdownMenu(
+            TunnelDropdownMenu(
                 expanded = expanded,
-                onDismissRequest = { expanded = false },
-                modifier = Modifier.widthIn(min = 160.dp, max = 220.dp),
-            ) {
-                options.forEach { (key, label) ->
-                    val itemIndicator = indicatorProvider?.invoke(key)
-                    DropdownMenuItem(
-                        text = {
-                            Column(
-                                modifier = Modifier.fillMaxWidth().padding(start = 5.dp, top = 2.dp, bottom = 2.dp),
-                                verticalArrangement = Arrangement.spacedBy(3.dp),
-                            ) {
-                                Text(
-                                    text = label,
-                                    maxLines = 1,
-                                    softWrap = false,
-                                    overflow = TextOverflow.Ellipsis,
-                                )
-                                if (itemIndicator != null) {
-                                    ModeProgressBar(
-                                        progress = itemIndicator.progress,
-                                        color = itemIndicator.color,
-                                        modifier = Modifier.fillMaxWidth(0.85f),
+                onDismiss = { expanded = false },
+                options = options,
+                onSelected = onSelected,
+                onInfo = onInfo,
+                onItemEdit = onItemEdit,
+                indicatorProvider = indicatorProvider,
+            )
+        }
+    }
+}
+
+@Composable
+internal fun TunnelDropdownMenu(
+    expanded: Boolean,
+    onDismiss: () -> Unit,
+    options: List<Pair<String, String>>,
+    onSelected: (String) -> Unit,
+    onInfo: ((String) -> Unit)? = null,
+    onItemEdit: ((String) -> Unit)? = null,
+    indicatorProvider: ((String) -> ModeIndicator?)? = null,
+    hasInfo: (String) -> Boolean = { true },
+) {
+    DropdownMenu(
+        expanded = expanded,
+        onDismissRequest = onDismiss,
+        modifier = Modifier.widthIn(min = 160.dp, max = 220.dp),
+        shape = CsqttShapes.Small,
+        containerColor = MaterialTheme.colorScheme.surface,
+        tonalElevation = 0.dp,
+    ) {
+        options.forEach { (key, label) ->
+            val itemIndicator = indicatorProvider?.invoke(key)
+            val showInfo = onInfo != null && hasInfo(key)
+            DropdownMenuItem(
+                text = {
+                    Column(
+                        modifier = Modifier.fillMaxWidth().padding(start = 5.dp, top = 2.dp, bottom = 2.dp),
+                        verticalArrangement = Arrangement.spacedBy(3.dp),
+                    ) {
+                        Text(
+                            text = label,
+                            maxLines = 1,
+                            softWrap = false,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        if (itemIndicator != null) {
+                            ModeProgressBar(
+                                progress = itemIndicator.progress,
+                                color = itemIndicator.color,
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                        }
+                    }
+                },
+                trailingIcon = if (onItemEdit != null || showInfo) {
+                    {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            if (onItemEdit != null) {
+                                IconButton(
+                                    onClick = {
+                                        onDismiss()
+                                        onItemEdit(key)
+                                    },
+                                    modifier = Modifier.size(32.dp),
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Edit,
+                                        contentDescription = "Редактировать: $label",
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.size(18.dp),
                                     )
                                 }
                             }
-                        },
-                        trailingIcon = if (onItemEdit != null || onInfo != null) {
-                            {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    if (onItemEdit != null) {
-                                        IconButton(
-                                            onClick = {
-                                                expanded = false
-                                                onItemEdit(key)
-                                            },
-                                            modifier = Modifier.size(32.dp),
-                                        ) {
-                                            Icon(
-                                                imageVector = Icons.Default.Edit,
-                                                contentDescription = "Редактировать: $label",
-                                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                                modifier = Modifier.size(18.dp),
-                                            )
-                                        }
-                                    }
-                                    if (onInfo != null) {
-                                        IconButton(
-                                            onClick = {
-                                                expanded = false
-                                                onInfo(key)
-                                            },
-                                            modifier = Modifier.size(32.dp),
-                                        ) {
-                                            Icon(
-                                                imageVector = Icons.AutoMirrored.Filled.HelpOutline,
-                                                contentDescription = "Информация: $label",
-                                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                                modifier = Modifier.size(18.dp),
-                                            )
-                                        }
-                                    }
+                            if (showInfo) {
+                                IconButton(
+                                    onClick = {
+                                        onDismiss()
+                                        onInfo(key)
+                                    },
+                                    modifier = Modifier.size(32.dp),
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.AutoMirrored.Filled.HelpOutline,
+                                        contentDescription = "Информация: $label",
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.size(18.dp),
+                                    )
                                 }
                             }
-                        } else {
-                            null
-                        },
-                        onClick = {
-                            expanded = false
-                            onSelected(key)
-                        },
-                    )
-                }
-            }
+                        }
+                    }
+                } else {
+                    null
+                },
+                onClick = {
+                    onDismiss()
+                    onSelected(key)
+                },
+            )
         }
     }
 }

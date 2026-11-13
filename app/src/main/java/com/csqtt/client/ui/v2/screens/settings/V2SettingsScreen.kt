@@ -51,15 +51,18 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.csqtt.client.CsqttConstants
+import com.csqtt.client.R
 import com.csqtt.client.SettingsStore
 import com.csqtt.client.TunnelAuthSnapshot
 import com.csqtt.client.TunnelManager
+import com.csqtt.client.ManualHashGroup
 import com.csqtt.client.VkHashValidationCodec
 import com.csqtt.client.VkHashValidator
 import com.csqtt.client.showRaisedToast
@@ -133,24 +136,23 @@ fun V2SettingsScreen(
     val turnTransport by settingsStore.turnTransport.collectAsStateWithLifecycle(
         initialValue = SettingsStore.cachedTurnTransport ?: CsqttConstants.Tunnel.DEFAULT_TURN_TRANSPORT,
     )
-    val goobyStrategy by settingsStore.goobyStrategy.collectAsStateWithLifecycle(com.csqtt.client.GoobyPolicy.DEFAULT_STRATEGY)
-    val goobyEnabled by settingsStore.goobyEnabled.collectAsStateWithLifecycle(SettingsStore.cachedGoobyEnabled)
     val srtpMode by settingsStore.srtpMode.collectAsStateWithLifecycle(
         initialValue = SettingsStore.cachedSrtpMode ?: CsqttConstants.SrtpMode.DEFAULT,
     )
-    val themeMode by settingsStore.themeMode.collectAsStateWithLifecycle(initialValue = CsqttConstants.Theme.MODE_DARK)
+    val loggingEnabled by settingsStore.loggingEnabled.collectAsStateWithLifecycle(initialValue = true)
+    val themeMode by settingsStore.themeMode.collectAsStateWithLifecycle(initialValue = CsqttConstants.Theme.MODE_SYSTEM)
     val autoPauseOnWifi by settingsStore.autoPauseOnWifi.collectAsStateWithLifecycle(initialValue = false)
     val wifiNetworkListMode by settingsStore.wifiNetworkListMode.collectAsStateWithLifecycle(initialValue = "whitelist")
     val wifiNetworkListSsids by settingsStore.wifiNetworkListSsids.collectAsStateWithLifecycle(initialValue = "")
-    val participantShowLogs by settingsStore.participantShowLogs.collectAsStateWithLifecycle(initialValue = false)
+    val participantShowLogs by settingsStore.participantShowLogs.collectAsStateWithLifecycle(
+        initialValue = SettingsStore.DEFAULT_PARTICIPANT_SHOW_LOGS,
+    )
     val extraWorkers by settingsStore.extraWorkers.collectAsStateWithLifecycle(
         initialValue = SettingsStore.cachedExtraWorkers ?: false,
     )
     val selectedTurnSubnet by settingsStore.selectedTurnSubnet.collectAsStateWithLifecycle(initialValue = "")
     val turnSubnetIpLimit by settingsStore.turnSubnetIpLimit.collectAsStateWithLifecycle(initialValue = "ALL")
     val tunnelRunning by TunnelManager.running.collectAsStateWithLifecycle()
-    val tunnelStarting by TunnelManager.starting.collectAsStateWithLifecycle()
-    val tunnelStopping by TunnelManager.stopping.collectAsStateWithLifecycle()
 
     var vkAuthMode by rememberSaveable { mutableStateOf(CsqttConstants.VkAuth.MODE_CALLS) }
     var vkHash1 by rememberSaveable { mutableStateOf("") }
@@ -222,7 +224,7 @@ fun V2SettingsScreen(
         com.csqtt.client.ui.legacy.utils.parseCsqttLink(tunnelAuthSettings.csqttLink)
     }
     val linkHashes = parsedCsqttLink?.hashes.orEmpty()
-    val linkHashesRemoved by settingsStore.linkHashesRemoved.collectAsStateWithLifecycle(initialValue = emptySet())
+    val manualHashGroup by settingsStore.manualHashGroup.collectAsStateWithLifecycle(ManualHashGroup.Owner)
     val linkVkAccessToken = parsedCsqttLink?.vkAccessToken.orEmpty()
     val linkTokenActive = participantMode && linkVkAccessToken.isNotEmpty()
 
@@ -412,26 +414,26 @@ fun V2SettingsScreen(
                     // the owner's hashes (never shown) plus the participant's own, edited in one sheet
                     V2ActionSetting(
                         title = "VK хеши",
-                        action = "От владельца: ${linkHashes.count { it !in linkHashesRemoved }} · свои: $filledHashCount",
+                        action = "${manualHashGroup.label}: ${if (manualHashGroup == ManualHashGroup.Owner) linkHashes.size else filledHashCount}",
                         onAction = { showHashesDialog = true },
                     )
                 } else if (linkTokenActive) {
                     V2SettingRow(title = "VK токен активен")
                 }
+                V2SwitchSetting(
+                    title = "Логи участника",
+                    checked = participantShowLogs,
+                    onCheckedChange = { checked ->
+                        scope.launch { settingsStore.saveParticipantShowLogs(checked) }
+                    },
+                )
             }
-            V2SwitchSetting(
-                title = "Показывать вкладку «Логи»",
-                checked = participantShowLogs,
-                onCheckedChange = { checked ->
-                    scope.launch { settingsStore.saveParticipantShowLogs(checked) }
-                },
-            )
 
             if (effectiveVkAuthMode != CsqttConstants.VkAuth.MODE_AUTO_JS) {
                 V2SwitchSetting(
                     title = "Экстра потоки",
                     checked = extraWorkers,
-                    enabled = true,
+                    enabled = !tunnelRunning,
                     onCheckedChange = { checked ->
                         scope.launch { settingsStore.saveExtraWorkers(checked) }
                     },
@@ -465,7 +467,7 @@ fun V2SettingsScreen(
                                 modifier = Modifier.weight(1f),
                                 style = MaterialTheme.typography.bodyLarge.copy(
                                     fontFamily = V2BodyFamily,
-                                    fontWeight = FontWeight.Normal,
+                                    fontWeight = FontWeight.SemiBold,
                                     fontSize = 15.sp,
                                 ),
                                 color = colors.textPrimary,
@@ -512,7 +514,7 @@ fun V2SettingsScreen(
                                 modifier = Modifier.weight(1f),
                                 style = MaterialTheme.typography.bodyLarge.copy(
                                     fontFamily = V2BodyFamily,
-                                    fontWeight = FontWeight.Normal,
+                                    fontWeight = FontWeight.SemiBold,
                                     fontSize = 15.sp,
                                 ),
                                 color = colors.textPrimary,
@@ -521,7 +523,7 @@ fun V2SettingsScreen(
                                 text = if (filledHashCount > 0) "Заполнено: $filledHashCount" else "Настроить",
                                 style = MaterialTheme.typography.labelMedium.copy(
                                     fontFamily = V2BodyFamily,
-                                    fontWeight = FontWeight.Normal,
+                                    fontWeight = FontWeight.SemiBold,
                                     fontSize = 14.sp,
                                 ),
                                 color = colors.textSecondary,
@@ -556,7 +558,7 @@ fun V2SettingsScreen(
                                 modifier = Modifier.weight(1f),
                                 style = MaterialTheme.typography.bodyLarge.copy(
                                     fontFamily = V2BodyFamily,
-                                    fontWeight = FontWeight.Normal,
+                                    fontWeight = FontWeight.SemiBold,
                                     fontSize = 15.sp,
                                 ),
                                 color = colors.textPrimary,
@@ -603,7 +605,7 @@ fun V2SettingsScreen(
                                         modifier = Modifier.weight(1f),
                                         style = MaterialTheme.typography.bodyLarge.copy(
                                             fontFamily = V2BodyFamily,
-                                            fontWeight = FontWeight.Normal,
+                                            fontWeight = FontWeight.Bold,
                                             fontSize = 16.sp,
                                         ),
                                         color = colors.textPrimary,
@@ -644,7 +646,7 @@ fun V2SettingsScreen(
                                         modifier = Modifier.weight(1f),
                                         style = MaterialTheme.typography.bodyLarge.copy(
                                             fontFamily = V2BodyFamily,
-                                            fontWeight = FontWeight.Normal,
+                                            fontWeight = FontWeight.Bold,
                                             fontSize = 16.sp,
                                         ),
                                         color = colors.textPrimary,
@@ -653,7 +655,7 @@ fun V2SettingsScreen(
                                         text = "Войти",
                                         style = MaterialTheme.typography.labelMedium.copy(
                                             fontFamily = V2BodyFamily,
-                                            fontWeight = FontWeight.Normal,
+                                            fontWeight = FontWeight.Bold,
                                             fontSize = 15.sp,
                                         ),
                                         color = colors.textSecondary,
@@ -709,17 +711,6 @@ fun V2SettingsScreen(
                 onInfo = { label -> showTurnTransportDetailDialog = transportKey(label) },
                 onSelected = { label -> requestTurnTransport(transportKey(label)) },
             )
-            if (turnTransport == CsqttConstants.Tunnel.TURN_TRANSPORT_TCP_TLS) {
-                V2SwitchSetting(title = "Gooby", checked = goobyEnabled,
-                    enabled = !tunnelRunning && !tunnelStarting && !tunnelStopping,
-                    onCheckedChange = { enabled -> scope.launch { settingsStore.saveGoobyEnabled(enabled, forProfile = activeProfile) } })
-                if (goobyEnabled) V2DropdownSetting(
-                    title = "Стратегия Gooby", value = com.csqtt.client.GoobyPolicy.strategyLabel(goobyStrategy),
-                    options = com.csqtt.client.GoobyPolicy.strategies.map { it.second },
-                    enabled = !tunnelRunning && !tunnelStarting && !tunnelStopping,
-                    onSelected = { label -> scope.launch { settingsStore.saveGoobyStrategy(com.csqtt.client.GoobyPolicy.strategies.first { it.second == label }.first, forProfile = activeProfile) } },
-                )
-            }
 
             if (effectiveVkAuthMode == CsqttConstants.VkAuth.MODE_CAPTCHA) {
                 V2SwitchSetting(
@@ -799,9 +790,20 @@ fun V2SettingsScreen(
                 },
             )
 
+            V2SwitchSetting(
+                title = "Автопауза при Wi-Fi",
+                checked = autoPauseOnWifi,
+                onCheckedChange = { checked ->
+                    scope.launch { settingsStore.saveAutoPauseOnWifi(checked) }
+                },
+                onInfoClick = { showAutoPauseInfoDialog = true },
+            )
+
+            val wifiListCount = com.csqtt.client.decodeWifiSsids(wifiNetworkListSsids).size
+            val wifiListLabel = if (wifiNetworkListMode == "blacklist") "Чёрный" else "Белый"
             V2ActionSetting(
-                title = com.csqtt.client.WifiCopy.TITLE,
-                action = if (autoPauseOnWifi) "Настроить" else "Выключена",
+                title = "Wi-Fi списки",
+                action = "$wifiListLabel · $wifiListCount",
                 onAction = { showWifiNetworkListDialog = true },
             )
 
@@ -836,6 +838,15 @@ fun V2SettingsScreen(
 
             V2SettingsSection("Приложение")
 
+            V2SwitchSetting(
+                title = "Логи",
+                checked = loggingEnabled,
+                onCheckedChange = { checked ->
+                    TunnelManager.isLoggingEnabled = checked
+                    scope.launch { settingsStore.saveLoggingEnabled(checked) }
+                },
+            )
+
             V2DropdownSetting(
                 title = "Тема оформления",
                 value = when (themeMode) {
@@ -854,12 +865,14 @@ fun V2SettingsScreen(
                 },
             )
 
+            val classicDesignLabel = stringResource(R.string.design_classic_csqtt_250)
+            val v2DesignLabel = stringResource(R.string.design_csqttr_253)
             V2DropdownSetting(
                 title = "Дизайн",
-                value = "Новый",
-                options = listOf("Классический", "Новый"),
+                value = v2DesignLabel,
+                options = listOf(v2DesignLabel, classicDesignLabel),
                 onSelected = { label ->
-                    if (label == "Классический") {
+                    if (label == classicDesignLabel) {
                         scope.launch { settingsStore.saveUiDesign(CsqttConstants.Theme.DESIGN_CLASSIC) }
                     }
                 },
@@ -895,8 +908,7 @@ fun V2SettingsScreen(
     if (showHashesDialog) {
         V2HashesDialog(
             ownerHashes = if (participantMode) linkHashes else emptyList(),
-            removedOwnerHashes = linkHashesRemoved,
-            onRemovedOwnerHashesChange = { removed -> scope.launch { settingsStore.saveLinkHashesRemoved(removed) } },
+            selectedGroup = if (participantMode && linkHashes.isNotEmpty()) manualHashGroup else ManualHashGroup.Own,
             hash1 = vkHash1,
             hash2 = vkHash2,
             hash3 = vkHash3,
@@ -928,19 +940,18 @@ fun V2SettingsScreen(
                     )
                 }
             },
-            onSave = { h1: String, h2: String, h3: String, h4: String, h5: String, h6: String ->
-                vkHash1 = stripVkUrlStatic(h1)
-                vkHash2 = stripVkUrlStatic(h2)
-                vkHash3 = stripVkUrlStatic(h3)
-                vkHash4 = stripVkUrlStatic(h4)
-                vkHash5 = stripVkUrlStatic(h5)
-                vkHash6 = stripVkUrlStatic(h6)
+            onSave = { group, hashes ->
+                vkHash1 = hashes[0]
+                vkHash2 = hashes[1]
+                vkHash3 = hashes[2]
+                vkHash4 = hashes[3]
+                vkHash5 = hashes[4]
+                vkHash6 = hashes[5]
                 scope.launch {
-                    settingsStore.saveVkHashesOnly(
-                        listOf(vkHash1, vkHash2, vkHash3, vkHash4, vkHash5, vkHash6)
-                            .filter { it.isNotBlank() && it.length >= 16 }
-                            .distinct()
-                            .joinToString(","),
+                    settingsStore.saveManualHashes(
+                        group,
+                        hashes.filter { it.length >= 16 }.distinct().joinToString(","),
+                        activeProfile,
                     )
                 }
             },
@@ -1057,7 +1068,7 @@ private fun V2SettingsSection(title: String) {
         text = title,
         style = MaterialTheme.typography.labelMedium.copy(
             fontFamily = V2BodyFamily,
-            fontWeight = FontWeight.Normal,
+            fontWeight = FontWeight.ExtraBold,
             fontSize = 12.sp,
             letterSpacing = 1.sp,
         ),

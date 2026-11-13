@@ -354,7 +354,7 @@ private fun V2SubscriptionCard(
                         text = title,
                         style = MaterialTheme.typography.titleSmall.copy(
                             fontFamily = V2BodyFamily,
-                            fontWeight = FontWeight.Normal,
+                            fontWeight = FontWeight.ExtraBold,
                         ),
                         color = colors.textPrimary,
                         maxLines = 1,
@@ -527,7 +527,7 @@ private fun V2ProfilePickerRow(
             text = name,
             style = MaterialTheme.typography.titleSmall.copy(
                 fontFamily = V2BodyFamily,
-                fontWeight = FontWeight.Normal,
+                fontWeight = if (selected) FontWeight.ExtraBold else FontWeight.SemiBold,
             ),
             color = if (selected) colors.textPrimary else colors.textSecondary,
             maxLines = 1,

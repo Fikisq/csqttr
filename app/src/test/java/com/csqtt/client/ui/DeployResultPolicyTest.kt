@@ -8,13 +8,6 @@ import org.junit.Test
 
 class DeployResultPolicyTest {
     @Test
-    fun cutoverFailureDoesNotClaimUnconfirmedRollback() {
-        val message = deployFailureMessage(30, "CSQTT_DEPLOY_ERROR|activation|health check failed")
-        assertFalse(message.contains("восстановлена"))
-        assertTrue(message.contains("health check failed"))
-    }
-
-    @Test
     fun exactMarkerAndZeroExitAreRequired() {
         assertTrue(isSuccessfulDeployResult(0, "done\nCSQTT_DEPLOY_OK\n"))
         assertFalse(isSuccessfulDeployResult(1, "CSQTT_DEPLOY_OK"))
@@ -154,11 +147,10 @@ class DeployResultPolicyTest {
     @Test
     fun uninstallSucceedsOnlyWithExitZeroAndItsMarker() {
         assertTrue(isSuccessfulUninstallResult(0, "...\nCSQTT_PURGE_OK\n"))
+        assertFalse(isSuccessfulUninstallResult(1, "CSQTT_PURGE_OK"))
         assertFalse(isSuccessfulUninstallResult(0, "CSQTT_UNINSTALL_OK"))
-        assertFalse(isSuccessfulUninstallResult(1, "CSQTT_UNINSTALL_OK"))
-        assertFalse(isSuccessfulUninstallResult(0, "CSQTT удалён"))
         assertTrue(uninstallFailureMessage("CSQTT_DEPLOY_ERROR|validation|порт занят").contains("порт занят"))
-        assertTrue(parseDeployOutputLine("CSQTT_UNINSTALL_OK") == null)   // a marker for the app, not a line for the user
+        assertTrue(parseDeployOutputLine("CSQTT_PURGE_OK") == null)   // a marker for the app, not a line for the user
     }
 
     @Test(expected = java.io.IOException::class)

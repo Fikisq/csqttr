@@ -244,6 +244,8 @@ private fun decodeQueryComponent(value: String): String? {
     }.getOrNull()
 }
 
+internal fun normalizeVkHashInput(input: String): String = stripVkUrlStatic(input.filterNot(Char::isWhitespace))
+
 fun stripVkUrlStatic(input: String): String {
     var s = input.trim()
     val lower = s.lowercase()

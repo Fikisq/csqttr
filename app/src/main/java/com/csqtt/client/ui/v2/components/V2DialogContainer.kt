@@ -115,7 +115,7 @@ fun V2DialogContainer(
                             text = title,
                             style = MaterialTheme.typography.titleLarge.copy(
                                 fontFamily = V2DisplayFamily,
-                                fontWeight = FontWeight.Normal,
+                                fontWeight = FontWeight.Bold,
                                 fontSize = 18.sp,
                             ),
                             color = colors.textPrimary,

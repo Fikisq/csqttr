@@ -147,7 +147,7 @@ internal fun V2DeployOptionsSheet(
                             },
                             style = MaterialTheme.typography.titleLarge.copy(
                                 fontFamily = V2DisplayFamily,
-                                fontWeight = FontWeight.Normal,
+                                fontWeight = FontWeight.Bold,
                                 fontSize = 19.sp,
                             ),
                             color = colors.textPrimary,
@@ -239,7 +239,7 @@ internal fun V2DeployOptionsSheet(
                         modifier = Modifier.weight(1f),
                         style = MaterialTheme.typography.bodyLarge.copy(
                             fontFamily = V2BodyFamily,
-                            fontWeight = FontWeight.Normal,
+                            fontWeight = FontWeight.SemiBold,
                             fontSize = 14.sp,
                         ),
                         color = colors.textPrimary,

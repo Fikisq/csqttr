@@ -52,13 +52,13 @@ object DeployManager {
         } catch (_: Exception) { }
     }
 
-    fun startDeploy() {
+    fun startDeploy(keepLogs: Boolean = false) {
         if (isDeploying.value && deployStartTime > 0 &&
             System.currentTimeMillis() - deployStartTime > 30 * 60 * 1000) {
             writeError("Автосброс: предыдущий деплой завис >30 мин")
             forceReset()
         }
-        TunnelManager.clearLogs()
+        if (!keepLogs) TunnelManager.clearLogs()
         isDeploying.value = true
         deployStartTime = System.currentTimeMillis()
         deployProgress.value = 0f

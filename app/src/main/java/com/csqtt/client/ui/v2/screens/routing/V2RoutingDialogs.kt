@@ -9,15 +9,12 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.clipToBounds
 import com.csqtt.client.ui.v2.design.V2BodyFamily
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.rememberModalBottomSheetState
 
-import androidx.core.graphics.drawable.toBitmap
-import androidx.compose.ui.graphics.asImageBitmap
 import android.content.Context
 import android.widget.Toast
 import androidx.compose.foundation.clickable
@@ -76,7 +73,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import com.csqtt.client.AppRoutingPresets
 import com.csqtt.client.R
 import com.csqtt.client.SettingsStore
 import com.csqtt.client.TunnelManager
@@ -87,6 +83,7 @@ import com.csqtt.client.ui.v2.components.V2CircleIconButton
 import com.csqtt.client.ui.v2.components.V2PillButton
 import com.csqtt.client.ui.v2.components.V2PillStyle
 import com.csqtt.client.ui.v2.components.V2SwitchSetting
+import com.csqtt.client.ui.v2.components.V2Switch
 import com.csqtt.client.ui.v2.components.V2TextField
 import com.csqtt.client.ui.v2.design.V2Shapes
 import com.csqtt.client.ui.v2.design.V2Sizes
@@ -102,58 +99,39 @@ internal fun V2AppsRoutingDialog(
     isWhitelist: Boolean,
     blacklist: Set<String>,
     whitelist: Set<String>,
-    presetsUsed: Set<String>,
-    allAppsMode: Boolean? = null,
-    showSystemApps: Boolean = false,
-    onShowSystemAppsChange: (Boolean) -> Unit = {},
-    onClose: (black: Set<String>, white: Set<String>, isWhitelist: Boolean, used: Set<String>, allApps: Boolean) -> Unit,
+    showSystemApps: Boolean,
+    onShowSystemAppsChange: (Boolean) -> Unit,
+    onClose: (black: Set<String>, white: Set<String>, isWhitelist: Boolean) -> Unit,
 ) {
     val colors = routingColors()
     val focusManager = LocalFocusManager.current
     val listState = rememberLazyListState()
+    val context = LocalContext.current
+    val clipboard = LocalClipboardManager.current
 
-    var pendingPreset by remember { mutableStateOf<Boolean?>(null) }
-    var used by remember { mutableStateOf(presetsUsed) }
-    var allApps by rememberSaveable { mutableStateOf(allAppsMode ?: (!isWhitelist && blacklist.isEmpty())) }
+    var allApps by rememberSaveable { mutableStateOf(!isWhitelist && blacklist.isEmpty()) }
     var modeIsWhitelist by rememberSaveable { mutableStateOf(isWhitelist) }
     var blackSelection by remember { mutableStateOf(blacklist) }
     var whiteSelection by remember { mutableStateOf(whitelist) }
     var searchQuery by rememberSaveable { mutableStateOf("") }
 
-    // Mode selection must work before package/icon loading completes and without a VPN.
-    androidx.compose.runtime.LaunchedEffect(pendingPreset, isAppsLoading, appsList) {
-        val white = pendingPreset ?: return@LaunchedEffect
-        if (isAppsLoading) return@LaunchedEffect
-        val installed = appsList.map { it.packageName }.toSet()
-        if (white) whiteSelection = AppRoutingPresets.initial(whiteSelection, "white" in used, installed, true)
-        else blackSelection = AppRoutingPresets.initial(blackSelection, "black" in used, installed, false)
-        used = used + if (white) "white" else "black"
-        pendingPreset = null
-    }
-
     val activeSelection = if (modeIsWhitelist) whiteSelection else blackSelection
 
-    val matchingApps = remember(appsList, searchQuery, showSystemApps, activeSelection) {
-        appsList.filter {
-            (!it.isSystem || showSystemApps || it.packageName in activeSelection) &&
-                (searchQuery.isBlank() || it.name.contains(searchQuery, ignoreCase = true) || it.packageName.contains(searchQuery, ignoreCase = true))
-        }
+    val filteredApps = remember(appsList, searchQuery, activeSelection, showSystemApps) {
+        val visible = appsList.filter {
+            (showSystemApps || !it.isSystem || it.packageName in activeSelection) &&
+                (searchQuery.isBlank() || it.name.contains(searchQuery, ignoreCase = true) ||
+                    it.packageName.contains(searchQuery, ignoreCase = true))
+        }.sortedWith(compareBy<AppItem> { it.name.lowercase() }.thenBy { it.packageName })
+        val (selected, unselected) = visible.partition { it.packageName in activeSelection }
+        selected + unselected
     }
-    val matchingByPackage = remember(matchingApps) { matchingApps.associateBy { it.packageName } }
-    val alphabeticalPackages = remember(matchingApps) { matchingApps.map { it.packageName } }
-    val blackApps = remember(matchingApps, blackSelection) {
-        AppRoutingPresets.orderedPackages(alphabeticalPackages, blackSelection).mapNotNull(matchingByPackage::get)
-    }
-    val whiteApps = remember(matchingApps, whiteSelection) {
-        AppRoutingPresets.orderedPackages(alphabeticalPackages, whiteSelection).mapNotNull(matchingByPackage::get)
-    }
-    val filteredApps = if (modeIsWhitelist) whiteApps else blackApps
 
     val scope = rememberCoroutineScope()
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     fun close() {
-        onClose(blackSelection, whiteSelection, if(allApps) false else modeIsWhitelist, used, allApps)
+        onClose(if(allApps) emptySet() else blackSelection, whiteSelection, if(allApps) false else modeIsWhitelist)
     }
 
     fun animateClose() {
@@ -213,13 +191,10 @@ internal fun V2AppsRoutingDialog(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(V2Spacing.Sm),
             ) {
-                V2PillButton(text = "Все с VPN", onClick = { allApps = true; pendingPreset = null }, modifier = Modifier.weight(1f), style = if(allApps) V2PillStyle.Accent else V2PillStyle.Outline, height = 40.dp, horizontalPadding = 4.dp)
+                V2PillButton(text = "Все с VPN", onClick = { allApps = true }, modifier = Modifier.weight(1f), style = if(allApps) V2PillStyle.Accent else V2PillStyle.Outline, height = 40.dp, horizontalPadding = 4.dp)
                 V2PillButton(
                     text = "Без VPN",
-                    onClick = {
-                        listState.requestScrollToItem(0)
-                        modeIsWhitelist = false; allApps = false; pendingPreset = if ("black" in used) null else false
-                    },
+                    onClick = { modeIsWhitelist = false; allApps = false },
                     modifier = Modifier.weight(1f),
                     style = if (!modeIsWhitelist && !allApps) V2PillStyle.Accent else V2PillStyle.Outline,
                     height = 40.dp,
@@ -227,10 +202,7 @@ internal fun V2AppsRoutingDialog(
                 )
                 V2PillButton(
                     text = "С VPN",
-                    onClick = {
-                        listState.requestScrollToItem(0)
-                        modeIsWhitelist = true; allApps = false; pendingPreset = if ("white" in used) null else true
-                    },
+                    onClick = { modeIsWhitelist = true; allApps = false },
                     modifier = Modifier.weight(1f),
                     style = if (modeIsWhitelist && !allApps) V2PillStyle.Accent else V2PillStyle.Outline,
                     height = 40.dp,
@@ -242,10 +214,7 @@ internal fun V2AppsRoutingDialog(
 
             OutlinedTextField(
                 value = searchQuery,
-                onValueChange = {
-                    if (it != searchQuery) listState.requestScrollToItem(0)
-                    searchQuery = it
-                },
+                onValueChange = { searchQuery = it },
                 placeholder = {
                     Text(
                         "Поиск приложения",
@@ -265,7 +234,7 @@ internal fun V2AppsRoutingDialog(
                                 .clickable(
                                     interactionSource = remember { MutableInteractionSource() },
                                     indication = null,
-                                    onClick = { listState.requestScrollToItem(0); searchQuery = "" },
+                                    onClick = { searchQuery = "" },
                                 ),
                             contentAlignment = Alignment.Center,
                         ) {
@@ -282,8 +251,8 @@ internal fun V2AppsRoutingDialog(
                     unfocusedTextColor = colors.textPrimary,
                     focusedContainerColor = colors.field,
                     unfocusedContainerColor = colors.field,
-                    focusedBorderColor = if (colors.routingBorder() != null) colors.accent else Color.Transparent,
-                    unfocusedBorderColor = colors.routingBorder() ?: Color.Transparent,
+                    focusedBorderColor = Color.Transparent,
+                    unfocusedBorderColor = Color.Transparent,
                     cursorColor = colors.accent,
                 ),
                 modifier = Modifier.fillMaxWidth(),
@@ -291,32 +260,71 @@ internal fun V2AppsRoutingDialog(
 
             Spacer(modifier = Modifier.height(V2Spacing.Xs))
 
-            if (!allApps) Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(V2Spacing.Sm)) {
-                V2PillButton(
-                    text = "Готовый список", modifier = Modifier.weight(1f),
-                    style = V2PillStyle.Outline, height = 40.dp, horizontalPadding = 4.dp,
-                    onClick = {
+            if (!allApps) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(V2Spacing.Sm)) {
+                    V2PillButton(
+                        text = "Готовый список", modifier = Modifier.weight(1f),
+                        style = V2PillStyle.Outline, height = 40.dp, horizontalPadding = 4.dp,
+                        enabled = !isAppsLoading,
+                        onClick = {
+                            val preset = V2AppPresets.merge(activeSelection, appsList.map { it.packageName }.toSet(), modeIsWhitelist)
+                            if (modeIsWhitelist) whiteSelection = preset else blackSelection = preset
+                            listState.requestScrollToItem(0)
+                        },
+                    )
+                    V2PillButton(
+                        text = "Очистить список", modifier = Modifier.weight(1f),
+                        style = V2PillStyle.Outline, height = 40.dp, horizontalPadding = 4.dp,
+                        enabled = !isAppsLoading,
+                        onClick = {
+                            if (modeIsWhitelist) whiteSelection = emptySet() else blackSelection = emptySet()
+                            listState.requestScrollToItem(0)
+                        },
+                    )
+                }
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(V2Spacing.Sm)) {
+                    V2PillButton(
+                        text = "Копировать список",
+                        modifier = Modifier.weight(1f),
+                        style = V2PillStyle.Outline,
+                        height = 40.dp,
+                        horizontalPadding = 4.dp,
+                        enabled = activeSelection.isNotEmpty(),
+                        onClick = {
+                            clipboard.setText(AnnotatedString(activeSelection.sorted().joinToString("\n")))
+                            context.showRaisedToast("Список скопирован", Toast.LENGTH_SHORT)
+                        },
+                    )
+                    V2PillButton(
+                        text = "Вставить список",
+                        modifier = Modifier.weight(1f),
+                        style = V2PillStyle.Outline,
+                        height = 40.dp,
+                        horizontalPadding = 4.dp,
+                        onClick = {
+                            val imported = clipboard.getText()?.text.orEmpty()
+                                .split(Regex("[,;\\s]+"))
+                                .filter(::isValidPackage)
+                                .toSet()
+                            if (imported.isEmpty()) {
+                                context.showRaisedToast("В буфере нет имён пакетов", Toast.LENGTH_SHORT)
+                            } else {
+                                if (modeIsWhitelist) whiteSelection += imported else blackSelection += imported
+                                listState.requestScrollToItem(0)
+                            }
+                        },
+                    )
+                }
+                Row(Modifier.fillMaxWidth().heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text("Показывать системные приложения", Modifier.weight(1f), color = colors.textSecondary)
+                    V2Switch(showSystemApps, {
                         listState.requestScrollToItem(0)
-                        pendingPreset = null
-                        val preset = AppRoutingPresets.merge(activeSelection, appsList.map { it.packageName }.toSet(), modeIsWhitelist)
-                        if (modeIsWhitelist) { whiteSelection = preset; used = used + "white" }
-                        else { blackSelection = preset; used = used + "black" }
-                    }, enabled = !isAppsLoading,
-                )
-                V2PillButton(
-                    text = "Очистить список", modifier = Modifier.weight(1f),
-                    style = V2PillStyle.Outline, height = 40.dp, horizontalPadding = 4.dp,
-                    onClick = {
-                        listState.requestScrollToItem(0)
-                        pendingPreset = null
-                        if (modeIsWhitelist) { whiteSelection = emptySet(); used = used + "white" }
-                        else { blackSelection = emptySet(); used = used + "black" }
-                    }, enabled = !isAppsLoading,
-                )
+                        onShowSystemAppsChange(it)
+                    })
+                }
             }
 
-            Spacer(Modifier.height(8.dp))
-            if (!allApps) Text(
+            Text(
                 text = if (modeIsWhitelist) {
                     "Выбрано: ${activeSelection.size} (в туннеле)"
                 } else {
@@ -328,24 +336,9 @@ internal fun V2AppsRoutingDialog(
                 overflow = TextOverflow.Ellipsis,
             )
 
-            Spacer(Modifier.height(8.dp))
-
-            if (!allApps) Row(
-                Modifier.fillMaxWidth().heightIn(min = 48.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text("Показывать системные приложения", Modifier.weight(1f), color = colors.textSecondary,
-                    style = MaterialTheme.typography.bodyMedium)
-                com.csqtt.client.ui.v2.components.V2Switch(
-                    checked = showSystemApps,
-                    onCheckedChange = { enabled -> listState.requestScrollToItem(0); onShowSystemAppsChange(enabled) },
-                )
-            }
-            Spacer(Modifier.height(8.dp))
-
             when {
                 allApps -> Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) { Text("Все приложения используют VPN", color = colors.textSecondary) }
-                isAppsLoading && appsList.isEmpty() -> {
+                isAppsLoading -> {
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -376,8 +369,7 @@ internal fun V2AppsRoutingDialog(
                         state = listState,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .weight(1f)
-                            .clipToBounds(),
+                            .weight(1f),
                         contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = V2Spacing.Sm),
                         verticalArrangement = Arrangement.spacedBy(V2Spacing.Xs),
                     ) {
@@ -391,9 +383,6 @@ internal fun V2AppsRoutingDialog(
                                 app = app,
                                 isSelected = isSelected,
                                 onClick = {
-                                    // Keep viewport index/offset rather than following the moved keyed row.
-                                    listState.requestScrollToItem(listState.firstVisibleItemIndex, listState.firstVisibleItemScrollOffset)
-                                    used = used + if (modeIsWhitelist) "white" else "black"
                                     val newSelection = if (isSelected) {
                                         activeSelection - app.packageName
                                     } else {
@@ -423,7 +412,7 @@ internal fun V2DomainsRoutingDialog(
     templateDomains: List<String>,
     onClose: (blackFormatted: String, whiteFormatted: String, isWhitelist: Boolean, templateEnabled: Boolean) -> Unit,
 ) {
-    val colors = routingColors()
+    val colors = V2Theme.colors
     var modeIsWhitelist by rememberSaveable { mutableStateOf(isWhitelist) }
     var templateEnabled by rememberSaveable { mutableStateOf(templateDomainsEnabled) }
     var blackText by rememberSaveable {
@@ -513,7 +502,7 @@ internal fun V2DomainsRoutingDialog(
                 horizontalArrangement = Arrangement.spacedBy(V2Spacing.Sm),
             ) {
                 V2PillButton(
-                    text = "Чёрный список",
+                    text = "Без VPN",
                     onClick = { modeIsWhitelist = false },
                     modifier = Modifier.weight(1f),
                     style = if (!modeIsWhitelist) V2PillStyle.Accent else V2PillStyle.Outline,
@@ -521,7 +510,7 @@ internal fun V2DomainsRoutingDialog(
                     horizontalPadding = 8.dp,
                 )
                 V2PillButton(
-                    text = "Белый список",
+                    text = "С VPN",
                     onClick = { modeIsWhitelist = true },
                     modifier = Modifier.weight(1f),
                     style = if (modeIsWhitelist) V2PillStyle.Accent else V2PillStyle.Outline,
@@ -569,8 +558,8 @@ internal fun V2DomainsRoutingDialog(
                     unfocusedTextColor = colors.textPrimary,
                     focusedContainerColor = colors.field,
                     unfocusedContainerColor = colors.field,
-                    focusedBorderColor = if (colors.routingBorder() != null) colors.accent else Color.Transparent,
-                    unfocusedBorderColor = colors.routingBorder() ?: Color.Transparent,
+                    focusedBorderColor = Color.Transparent,
+                    unfocusedBorderColor = Color.Transparent,
                     cursorColor = colors.accent,
                 ),
                 modifier = Modifier
@@ -631,7 +620,7 @@ internal fun V2IpsRoutingDialog(
     whiteStr: String,
     onClose: (blackFormatted: String, whiteFormatted: String, isWhitelist: Boolean) -> Unit,
 ) {
-    val colors = routingColors()
+    val colors = V2Theme.colors
     var modeIsWhitelist by rememberSaveable { mutableStateOf(isWhitelist) }
     var blackText by rememberSaveable { mutableStateOf(parseIpsFromText(blackStr).joinToString("\n")) }
     var whiteText by rememberSaveable { mutableStateOf(parseIpsFromText(whiteStr).joinToString("\n")) }
@@ -706,7 +695,7 @@ internal fun V2IpsRoutingDialog(
                 horizontalArrangement = Arrangement.spacedBy(V2Spacing.Sm),
             ) {
                 V2PillButton(
-                    text = "Чёрный список",
+                    text = "Без VPN",
                     onClick = { modeIsWhitelist = false },
                     modifier = Modifier.weight(1f),
                     style = if (!modeIsWhitelist) V2PillStyle.Accent else V2PillStyle.Outline,
@@ -714,7 +703,7 @@ internal fun V2IpsRoutingDialog(
                     horizontalPadding = 8.dp,
                 )
                 V2PillButton(
-                    text = "Белый список",
+                    text = "С VPN",
                     onClick = { modeIsWhitelist = true },
                     modifier = Modifier.weight(1f),
                     style = if (modeIsWhitelist) V2PillStyle.Accent else V2PillStyle.Outline,
@@ -743,8 +732,8 @@ internal fun V2IpsRoutingDialog(
                     unfocusedTextColor = colors.textPrimary,
                     focusedContainerColor = colors.field,
                     unfocusedContainerColor = colors.field,
-                    focusedBorderColor = if (colors.routingBorder() != null) colors.accent else Color.Transparent,
-                    unfocusedBorderColor = colors.routingBorder() ?: Color.Transparent,
+                    focusedBorderColor = Color.Transparent,
+                    unfocusedBorderColor = Color.Transparent,
                     cursorColor = colors.accent,
                 ),
                 modifier = Modifier
@@ -809,27 +798,10 @@ internal fun V2RulesTransferDialog(
     directIpsWhiteStr: String,
     onClose: () -> Unit,
 ) {
-    val colors = routingColors()
+    val colors = V2Theme.colors
     val context = LocalContext.current
     val scope = androidx.compose.runtime.rememberCoroutineScope()
-    var pendingExport by rememberSaveable { mutableStateOf("") }
-    var fileBusy by remember { mutableStateOf(false) }
-    val exportFile = androidx.activity.compose.rememberLauncherForActivityResult(
-        androidx.activity.result.contract.ActivityResultContracts.CreateDocument("application/json"),
-    ) { uri ->
-        if (uri != null) scope.launch {
-            fileBusy = true
-            try {
-                check(pendingExport.isNotBlank()) { "No export data" }
-                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                    requireNotNull(context.contentResolver.openOutputStream(uri)).use { it.write(pendingExport.toByteArray(Charsets.UTF_8)) }
-                }
-                context.showRaisedToast("Правила сохранены в файл", Toast.LENGTH_SHORT)
-            } catch (_: Exception) {
-                context.showRaisedToast("Не удалось сохранить файл", Toast.LENGTH_SHORT)
-            } finally { fileBusy = false; pendingExport = "" }
-        } else pendingExport = ""
-    }
+    val clipboardManager = LocalClipboardManager.current
 
     var transferApps by rememberSaveable { mutableStateOf(true) }
     var transferDomains by rememberSaveable { mutableStateOf(true) }
@@ -898,40 +870,23 @@ internal fun V2RulesTransferDialog(
             ipsObj.put("direct_ips", if (ipIsWhitelist) whiteArr else blackArr)
             root.put("ips", ipsObj)
         }
-        pendingExport = root.toString(2)
-        exportFile.launch("csqtt-routing.json")
+        clipboardManager.setText(AnnotatedString(root.toString(2)))
+        context.showRaisedToast("Правила экспортированы в буфер обмена", Toast.LENGTH_SHORT)
     }
 
-    fun importRules(clipText: String) {
+    fun importRules() {
         if (!transferApps && !transferDomains && !transferIps) {
             context.showRaisedToast("Выберите хотя бы один пункт", Toast.LENGTH_SHORT)
             return
         }
+        val clipText = clipboardManager.getText()?.text.orEmpty().trim()
         if (clipText.isBlank()) {
-            context.showRaisedToast("Файл пуст", Toast.LENGTH_SHORT)
+            context.showRaisedToast("Буфер обмена пуст", Toast.LENGTH_SHORT)
             return
         }
         var importedAny = false
         val rootJson = runCatching { JSONObject(clipText) }.getOrNull()
         if (rootJson != null) {
-            // Validate every selected section before any settings writes are launched.
-            listOf("apps" to transferApps, "domains" to transferDomains, "ips" to transferIps)
-                .filter { (key, selected) -> selected && rootJson.has(key) }
-                .forEach { (key, _) ->
-                    val section = rootJson.getJSONObject(key)
-                    listOf("blacklist", "whitelist", "direct_domains", "direct_ips").forEach { field ->
-                        if (section.has(field)) {
-                            val array = section.getJSONArray(field)
-                            for (i in 0 until array.length()) require(array.get(i) is String)
-                        }
-                    }
-                    if (section.has("active_mode")) {
-                        require(section.getString("active_mode") in setOf("whitelist", "blacklist"))
-                    }
-                    listOf("is_whitelist", "template_domains").forEach { field ->
-                        if (section.has(field)) require(section.get(field) is Boolean)
-                    }
-                }
             if (transferApps && rootJson.has("apps")) {
                 val appsObj = rootJson.getJSONObject("apps")
                 val isWhite = if (appsObj.has("active_mode")) {
@@ -1117,33 +1072,7 @@ internal fun V2RulesTransferDialog(
             context.showRaisedToast("Правила успешно импортированы", Toast.LENGTH_SHORT)
             animateClose()
         } else {
-            context.showRaisedToast("В файле нет подходящих данных", Toast.LENGTH_SHORT)
-        }
-    }
-
-    val importFile = androidx.activity.compose.rememberLauncherForActivityResult(
-        androidx.activity.result.contract.ActivityResultContracts.GetContent(),
-    ) { uri ->
-        if (uri != null) scope.launch {
-            fileBusy = true
-            try {
-                val text = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                    requireNotNull(context.contentResolver.openInputStream(uri)).use { stream ->
-                        val output = java.io.ByteArrayOutputStream()
-                        val buffer = ByteArray(8192)
-                        var count = stream.read(buffer)
-                        while (count != -1) {
-                            require(output.size() + count <= 1024 * 1024)
-                            output.write(buffer, 0, count)
-                            count = stream.read(buffer)
-                        }
-                        output.toString("UTF-8").trim()
-                    }
-                }
-                importRules(text)
-            } catch (_: Exception) {
-                context.showRaisedToast("Не удалось импортировать файл (лимит 1 МБ)", Toast.LENGTH_SHORT)
-            } finally { fileBusy = false }
+            context.showRaisedToast("В буфере обмена нет подходящих данных", Toast.LENGTH_SHORT)
         }
     }
 
@@ -1214,16 +1143,14 @@ internal fun V2RulesTransferDialog(
                 horizontalArrangement = Arrangement.spacedBy(V2Spacing.Sm),
             ) {
                 V2PillButton(
-                    text = "В файл",
+                    text = "Экспорт",
                     onClick = { exportRules() },
-                    enabled = !fileBusy,
                     modifier = Modifier.weight(1f),
                     style = V2PillStyle.Accent,
                 )
                 V2PillButton(
-                    text = "Из файла",
-                    onClick = { importFile.launch("application/json") },
-                    enabled = !fileBusy,
+                    text = "Импорт",
+                    onClick = { importRules() },
                     modifier = Modifier.weight(1f),
                     style = V2PillStyle.Contrast,
                 )
@@ -1238,12 +1165,12 @@ private fun V2TransferCheckRow(
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit,
 ) {
-    val colors = routingColors()
+    val colors = V2Theme.colors
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = V2Shapes.Field,
         color = colors.field,
-        border = colors.routingBorder()?.let { androidx.compose.foundation.BorderStroke(1.dp, it) },
+        border = null,
         tonalElevation = 0.dp,
         shadowElevation = 0.dp,
     ) {
@@ -1263,7 +1190,7 @@ private fun V2TransferCheckRow(
                 text = title,
                 style = MaterialTheme.typography.bodyLarge.copy(
                     fontFamily = V2BodyFamily,
-                    fontWeight = FontWeight.Normal,
+                    fontWeight = FontWeight.SemiBold,
                 ),
                 color = colors.textPrimary,
                 maxLines = 1,
@@ -1284,7 +1211,7 @@ fun V2CircleCheckbox(
     modifier: Modifier = Modifier,
     checkedColor: Color = V2Theme.colors.accent,
     checkmarkColor: Color = V2Theme.colors.onAccent,
-    uncheckedColor: Color = routingColors().surfaceElevated,
+    uncheckedColor: Color = V2Theme.colors.surfaceElevated,
     size: androidx.compose.ui.unit.Dp = 24.dp,
 ) {
     val bgAnimated by animateColorAsState(
@@ -1305,7 +1232,6 @@ fun V2CircleCheckbox(
             .size(size)
             .clip(CircleShape)
             .background(bgAnimated, CircleShape)
-            .then(if (!checked && routingColors().routingBorder() != null) Modifier.border(1.dp, routingColors().outline, CircleShape) else Modifier)
             .then(clickModifier),
         contentAlignment = Alignment.Center,
     ) {
@@ -1320,8 +1246,6 @@ fun V2CircleCheckbox(
     }
 }
 
-private val routingIconCache = android.util.LruCache<String, androidx.compose.ui.graphics.ImageBitmap>(96)
-
 @Composable
 private fun V2AppRow(
     app: AppItem,
@@ -1329,22 +1253,7 @@ private fun V2AppRow(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val appContext = LocalContext.current.applicationContext
-    val icon by androidx.compose.runtime.produceState(
-        initialValue = app.icon ?: routingIconCache.get(app.packageName), key1 = app.packageName,
-    ) {
-        if (value == null) {
-            val loaded = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                runCatching {
-                    appContext.packageManager.getApplicationIcon(app.packageName)
-                        .toBitmap(width = 96, height = 96).asImageBitmap()
-                }.getOrNull()
-            }
-            loaded?.let { routingIconCache.put(app.packageName, it) }
-            value = loaded
-        }
-    }
-    val colors = routingColors()
+    val colors = V2Theme.colors
     val backgroundColor = if (isSelected) colors.surfaceElevated else colors.bottomSurface
 
     Surface(
@@ -1359,7 +1268,7 @@ private fun V2AppRow(
         shape = V2Shapes.Row,
         color = backgroundColor,
         contentColor = colors.textPrimary,
-        border = colors.routingBorder()?.let { androidx.compose.foundation.BorderStroke(1.dp, it) },
+        border = null,
         tonalElevation = 0.dp,
         shadowElevation = 0.dp,
     ) {
@@ -1368,9 +1277,9 @@ private fun V2AppRow(
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            if (icon != null) {
+            if (app.icon != null) {
                 androidx.compose.foundation.Image(
-                    bitmap = icon!!,
+                    bitmap = app.icon,
                     contentDescription = null,
                     modifier = Modifier
                         .size(40.dp)
@@ -1392,7 +1301,7 @@ private fun V2AppRow(
                     text = app.name,
                     style = MaterialTheme.typography.bodyLarge.copy(
                         fontFamily = V2BodyFamily,
-                        fontWeight = FontWeight.Normal,
+                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.SemiBold,
                     ),
                     color = colors.textPrimary,
                     maxLines = 1,

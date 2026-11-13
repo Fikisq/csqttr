@@ -91,7 +91,7 @@ fun V2DockerInstallInfoDialog(onDismiss: () -> Unit) {
                     text = "Установка в Docker",
                     style = MaterialTheme.typography.titleLarge.copy(
                         fontFamily = V2DisplayFamily,
-                        fontWeight = FontWeight.Normal,
+                        fontWeight = FontWeight.Bold,
                         fontSize = 20.sp,
                     ),
                     color = colors.textPrimary,

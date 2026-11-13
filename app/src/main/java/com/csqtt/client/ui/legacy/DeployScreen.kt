@@ -33,6 +33,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
@@ -67,189 +68,193 @@ internal fun DeployScreen(
         modifier = modifier,
     ) {
         Box(modifier = Modifier.fillMaxWidth().weight(1f)) {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .verticalScroll(scrollState),
-                verticalArrangement = Arrangement.spacedBy(CsqttSpacing.Md),
-            ) {
-                AppSectionCard {
-                    Text("Деплой и SSH", style = MaterialTheme.typography.titleMedium, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold)
-                    if (state.sshKeysMode) {
-                        AdaptiveFieldPair(
-                            first = {
-                                HostAndSshPortFields(state = state, onAction = onAction)
-                            },
-                            second = {
-                                DeployTextField(
-                                    value = state.sshLogin,
-                                    onValueChange = { onAction(DeployAction.LoginChanged(it)) },
-                                    label = "Логин SSH",
-                                    enabled = !state.isDeploying,
-                                    isError = state.sshLogin.isBlank(),
-                                    imeAction = ImeAction.Next,
-                                )
-                            },
-                        )
-                        AnimatedVisibility(
-                            visible = state.manualPorts,
-                            enter = fadeIn() + expandVertically(expandFrom = Alignment.Top),
-                            exit = fadeOut() + shrinkVertically(shrinkTowards = Alignment.Top),
-                        ) {
-                            ManualPortFields(state = state, onAction = onAction)
-                        }
-                        OutlinedButton(
-                            onClick = { onAction(DeployAction.EditSshKeys) },
-                            enabled = !state.isDeploying,
-                            modifier = Modifier.fillMaxWidth().height(52.dp),
-                            shape = CsqttShapes.Pill,
-                            colors = ButtonDefaults.outlinedButtonColors(
-                                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                                contentColor = MaterialTheme.colorScheme.onSurface,
-                            ),
-                            border = BorderStroke(
-                                1.dp,
-                                if (state.sshKeysFilled < 1) MaterialTheme.colorScheme.error
-                                else MaterialTheme.colorScheme.outline.copy(alpha = 0.5f),
-                            ),
-                        ) {
-                            Icon(Icons.Default.Key, contentDescription = null, modifier = Modifier.size(18.dp))
-                            Spacer(Modifier.width(8.dp))
-                            Text("Ключи SSH ${state.sshKeysFilled}/1", fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold, maxLines = 1)
-                        }
-                    } else {
-                        HostAndSshPortFields(state = state, onAction = onAction)
-                        AnimatedVisibility(
-                            visible = state.manualPorts,
-                            enter = fadeIn() + expandVertically(expandFrom = Alignment.Top),
-                            exit = fadeOut() + shrinkVertically(shrinkTowards = Alignment.Top),
-                        ) {
-                            ManualPortFields(state = state, onAction = onAction)
-                        }
-                        AdaptiveFieldPair(
-                            first = {
-                                DeployTextField(
-                                    value = state.sshLogin,
-                                    onValueChange = { onAction(DeployAction.LoginChanged(it)) },
-                                    label = "Логин SSH",
-                                    enabled = !state.isDeploying,
-                                    isError = state.sshLogin.isBlank(),
-                                    imeAction = ImeAction.Next,
-                                )
-                            },
-                            second = {
-                                DeployTextField(
-                                    value = state.sshPassword,
-                                    onValueChange = { onAction(DeployAction.PasswordChanged(it)) },
-                                    label = "Пароль SSH",
-                                    enabled = !state.isDeploying,
-                                    isError = state.sshPassword.isBlank(),
-                                    keyboardType = KeyboardType.Password,
-                                    visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
-                                    trailingContent = {
-                                        IconButton(onClick = { passwordVisible = !passwordVisible }) {
-                                             Icon(
-                                                imageVector = if (passwordVisible) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility,
-                                                contentDescription = if (passwordVisible) "Скрыть пароль" else "Показать пароль",
-                                            )
-                                        }
-                                    },
-                                )
-                            },
-                        )
-                    }
-                    Column {
-                        CsqttSettingRow(
-                            title = "Ключи SSH",
-                            checked = state.sshKeysMode,
-                            enabled = !state.isDeploying,
-                            onCheckedChange = { onAction(DeployAction.SshKeysModeChanged(it)) },
-                        )
-                        CsqttSettingRow(
-                            title = "Ручные порты",
-                            checked = state.manualPorts,
-                            enabled = !state.isDeploying,
-                            onCheckedChange = { onAction(DeployAction.ManualPortsChanged(it)) },
-                        )
-                        CsqttSettingRow(
-                            title = "Установить в Docker",
-                            checked = state.dockerInstall,
-                            enabled = !state.isDeploying,
-                            onCheckedChange = { onAction(DeployAction.DockerInstallChanged(it)) },
-                            onInfoClick = { onAction(DeployAction.DockerInfo) },
-                            infoContentDescription = "О Docker-установке",
-                        )
-                        Text(
-                            text = "Секретный путь и ссылка панели",
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = if (!state.isDeploying) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f),
-                            modifier = Modifier.padding(top = 6.dp),
-                        )
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(top = 10.dp)
-                        ) {
-                            DeployTextField(
-                                value = state.panelDisplayUrl,
-                                onValueChange = {},
-                                placeholder = "https://1.2.3.4:46002/uuid",
-                                enabled = !state.isDeploying,
-                                readOnly = true,
-                                singleLine = false,
-                                minLines = 2,
-                                maxLines = 2,
-                                textColor = if (!state.isDeploying) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f),
-                                modifier = Modifier.fillMaxWidth(),
-                                trailingContent = {
-                                    IconButton(
-                                        onClick = { showRegenConfirmDialog = true },
+            Column(modifier = Modifier.fillMaxSize()) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
+                        .verticalScroll(scrollState),
+                    verticalArrangement = Arrangement.spacedBy(CsqttSpacing.Md),
+                ) {
+                    AppSectionCard {
+                        Text("Деплой и SSH", style = MaterialTheme.typography.titleMedium, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold)
+                        if (state.sshKeysMode) {
+                            AdaptiveFieldPair(
+                                first = {
+                                    HostAndSshPortFields(state = state, onAction = onAction)
+                                },
+                                second = {
+                                    DeployTextField(
+                                        value = state.sshLogin,
+                                        onValueChange = { onAction(DeployAction.LoginChanged(it)) },
+                                        label = "Логин SSH",
                                         enabled = !state.isDeploying,
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Default.Refresh,
-                                            contentDescription = "Перегенерировать UUID",
-                                        )
-                                    }
-                                }
+                                        isError = state.sshLogin.isBlank(),
+                                        imeAction = ImeAction.Next,
+                                    )
+                                },
+                            )
+                            AnimatedVisibility(
+                                visible = state.manualPorts,
+                                enter = fadeIn() + expandVertically(expandFrom = Alignment.Top),
+                                exit = fadeOut() + shrinkVertically(shrinkTowards = Alignment.Top),
+                            ) {
+                                ManualPortFields(state = state, onAction = onAction)
+                            }
+                            OutlinedButton(
+                                onClick = { onAction(DeployAction.EditSshKeys) },
+                                enabled = !state.isDeploying,
+                                modifier = Modifier.fillMaxWidth().height(52.dp),
+                                shape = CsqttShapes.Pill,
+                                colors = ButtonDefaults.outlinedButtonColors(
+                                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                                    contentColor = MaterialTheme.colorScheme.onSurface,
+                                ),
+                                border = BorderStroke(
+                                    1.dp,
+                                    if (state.sshKeysFilled < 1) MaterialTheme.colorScheme.error
+                                    else MaterialTheme.colorScheme.outline.copy(alpha = 0.5f),
+                                ),
+                            ) {
+                                Icon(Icons.Default.Key, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Spacer(Modifier.width(8.dp))
+                                Text("Ключи SSH ${state.sshKeysFilled}/1", fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold, maxLines = 1)
+                            }
+                        } else {
+                            HostAndSshPortFields(state = state, onAction = onAction)
+                            AnimatedVisibility(
+                                visible = state.manualPorts,
+                                enter = fadeIn() + expandVertically(expandFrom = Alignment.Top),
+                                exit = fadeOut() + shrinkVertically(shrinkTowards = Alignment.Top),
+                            ) {
+                                ManualPortFields(state = state, onAction = onAction)
+                            }
+                            AdaptiveFieldPair(
+                                first = {
+                                    DeployTextField(
+                                        value = state.sshLogin,
+                                        onValueChange = { onAction(DeployAction.LoginChanged(it)) },
+                                        label = "Логин SSH",
+                                        enabled = !state.isDeploying,
+                                        isError = state.sshLogin.isBlank(),
+                                        imeAction = ImeAction.Next,
+                                    )
+                                },
+                                second = {
+                                    DeployTextField(
+                                        value = state.sshPassword,
+                                        onValueChange = { onAction(DeployAction.PasswordChanged(it)) },
+                                        label = "Пароль SSH",
+                                        enabled = !state.isDeploying,
+                                        isError = state.sshPassword.isBlank(),
+                                        keyboardType = KeyboardType.Password,
+                                        visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                                        trailingContent = {
+                                            IconButton(onClick = { passwordVisible = !passwordVisible }) {
+                                                 Icon(
+                                                    imageVector = if (passwordVisible) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility,
+                                                    contentDescription = if (passwordVisible) "Скрыть пароль" else "Показать пароль",
+                                                )
+                                            }
+                                        },
+                                    )
+                                },
+                            )
+                        }
+                        Column {
+                            CsqttSettingRow(
+                                title = "Ключи SSH",
+                                checked = state.sshKeysMode,
+                                enabled = !state.isDeploying,
+                                onCheckedChange = { onAction(DeployAction.SshKeysModeChanged(it)) },
+                            )
+                            CsqttSettingRow(
+                                title = "Ручные порты",
+                                checked = state.manualPorts,
+                                enabled = !state.isDeploying,
+                                onCheckedChange = { onAction(DeployAction.ManualPortsChanged(it)) },
+                            )
+                            CsqttSettingRow(
+                                title = "Установить в Docker",
+                                checked = state.dockerInstall,
+                                enabled = !state.isDeploying,
+                                onCheckedChange = { onAction(DeployAction.DockerInstallChanged(it)) },
+                                onInfoClick = { onAction(DeployAction.DockerInfo) },
+                                infoContentDescription = "О Docker-установке",
+                            )
+                            Text(
+                                text = "Секретный путь и ссылка панели",
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = if (!state.isDeploying) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f),
+                                modifier = Modifier.padding(top = 6.dp),
                             )
                             Box(
                                 modifier = Modifier
-                                    .matchParentSize()
-                                    .padding(end = 52.dp)
-                                    .clickable(enabled = !state.isDeploying) {
-                                        onAction(DeployAction.OpenControlPanel)
+                                    .fillMaxWidth()
+                                    .padding(top = 10.dp)
+                            ) {
+                                DeployTextField(
+                                    value = state.panelDisplayUrl,
+                                    onValueChange = {},
+                                    placeholder = "https://1.2.3.4:46002/uuid",
+                                    enabled = !state.isDeploying,
+                                    readOnly = true,
+                                    singleLine = false,
+                                    minLines = 2,
+                                    maxLines = 2,
+                                    textColor = if (!state.isDeploying) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f),
+                                    modifier = Modifier.fillMaxWidth(),
+                                    trailingContent = {
+                                        IconButton(
+                                            onClick = { showRegenConfirmDialog = true },
+                                            enabled = !state.isDeploying,
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.Refresh,
+                                                contentDescription = "Перегенерировать UUID",
+                                            )
+                                        }
                                     }
-                            )
+                                )
+                                Box(
+                                    modifier = Modifier
+                                        .matchParentSize()
+                                        .padding(end = 52.dp)
+                                        .clickable(enabled = !state.isDeploying) {
+                                            onAction(DeployAction.OpenControlPanel)
+                                        }
+                                )
+                            }
                         }
                     }
-                }
 
-                if (showRegenConfirmDialog) {
-                    AlertDialog(
-                        onDismissRequest = { showRegenConfirmDialog = false },
-                        title = { Text("Перегенерация пути") },
-                        text = { Text("После перегенерации старый путь будет утерян, и доступ к панели будет утерян, если вы потеряете новый UUID. Перегенерировать?") },
-                        confirmButton = {
-                            Button(
-                                onClick = {
-                                    showRegenConfirmDialog = false
-                                    onAction(DeployAction.RegenerateSecretPath)
-                                },
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = MaterialTheme.colorScheme.error,
-                                    contentColor = MaterialTheme.colorScheme.onError,
-                                )
-                            ) {
-                                Text("Перегенерировать")
+                    if (showRegenConfirmDialog) {
+                        AlertDialog(
+                            onDismissRequest = { showRegenConfirmDialog = false },
+                            title = { Text("Перегенерация пути") },
+                            text = { Text("После перегенерации старый путь будет утерян, и доступ к панели будет утерян, если вы потеряете новый UUID. Перегенерировать?") },
+                            confirmButton = {
+                                Button(
+                                    onClick = {
+                                        showRegenConfirmDialog = false
+                                        onAction(DeployAction.RegenerateSecretPath)
+                                    },
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = MaterialTheme.colorScheme.error,
+                                        contentColor = MaterialTheme.colorScheme.onError,
+                                    )
+                                ) {
+                                    Text("Перегенерировать")
+                                }
+                            },
+                            dismissButton = {
+                                TextButton(onClick = { showRegenConfirmDialog = false }) {
+                                    Text("Отмена")
+                                }
                             }
-                        },
-                        dismissButton = {
-                            TextButton(onClick = { showRegenConfirmDialog = false }) {
-                                Text("Отмена")
-                            }
-                        }
-                    )
+                        )
+                    }
+
                 }
 
                 if (state.isDeploying) {
@@ -354,6 +359,19 @@ private fun DeployProgressCard(
     )
 
     AppSectionCard(verticalArrangement = Arrangement.spacedBy(CsqttSpacing.Xs)) {
+        DeployProgressContent(animatedProgress, currentStep)
+    }
+}
+
+@Composable
+internal fun DeployProgressContent(
+    progress: Float,
+    currentStep: String,
+    modifier: Modifier = Modifier,
+    accent: Color = MaterialTheme.colorScheme.primary,
+    foreground: Color = MaterialTheme.colorScheme.onSurface,
+) {
+    Column(modifier.testTag("deploy-progress"), verticalArrangement = Arrangement.spacedBy(CsqttSpacing.Xs)) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(CsqttSpacing.Md),
@@ -362,18 +380,20 @@ private fun DeployProgressCard(
             Text(
                 text = currentStep.ifBlank { "Подготовка…" },
                 style = MaterialTheme.typography.bodyMedium,
+                color = foreground,
                 modifier = Modifier.weight(1f),
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
             Text(
-                text = "${(animatedProgress * 100).toInt()}%",
+                text = "${(progress.coerceIn(0f, 1f) * 100).toInt()}%",
                 style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.primary,
+                color = accent,
             )
         }
         LinearProgressIndicator(
-            progress = { animatedProgress },
+            progress = { progress.coerceIn(0f, 1f) },
+            color = accent,
             modifier = Modifier.fillMaxWidth(),
         )
     }

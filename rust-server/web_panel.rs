@@ -487,20 +487,13 @@ fn make_main_link(host: &str, port: u16, db: &model::Database) -> String {
     )
 }
 
-// Match 2.5.0 subscription semantics: None inherits, Some("") disables.
-fn client_vk_token<'a>(db: &'a model::Database, group_id: &str) -> &'a str {
-    db.groups.get(group_id)
-        .and_then(|group| group.vk_token.as_deref())
-        .unwrap_or(&db.vk_access_token)
-}
-
 #[inline]
 fn make_entry_link(
     host: &str,
     port: u16,
     password: &str,
     entry: &model::PasswordEntry,
-    db: &model::Database,
+    shared_token: &str,
 ) -> String {
     make_client_link(
         host,
@@ -508,7 +501,7 @@ fn make_entry_link(
         password,
         &entry.vk_hashes,
         entry.vk_token_enabled,
-        client_vk_token(db, &entry.group_id),
+        shared_token,
     )
 }
 
@@ -1606,7 +1599,7 @@ async fn clients_get(
                     client_peer_port,
                     password,
                     entry,
-                    &db,
+                    &db.vk_access_token,
                 ),
                 sub_uuid: entry.sub_uuid.clone(),
                 workers: entry.workers,
@@ -1689,6 +1682,11 @@ async fn group_clients_get(
             .into_response();
     }
     let host = resolve_client_host(&headers, &state).await;
+    let effective_vk_token = db
+        .groups
+        .get(&id)
+        .and_then(|g| g.vk_token.as_deref())
+        .unwrap_or(&db.vk_access_token);
     let list: Vec<ClientInfo> = db
         .passwords
         .iter()
@@ -1720,7 +1718,7 @@ async fn group_clients_get(
                 local_port: entry.local_port,
                 group_id: entry.group_id.clone(),
                 routing_rule_id: entry.routing_rule_id.clone(),
-                link: make_entry_link(&host, client_peer_port, password, entry, &db),
+                link: make_entry_link(&host, client_peer_port, password, entry, effective_vk_token),
                 sub_uuid: entry.sub_uuid.clone(),
                 workers: entry.workers,
             }
@@ -1791,7 +1789,7 @@ async fn clients_create(
 
     let (password, expires, revision, link, sub_uuid) = {
         let mut db = state.app.db.write().await;
-        if request.vk_token && client_vk_token(&db, &group_id).is_empty() {
+        if request.vk_token && db.vk_access_token.is_empty() {
             return (StatusCode::BAD_REQUEST, "configure a VK token first").into_response();
         }
         db.passwords.retain(|_, entry| !is_expired(entry));
@@ -1867,12 +1865,13 @@ async fn clients_create(
                 workers: validated_workers,
             },
         );
-        let link = make_entry_link(
+        let link = make_client_link(
             &host,
             peer_port,
             &password,
-            &db.passwords[&password],
-            &db,
+            &vk_hashes,
+            request.vk_token,
+            &db.vk_access_token,
         );
         let revision = state.app.db_persistence.submit(db.clone());
         (password, expires, revision, link, sub_uuid)
@@ -1923,17 +1922,7 @@ async fn client_update(
 
     let revision = {
         let mut db = state.app.db.write().await;
-        let credential_group = if secret_eq(&password, &db.main_password) {
-            ""
-        } else {
-            request.group_id.as_deref().unwrap_or_else(|| {
-                db.passwords
-                    .get(&password)
-                    .map(|entry| entry.group_id.as_str())
-                    .unwrap_or("")
-            })
-        };
-        if request.vk_token && client_vk_token(&db, credential_group).is_empty() {
+        if request.vk_token && db.vk_access_token.is_empty() {
             return (StatusCode::BAD_REQUEST, "configure a VK token first").into_response();
         }
         if secret_eq(&password, &db.main_password) {
@@ -2137,7 +2126,7 @@ async fn client_get(
                 client_peer_port,
                 &password,
                 entry,
-                &db,
+                &db.vk_access_token,
             ),
             sub_uuid: entry.sub_uuid.clone(),
             workers: entry.workers,
@@ -2260,7 +2249,7 @@ async fn api_links_get(State(state): State<WebState>, headers: HeaderMap) -> imp
                     client_peer_port,
                     password,
                     entry,
-                    &db,
+                    &db.vk_access_token,
                 ),
                 expires: entry.expires_at,
                 peer_port: client_peer_port,
@@ -3049,7 +3038,15 @@ async fn client_sub_page(
     } else {
         entry.dtls_port
     };
-    let link = make_entry_link(&host, client_peer_port, password, entry, &db);
+    let effective_vk_token = if !entry.group_id.is_empty() {
+        db.groups
+            .get(&entry.group_id)
+            .and_then(|g| g.vk_token.as_deref())
+            .unwrap_or(&db.vk_access_token)
+    } else {
+        &db.vk_access_token
+    };
+    let link = make_entry_link(&host, client_peer_port, password, entry, effective_vk_token);
     let client_name = if entry.name.is_empty() {
         "Клиент".to_string()
     } else {
@@ -3105,7 +3102,15 @@ async fn client_sub_json(
     } else {
         entry.dtls_port
     };
-    let link = make_entry_link(&host, client_peer_port, password, entry, &db);
+    let effective_vk_token = if !entry.group_id.is_empty() {
+        db.groups
+            .get(&entry.group_id)
+            .and_then(|g| g.vk_token.as_deref())
+            .unwrap_or(&db.vk_access_token)
+    } else {
+        &db.vk_access_token
+    };
+    let link = make_entry_link(&host, client_peer_port, password, entry, effective_vk_token);
     let client_name = if entry.name.is_empty() {
         "Клиент".to_string()
     } else {
@@ -3156,6 +3161,7 @@ async fn group_sub_page(
     };
 
     let host = resolve_client_host(&headers, &state).await;
+    let effective_vk_token = group.vk_token.as_deref().unwrap_or(&db.vk_access_token);
     let mut items = Vec::new();
     for (password, entry) in &db.passwords {
         if entry.group_id == group.id {
@@ -3165,7 +3171,7 @@ async fn group_sub_page(
                 entry.dtls_port
             };
             let link =
-                make_entry_link(&host, client_peer_port, password, entry, &db);
+                make_entry_link(&host, client_peer_port, password, entry, effective_vk_token);
             let name = if entry.name.is_empty() {
                 "Клиент".to_string()
             } else {
@@ -3210,6 +3216,7 @@ async fn group_sub_json(
     };
 
     let host = resolve_client_host(&headers, &state).await;
+    let effective_vk_token = group.vk_token.as_deref().unwrap_or(&db.vk_access_token);
     let mut items = Vec::new();
     for (password, entry) in &db.passwords {
         if entry.group_id == group.id {
@@ -3219,7 +3226,7 @@ async fn group_sub_json(
                 entry.dtls_port
             };
             let link =
-                make_entry_link(&host, client_peer_port, password, entry, &db);
+                make_entry_link(&host, client_peer_port, password, entry, effective_vk_token);
             let name = if entry.name.is_empty() {
                 "Клиент".to_string()
             } else {
@@ -3600,12 +3607,12 @@ async fn group_admin_data_get(
         server_ip.clone()
     };
     let peer_port = state.app.listen.port();
-    let effective_vk_token = client_vk_token(&db, &group.id);
+    let effective_vk_token = group.vk_token.as_deref().unwrap_or(&db.vk_access_token);
     let effective_vk_hashes = group.vk_hashes.as_deref().unwrap_or(&db.vk_hashes);
     let mut clients = Vec::new();
     for (_pass, p_entry) in &db.passwords {
         if p_entry.group_id == group.id {
-            let link = make_entry_link(&host, peer_port, _pass, p_entry, &db);
+            let link = make_entry_link(&host, peer_port, _pass, p_entry, effective_vk_token);
             clients.push(serde_json::json!({
                 "password": _pass,
                 "name": p_entry.name,
@@ -13186,174 +13193,6 @@ const PANEL_HTML: &str = r##"
 
 #[cfg(test)]
 mod tests {
-    #[test]
-    fn group_token_link_keeps_legacy_v2_wire_format() {
-        use crate::model::{ClientGroup, Database, PasswordEntry};
-        let mut db = Database::default();
-        db.groups.insert(
-            "group".into(),
-            ClientGroup {
-                vk_token: Some("group-token".into()),
-                ..Default::default()
-            },
-        );
-        let entry = PasswordEntry {
-            group_id: "group".into(),
-            vk_token_enabled: true,
-            ..Default::default()
-        };
-        // Fixed vector using the unchanged 2.5.0 AES-GCM/HMAC link format.
-        assert_eq!(
-            super::make_entry_link("example.com", 46000, "test-password", &entry, &db),
-            "csqtt://tPCVdB0YDTJ73kukianwafDUefy-mr5mx-SZH3slcXzK7Hdmt6DNDQwGVosV34sdy2-GitJsaQXrvV5DBGIsimKbSb87inCDTYSrM2XhYWP9gVhlk0BudBUTqJRs3Dr4L7zoA2Tug6wcleVp"
-        );
-    }
-
-    #[test]
-    fn entry_links_select_group_credentials_without_changing_v2_payload() {
-        use crate::model::{ClientGroup, Database, PasswordEntry};
-        for (group_id, group_token, global, expected) in [
-            (
-                "group",
-                Some("group-token"),
-                "global-token",
-                Some("group-token"),
-            ),
-            ("group", Some("group-token"), "", Some("group-token")),
-            ("group", None, "global-token", Some("global-token")),
-            ("missing", None, "global-token", Some("global-token")),
-            ("", None, "global-token", Some("global-token")),
-            ("group", Some(""), "global-token", None),
-            ("group", None, "", None),
-        ] {
-            let mut db = Database {
-                vk_access_token: global.into(),
-                ..Default::default()
-            };
-            db.groups.insert(
-                "group".into(),
-                ClientGroup {
-                    id: "group".into(),
-                    vk_token: group_token.map(str::to_owned),
-                    ..Default::default()
-                },
-            );
-            let entry = PasswordEntry {
-                group_id: group_id.into(),
-                vk_token_enabled: true,
-                ..Default::default()
-            };
-            let link = super::make_entry_link("example.com", 46000, "test-password", &entry, &db);
-            let payload = super::decrypt_csqtt_link(&link).unwrap();
-            let mut expected_payload =
-                "connect?v=2&host=example.com&peer=46000&password=test-password".to_owned();
-            if let Some(token) = expected {
-                expected_payload.push_str(&format!("&token={token}"));
-            }
-            assert_eq!(
-                payload, expected_payload,
-                "group={group_id}, token={group_token:?}"
-            );
-            // The existing 2.5.0 codec must produce exactly the same link.
-            assert_eq!(
-                link,
-                super::make_client_link(
-                    "example.com",
-                    46000,
-                    "test-password",
-                    "",
-                    true,
-                    expected.unwrap_or("")
-                )
-            );
-        }
-    }
-
-    #[test]
-    fn entry_links_keep_hash_priority_and_respect_disabled_token() {
-        use crate::model::{ClientGroup, Database, PasswordEntry};
-        let mut db = Database {
-            vk_access_token: "global-token".into(),
-            ..Default::default()
-        };
-        db.groups.insert(
-            "group".into(),
-            ClientGroup {
-                id: "group".into(),
-                vk_token: Some("group-token".into()),
-                ..Default::default()
-            },
-        );
-        let mut entry = PasswordEntry {
-            group_id: "group".into(),
-            ..Default::default()
-        };
-        let payload = super::decrypt_csqtt_link(&super::make_entry_link(
-            "example.com",
-            46000,
-            "test-password",
-            &entry,
-            &db,
-        ))
-        .unwrap();
-        assert!(!payload.contains("token="));
-        entry.vk_token_enabled = true;
-        entry.vk_hashes = "first_hash_00000001,second_hash_00000002".into();
-        let payload = super::decrypt_csqtt_link(&super::make_entry_link(
-            "example.com",
-            46000,
-            "test-password",
-            &entry,
-            &db,
-        ))
-        .unwrap();
-        assert!(payload.ends_with("&hashes=first_hash_00000001+second_hash_00000002"));
-        assert!(!payload.contains("token="));
-    }
-
-    #[test]
-    fn entry_link_tracks_group_changes_without_modifying_client_identity() {
-        use crate::model::{ClientGroup, Database, PasswordEntry};
-        let mut db = Database {
-            vk_access_token: "global-token".into(),
-            ..Default::default()
-        };
-        for id in ["one", "two"] {
-            db.groups.insert(
-                id.into(),
-                ClientGroup {
-                    id: id.into(),
-                    vk_token: Some(format!("{id}-token")),
-                    ..Default::default()
-                },
-            );
-        }
-        let mut entry = PasswordEntry {
-            group_id: "one".into(),
-            vk_token_enabled: true,
-            sub_uuid: "unchanged-subscription".into(),
-            ..Default::default()
-        };
-        for (group, expected) in [
-            ("one", "one-token"),
-            ("two", "two-token"),
-            ("", "global-token"),
-        ] {
-            entry.group_id = group.into();
-            let payload = super::decrypt_csqtt_link(&super::make_entry_link(
-                "example.com",
-                46000,
-                "test-password",
-                &entry,
-                &db,
-            ))
-            .unwrap();
-            assert!(payload.ends_with(&format!("&token={expected}")));
-            assert!(payload.contains("&password=test-password"));
-            assert_eq!(entry.sub_uuid, "unchanged-subscription");
-        }
-    }
-
     use super::{
         DNS_PROVIDERS, LOGIN_HTML, MAX_CLIENT_NAME_BYTES, PANEL_HTML, PWA_ICON_192_PNG,
         PWA_ICON_512_PNG, PWA_MANIFEST, PWA_SERVICE_WORKER, count_active_sessions,

@@ -1,8 +1,8 @@
-package com.csqtt.client
+package com.csqtt.client.ui.v2.screens.routing
 
 /** Exact package IDs only: never infer banking or routing from an app label/prefix. */
-internal object AppRoutingPresets {
-    val direct = """
+internal object V2AppPresets {
+    private val direct = """
         ru.rostel ru.gosuslugi.goskey ru.gosuslugi.dom com.avito.android
         com.vkontakte.android com.vk.im com.vk.vkvideo com.vk.music com.vk.calls
         ru.yandex.searchplugin ru.yandex.yandexmaps ru.yandex.yandexnavi ru.yandex.taxi
@@ -19,7 +19,7 @@ internal object AppRoutingPresets {
         ru.cian.main com.domclick.mortgage ru.drom ru.auto.ara
         ru.litres.android ru.instamart ru.sbcs.store ru.pyaterochka.app ru.tander.magnit com.icemobile.lenta.prod
     """.trimIndent().split(Regex("\\s+")).toSet()
-    val vpn = """
+    private val vpn = """
         com.android.chrome com.yandex.browser org.mozilla.firefox com.microsoft.emmx
         com.opera.browser com.opera.mini.native com.brave.browser com.sec.android.app.sbrowser
         org.telegram.messenger org.telegram.messenger.web com.google.android.youtube
@@ -32,15 +32,6 @@ internal object AppRoutingPresets {
         notion.id medium.reader com.patreon.android com.supercell.brawlstars com.supercell.clashofclans
     """.trimIndent().split(Regex("\\s+")).toSet()
 
-    /** Selection iteration order is the user's addition order, including after persistence. */
-    fun orderedPackages(alphabetical: List<String>, selection: Set<String>): List<String> {
-        val available = alphabetical.toSet()
-        return selection.filter { it in available } + alphabetical.filterNot { it in selection }
-    }
-
     fun merge(existing: Set<String>, installed: Set<String>, whitelist: Boolean): Set<String> =
         existing + (if (whitelist) vpn else direct).intersect(installed)
-
-    fun initial(existing: Set<String>, initialized: Boolean, installed: Set<String>, whitelist: Boolean): Set<String> =
-        if (initialized || existing.isNotEmpty()) existing else (if (whitelist) vpn else direct).intersect(installed)
 }

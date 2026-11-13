@@ -182,11 +182,7 @@ internal class VkAuthSession(
     private val onToken: (VkAuthPayload) -> Unit,
     private val onError: (String) -> Unit,
     private val onPhaseChange: (VkAuthPhase) -> Unit = {},
-    private val chooseAccount: Boolean = false,
-    private val acquireToken: suspend (String, String) -> Result<VkAuthPayload> = VkTokenScraper::scrape,
 ) {
-    private var preparingAccountChoice = chooseAccount
-
     private val mainHandler = Handler(Looper.getMainLooper())
 
     private var webView: WebView? = null
@@ -209,8 +205,6 @@ internal class VkAuthSession(
                 installTelevisionNavigation(v)
                 if (url.contains("access_token=")) {
                     handleUrl(url)
-                } else if (!preparingAccountChoice && phase == VkAuthPhase.LOGIN && isVkLoggedIn()) {
-                    switchToTokenPhase(v)
                 }
                 if (!uiReadyReported) {
                     uiReadyReported = true
@@ -227,22 +221,21 @@ internal class VkAuthSession(
             }
 
             override fun shouldOverrideUrlLoading(v: WebView, request: WebResourceRequest): Boolean {
-                // Authorization stays in this WebView, including when VK offers an app deep link.
-                if (request.url.scheme !in listOf("https", "http")) return true
                 val url = request.url.toString()
-                if (request.isForMainFrame && VkOAuthUrlPolicy.isCallback(url) && url.contains("access_token=")) {
+                if (url.contains("access_token=")) {
                     handleUrl(url)
                     return true
                 }
                 val path = request.url.path ?: ""
-                if (!preparingAccountChoice && phase == VkAuthPhase.LOGIN && (path.startsWith("/feed") || isVkLoggedIn())) {
+                if (phase == VkAuthPhase.LOGIN && (path.startsWith("/feed") || isVkLoggedIn())) {
                     switchToTokenPhase(v)
                     return true
                 }
                 return false
             }
             override fun shouldInterceptRequest(v: WebView, request: WebResourceRequest): WebResourceResponse? {
-                if (request.isForMainFrame && VkOAuthUrlPolicy.isCallback(request.url.toString())) {
+                val uri = request.url
+                if (uri.lastPathSegment == "blank.html") {
                     return WebResourceResponse(
                         "text/html",
                         "utf-8",
@@ -267,23 +260,7 @@ internal class VkAuthSession(
             onUiReady()
         }
 
-        if (chooseAccount) {
-            phase = VkAuthPhase.LOGIN
-            onPhaseChange(phase)
-            // Opening /login with the previous cookie just redirects to the same profile.
-            // Wait for deletion before navigation, and do not accept that old session meanwhile.
-            VkAuthWebViewManager.clearVkSessionCookies { cleared ->
-                if (!finished && webView === view) {
-                    preparingAccountChoice = false
-                    if (cleared) {
-                        view.clearHistory()
-                        view.loadUrl(CsqttConstants.VkAutoHash.VK_LOGIN_URL, mapOf("Cache-Control" to "no-cache"))
-                    } else {
-                        finishWithError("Не удалось открыть вход в другой аккаунт VK. Попробуйте ещё раз")
-                    }
-                }
-            }
-        } else if (isVkLoggedIn()) {
+        if (isVkLoggedIn()) {
             switchToTokenPhase(view)
         } else {
             phase = VkAuthPhase.LOGIN
@@ -340,7 +317,6 @@ internal class VkAuthSession(
     }
 
     private fun switchToTokenPhase(view: WebView) {
-        if (finished || preparingAccountChoice || phase == VkAuthPhase.TOKEN) return
         phase = VkAuthPhase.TOKEN
         onPhaseChange(phase)
         lastUrl = null
@@ -368,7 +344,7 @@ internal class VkAuthSession(
         kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
             if (finished) return@launch
             
-            val result = acquireToken(cookieString, userAgent)
+            val result = VkTokenScraper.scrape(cookieString, userAgent)
             
             mainHandler.post {
                 if (finished) return@post
@@ -408,15 +384,13 @@ internal class VkAuthSession(
                 return
             }
             if (System.currentTimeMillis() - startedAt > CsqttConstants.VkAutoHash.AUTH_TIMEOUT_MS) {
-                finishWithError("Превышено время ожидания входа в VK")
+                finishWithError("Тайм-аут ожидания access_token")
                 return
             }
 
             when (phase) {
                 VkAuthPhase.LOGIN -> {
-                    if (preparingAccountChoice) {
-                        // Ignore the previous session while its browser data is being cleared.
-                    } else if (isVkLoggedIn()) {
+                    if (isVkLoggedIn()) {
                         switchToTokenPhase(view)
                     } else {
                         val currentUrl = view.url.orEmpty()
@@ -448,8 +422,6 @@ internal class VkAuthSession(
     }
 
     private fun handleUrl(url: String) {
-        if (finished || preparingAccountChoice) return
-        if (!VkOAuthUrlPolicy.isCallback(url)) return
         val uri = runCatching { url.toUri() }.getOrNull()
         val raw = uri?.fragment ?: url.substringAfter("#", "").ifEmpty { url.substringAfter("?", "") }
         val fragment = raw.substringAfter("#").substringAfter("?")
@@ -469,7 +441,6 @@ internal class VkAuthSession(
     }
 
     private fun handleAccessToken(fragment: String) {
-        if (finished || preparingAccountChoice) return
         val clean = fragment.substringAfter('#').substringAfter('?')
         val params = parseFragmentParams(clean)
         val token = params["access_token"]
@@ -515,7 +486,6 @@ internal class VkAuthSession(
     }
 
     private fun repeatAuthorization() {
-        if (finished || preparingAccountChoice) return
         if (paused) {
             pendingAuthorizationRetry = true
             return

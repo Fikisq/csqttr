@@ -2,21 +2,22 @@ package com.csqtt.client.ui.v2.screens.routing
 
 import android.content.Context
 import android.content.pm.PackageManager
-import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
+import androidx.compose.ui.platform.testTag
+import com.csqtt.client.ui.v2.components.V2AdaptiveScreen
+import com.csqtt.client.ui.v2.components.LocalV2AdaptiveMetrics
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.SwapVert
+import androidx.compose.material.icons.outlined.Apps
+import androidx.compose.material.icons.outlined.Language
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -27,26 +28,25 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.painter.Painter
+import androidx.compose.ui.graphics.vector.rememberVectorPainter
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.graphics.drawable.toBitmap
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.csqtt.client.R
 import com.csqtt.client.SettingsStore
+import com.csqtt.client.RoutingScreenSnapshot
 import com.csqtt.client.TunnelManager
 import com.csqtt.client.ui.legacy.AppItem
 import com.csqtt.client.ui.v2.components.V2Card
-import com.csqtt.client.ui.v2.components.V2Chevron
+import com.csqtt.client.ui.v2.components.V2PillButton
+import com.csqtt.client.ui.v2.components.V2PillStyle
 import com.csqtt.client.ui.v2.components.V2TopBar
-import com.csqtt.client.ui.v2.components.V2AdaptiveScreen
-import com.csqtt.client.ui.v2.components.LocalV2AdaptiveMetrics
 import com.csqtt.client.ui.v2.design.V2Shapes
 import com.csqtt.client.ui.v2.design.V2Sizes
 import com.csqtt.client.ui.v2.design.V2Spacing
@@ -58,48 +58,34 @@ import kotlinx.coroutines.withContext
 private object V2AppCache {
     @Volatile
     var cachedList: List<AppItem>? = null
-    var labelCache: Map<String, Pair<String, String>> = emptyMap()
 }
 
 @Composable
-fun V2RoutingScreen(
+internal fun V2RoutingScreen(
     settingsStore: SettingsStore,
+    snapshot: RoutingScreenSnapshot,
     version: String,
     onSettings: () -> Unit,
     modifier: Modifier = Modifier,
     onVersionClick: (() -> Unit)? = null,
 ) {
     val context = LocalContext.current.applicationContext
-    val profile by settingsStore.activeProfile.collectAsStateWithLifecycle(0)
-    val appRoutingAll by settingsStore.appRoutingAll.collectAsStateWithLifecycle(null)
-    val showSystemApps by settingsStore.showSystemApps.collectAsStateWithLifecycle(false)
-    val presetsUsed by settingsStore.appPresetsUsed.collectAsStateWithLifecycle(emptySet())
     val scope = rememberCoroutineScope()
-    val colors = routingColors()
+    val colors = V2Theme.colors
 
     val serverRoutingActiveLive by TunnelManager.serverRoutingActive.collectAsStateWithLifecycle()
     val isServerRouting = serverRoutingActiveLive
-
-    val savedExcluded by settingsStore.excludedApps.collectAsStateWithLifecycle(
-        initialValue = SettingsStore.cachedExcludedApps ?: "",
-    )
-    val savedWhitelist by settingsStore.whitelistApps.collectAsStateWithLifecycle(
-        initialValue = SettingsStore.cachedWhitelistApps ?: "",
-    )
-    val isWhitelist by settingsStore.isWhitelist.collectAsStateWithLifecycle(
-        initialValue = SettingsStore.cachedIsWhitelist ?: false,
-    )
-    val templateDomainsEnabled by settingsStore.templateDomainsEnabled.collectAsStateWithLifecycle(
-        initialValue = SettingsStore.cachedTemplateDomainsEnabled ?: false,
-    )
-    val domainIsWhitelist by settingsStore.domainIsWhitelist.collectAsStateWithLifecycle(initialValue = false)
-    val directDomainsBlackStr by settingsStore.directDomainsBlack.collectAsStateWithLifecycle(
-        initialValue = SettingsStore.cachedDirectDomains ?: "",
-    )
-    val directDomainsWhiteStr by settingsStore.directDomainsWhite.collectAsStateWithLifecycle(initialValue = "")
-    val ipIsWhitelist by settingsStore.ipIsWhitelist.collectAsStateWithLifecycle(initialValue = false)
-    val directIpsBlackStr by settingsStore.directIpsBlack.collectAsStateWithLifecycle(initialValue = "")
-    val directIpsWhiteStr by settingsStore.directIpsWhite.collectAsStateWithLifecycle(initialValue = "")
+    val showSystemApps = snapshot.showSystemApps
+    val savedExcluded = snapshot.excludedApps
+    val savedWhitelist = snapshot.whitelistApps
+    val isWhitelist = snapshot.isWhitelist
+    val templateDomainsEnabled = snapshot.templateDomainsEnabled
+    val domainIsWhitelist = snapshot.domainIsWhitelist
+    val directDomainsBlackStr = snapshot.directDomainsBlack
+    val directDomainsWhiteStr = snapshot.directDomainsWhite
+    val ipIsWhitelist = snapshot.ipIsWhitelist
+    val directIpsBlackStr = snapshot.directIpsBlack
+    val directIpsWhiteStr = snapshot.directIpsWhite
 
     val templateDomains = remember {
         val text = runCatching {
@@ -123,52 +109,60 @@ fun V2RoutingScreen(
     }
 
     var appsList by remember { mutableStateOf(V2AppCache.cachedList.orEmpty()) }
-    var isAppsLoading by remember { mutableStateOf(V2AppCache.cachedList == null) }
-    var isMigrationReady by remember { mutableStateOf(false) }
+    var isAppsLoading by remember { mutableStateOf(false) }
+    var isMigrationReady by rememberSaveable { mutableStateOf(false) }
 
     var showAppsDialog by rememberSaveable { mutableStateOf(false) }
     var showDomainsDialog by rememberSaveable { mutableStateOf(false) }
     var showIpsDialog by rememberSaveable { mutableStateOf(false) }
     var showRulesTransferDialog by rememberSaveable { mutableStateOf(false) }
 
-    LaunchedEffect(Unit) {
-        withContext(Dispatchers.IO) { settingsStore.migrateLegacyWhitelistMode() }
-        isMigrationReady = true
+    LaunchedEffect(isMigrationReady) {
+        if (!isMigrationReady) {
+            withContext(Dispatchers.IO) { settingsStore.migrateLegacyWhitelistMode() }
+            isMigrationReady = true
+        }
     }
 
     // The app list with icons is only needed when the apps dialog is opened. Loading it lazily
     // keeps the routing tab light even on devices with hundreds of installed applications.
     LaunchedEffect(showAppsDialog) {
         if (!showAppsDialog) return@LaunchedEffect
-        // Keep cached rows visible, but refresh installed packages on every opening.
-        // No polling/background receiver; new installations appear on the next opening.
+        V2AppCache.cachedList?.let {
+            appsList = it
+            isAppsLoading = false
+            return@LaunchedEffect
+        }
         isAppsLoading = true
         val loadedApps = withContext(Dispatchers.IO) {
             val packageManager = context.packageManager
-            val previousLabels = V2AppCache.labelCache
-            val labels = mutableMapOf<String, Pair<String, String>>()
-            val locale = context.resources.configuration.locales.toLanguageTags()
             val apps = packageManager
-                .getInstalledApplications(0)
+                .getInstalledApplications(PackageManager.GET_META_DATA)
                 .asSequence()
                 .filter { app ->
-                    app.packageName != context.packageName
+                    app.packageName != context.packageName &&
+                        !app.packageName.contains("vkontakte") &&
+                        !app.packageName.contains("vk.calls")
                 }
                 .map { app ->
-                    val fingerprint = "${app.sourceDir}|$locale"
-                    val name = previousLabels[app.packageName]?.takeIf { it.first == fingerprint }?.second
-                        ?: runCatching { app.loadLabel(packageManager).toString() }.getOrDefault(app.packageName)
-                    labels[app.packageName] = fingerprint to name
                     AppItem(
-                        name = name,
+                        name = app.loadLabel(packageManager).toString(),
                         packageName = app.packageName,
-                        icon = null, // Visible rows load icons lazily; never delay mode selection.
+                        icon = runCatching {
+                            // Icons are shown at 40dp; decoding them at full intrinsic size
+                            // (often 192-432 px) for every installed app wasted ~100 MB.
+                            app.loadIcon(packageManager)
+                                .toBitmap(width = 96, height = 96)
+                                .asImageBitmap()
+                        }.getOrNull(),
                         isSystem = (app.flags and android.content.pm.ApplicationInfo.FLAG_SYSTEM) != 0,
                     )
                 }
-                .sortedWith(compareBy<AppItem> { it.name.lowercase() }.thenBy { it.packageName })
+                .sortedWith(compareBy<AppItem> { it.isSystem }.thenBy { it.name.lowercase() })
                 .toList()
-            V2AppCache.labelCache = labels
+            // Release the temporary full-size drawable bitmaps right away instead of
+            // keeping the transient spike in the native heap until the next GC.
+            Runtime.getRuntime().gc()
             apps
         }
         V2AppCache.cachedList = loadedApps
@@ -218,24 +212,20 @@ fun V2RoutingScreen(
                 }
             } else {
                 V2RoutingCard(
-                    badge = "APP",
+                    tag = "APP",
                     title = "Маршрутизация приложений",
-                    countLabel = if (appRoutingAll == true) "Все приложения в туннеле" else appsCountLabel(
+                    countLabel = appsCountLabel(
                         isWhitelist = isWhitelist,
                         blacklistSize = persistedBlacklist.size,
                         whitelistSize = persistedWhitelist.size,
                     ),
+                    action = "Список приложений",
+                    icon = rememberVectorPainter(Icons.Outlined.Apps),
                     onClick = { showAppsDialog = true },
                 )
                 V2RoutingCard(
-                    badge = "IP",
-                    title = "Маршрутизация по ip",
-                    countLabel = "Настроено ${directIpsList.size} ip",
-                    onClick = { showIpsDialog = true },
-                )
-                V2RoutingCard(
-                    badge = "DM",
-                    title = "Маршрутизация по доменам",
+                    tag = "DM",
+                    title = "Маршрутизация доменов",
                     countLabel = domainsCountLabel(
                         isWhitelist = domainIsWhitelist,
                         listSize = directDomainsList.size,
@@ -243,65 +233,55 @@ fun V2RoutingScreen(
                         templateSize = templateDomains.size,
                         customCount = directDomainsList.count { !templateDomains.contains(it) },
                     ),
+                    action = "Список доменов",
+                    icon = rememberVectorPainter(Icons.Outlined.Language),
                     onClick = { showDomainsDialog = true },
                 )
-                V2Card(
+                V2RoutingCard(
+                    tag = "IP",
+                    title = "Маршрутизация адресов",
+                    countLabel = if (ipIsWhitelist) {
+                        "С VPN: ${directIpsList.size} в туннеле"
+                    } else {
+                        "Без VPN: ${directIpsList.size} исключено"
+                    },
+                    action = "Список адресов",
+                    icon = painterResource(R.drawable.ic_ip),
+                    onClick = { showIpsDialog = true },
+                )
+                V2RoutingCard(
+                    tag = "transfer",
+                    title = "Импорт и экспорт правил",
+                    countLabel = "Резервное копирование и перенос настроек",
+                    action = "Импорт / экспорт",
+                    icon = rememberVectorPainter(Icons.Default.SwapVert),
                     onClick = { showRulesTransferDialog = true },
-                    color = colors.surface,
-                    contentPadding = PaddingValues(
-                        horizontal = V2Spacing.Lg,
-                        vertical = V2Spacing.Md,
-                    ),
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(min = ((layout.height - 56.dp - layout.gap * 4) / 4 - V2Spacing.Md * 2).coerceIn(48.dp, 180.dp)),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "Импорт и экспорт правил",
-                                style = MaterialTheme.typography.titleMedium,
-                                color = colors.textPrimary,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                            Text(
-                                text = "Резервное копирование и перенос настроек",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = colors.textMuted,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                        }
-                        V2Chevron()
-                    }
-                }
+                )
             }
         }
     }
 
-    if (showAppsDialog && isMigrationReady) {
-        androidx.compose.runtime.key(profile) {
+    if (showAppsDialog) {
         V2AppsRoutingDialog(
             appsList = appsList,
             isAppsLoading = isAppsLoading || !isMigrationReady,
             isWhitelist = isWhitelist,
             blacklist = persistedBlacklist,
             whitelist = persistedWhitelist,
-            presetsUsed = presetsUsed,
-            allAppsMode = appRoutingAll,
             showSystemApps = showSystemApps,
             onShowSystemAppsChange = { enabled -> scope.launch { settingsStore.saveShowSystemApps(enabled) } },
-            onClose = { black, white, modeWhite, used, allApps ->
+            onClose = { black, white, modeWhite ->
                 showAppsDialog = false
-                val modeChanged = modeWhite != isWhitelist || allApps != (appRoutingAll ?: (!isWhitelist && persistedBlacklist.isEmpty()))
-                val blackChanged = black.toList() != persistedBlacklist.toList()
-                val whiteChanged = white.toList() != persistedWhitelist.toList()
-                if (modeChanged || blackChanged || whiteChanged || used != presetsUsed) {
+                val modeChanged = modeWhite != isWhitelist
+                val blackChanged = black != persistedBlacklist
+                val whiteChanged = white != persistedWhitelist
+                val blackOrderChanged = black.toList() != persistedBlacklist.toList()
+                val whiteOrderChanged = white.toList() != persistedWhitelist.toList()
+                if (modeChanged || blackOrderChanged || whiteOrderChanged) {
                     scope.launch {
-                        settingsStore.saveAppRoutingSelection(black.joinToString(","), white.joinToString(","), modeWhite, used, profile, allApps)
+                        if (modeChanged) settingsStore.saveIsWhitelist(modeWhite)
+                        if (blackOrderChanged) settingsStore.saveExcludedApps(black.joinToString(","))
+                        if (whiteOrderChanged) settingsStore.saveWhitelistApps(white.joinToString(","))
                         if (modeChanged || blackChanged || whiteChanged) TunnelManager.reloadVpn()
                     }
                 }
@@ -309,7 +289,6 @@ fun V2RoutingScreen(
         )
     }
 
-    }
     if (showDomainsDialog) {
         V2DomainsRoutingDialog(
             isWhitelist = domainIsWhitelist,
@@ -367,12 +346,11 @@ fun V2RoutingScreen(
     }
 }
 
-private fun appsCountLabel(isWhitelist: Boolean, blacklistSize: Int, whitelistSize: Int): String =
-    if (isWhitelist) {
-        "В туннеле $whitelistSize прил."
-    } else {
-        "Настроено $blacklistSize прил."
-    }
+internal fun appsCountLabel(isWhitelist: Boolean, blacklistSize: Int, whitelistSize: Int): String = when {
+    isWhitelist -> "С VPN: $whitelistSize в туннеле"
+    blacklistSize > 0 -> "Без VPN: $blacklistSize исключено"
+    else -> "Все с VPN"
+}
 
 private fun domainsCountLabel(
     isWhitelist: Boolean,
@@ -381,72 +359,52 @@ private fun domainsCountLabel(
     templateSize: Int,
     customCount: Int,
 ): String = when {
-    isWhitelist -> "В туннеле $listSize доменов"
-    listSize == 0 -> "Настроено 0 доменов"
-    templateDomainsEnabled && customCount > 0 -> "Настроено ${templateSize + customCount} доменов"
-    templateDomainsEnabled -> "Настроено $listSize доменов (RU)"
-    else -> "Настроено $listSize доменов"
+    isWhitelist -> "С VPN: $listSize в туннеле"
+    listSize == 0 -> "Без VPN: 0 доменов исключено"
+    templateDomainsEnabled && customCount > 0 -> "Без VPN: $templateSize готовых + $customCount своих"
+    templateDomainsEnabled -> "Без VPN: $listSize (Готовый список RU)"
+    else -> "Без VPN: $listSize исключено"
 }
 
 @Composable
 private fun V2RoutingCard(
-    badge: String,
+    tag: String,
     title: String,
     countLabel: String,
+    action: String,
+    icon: Painter,
     onClick: () -> Unit,
 ) {
     val colors = routingColors()
     val layout = LocalV2AdaptiveMetrics.current
     V2Card(
-        modifier = Modifier.testTag("routing-card-$badge"),
-        onClick = onClick,
+        modifier = Modifier.testTag("routing-card-$tag"),
         color = colors.surface,
-        contentPadding = PaddingValues(V2Spacing.Md),
-        contentModifier = Modifier.heightIn(min = ((layout.height - 56.dp - layout.gap * 4) / 4).coerceIn(96.dp, 208.dp)),
-        verticalArrangement = Arrangement.Center,
+        contentPadding = PaddingValues(V2Spacing.Lg),
+        verticalArrangement = Arrangement.spacedBy(V2Spacing.Md),
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(V2Spacing.Md),
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(42.dp)
-                    .clip(V2Shapes.Pill)
-                    .background(colors.contrast),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    text = badge,
-                    style = MaterialTheme.typography.labelSmall,
-                    fontWeight = FontWeight.Normal,
-                    color = colors.onContrast,
-                )
-            }
+        Column(verticalArrangement = Arrangement.spacedBy(V2Spacing.Xs)) {
             Text(
                 text = title,
                 style = MaterialTheme.typography.titleMedium,
                 color = colors.textPrimary,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f),
             )
-            V2Chevron()
-        }
-        Spacer(modifier = Modifier.height(V2Spacing.Xs))
-        Box(
-            modifier = Modifier
-                .clip(V2Shapes.Pill)
-                .background(colors.surfaceElevated)
-                .padding(horizontal = 12.dp, vertical = 6.dp),
-        ) {
             Text(
                 text = countLabel,
-                style = MaterialTheme.typography.labelMedium,
+                style = MaterialTheme.typography.bodySmall,
                 color = colors.textSecondary,
             )
         }
+        V2PillButton(
+            text = action,
+            onClick = onClick,
+            modifier = Modifier.fillMaxWidth().border(1.dp, colors.outline, V2Shapes.Pill),
+            iconPainter = icon,
+            style = V2PillStyle.Outline,
+            height = layout.buttonHeight.coerceAtLeast(48.dp),
+            shape = V2Shapes.Pill,
+            maxLines = 2,
+        )
     }
 }
 

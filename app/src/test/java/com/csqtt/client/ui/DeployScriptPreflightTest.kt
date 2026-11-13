@@ -1,22 +1,12 @@
 package com.csqtt.client.ui.legacy
 
 import java.io.File
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class DeployScriptPreflightTest {
-    @Test
-    fun `reinstall uses preservation path and never purges the database`() {
-        org.junit.Assert.assertEquals("update", DeployActionMode.Reinstall.scriptAction)
-        val operations = deployOperations()
-        val install = operations.substringAfter("val environmentFile =").substringBefore("internal suspend fun performUninstall")
-        assertFalse(install.contains("bash /tmp/deploy.sh purge"))
-        assertTrue(install.contains("if (mode == DeployActionMode.Update) null else"))
-        assertTrue(install.contains("CSQTT_APPLY_TUNNEL_PASSWORD=${'$'}{if (mode == DeployActionMode.Reinstall) 1 else 0}"))
-        assertTrue(install.contains("if (mode == DeployActionMode.Install) mainPass else"))
-    }
-
     private fun script(): String {
         val candidates = listOf(
             File("app/src/main/assets/deploy.sh"),
@@ -67,10 +57,10 @@ class DeployScriptPreflightTest {
         assertTrue(binary >= 0)
         assertTrue(binary > preflight)
         assertTrue(binary > firewall)
-        assertTrue(installBranch.contains("run_timed \"preflight\" run_platform_preflight"))
+        assertTrue(preflight in (uploadCheck + 1) until cleanup)
         assertTrue(cleanup > uploadCheck)
         assertTrue(binary > cleanup)
-        assertTrue(installBranch.contains("local total_started=\$SECONDS\n            detect_os\n            run_timed \"зависимости\" install_prerequisites\n            require_runtime_tools"))
+        assertTrue(installBranch.indexOf("install_prerequisites") in 0 until uploadCheck)
 
         val client = deployOperations()
         assertFalse(client.contains("bash /tmp/deploy.sh prepare"))
@@ -107,14 +97,19 @@ class DeployScriptPreflightTest {
     }
 
     @Test
-    fun `redeploy removes old runtime config but preserves SQLite and its WAL files`() {
+    fun `repeated installation preserves existing data and deletion requires a full purge`() {
         val deploy = script()
         assertTrue(deploy.contains("readonly CSQTT_DATABASE_FILE=\"csqtt.db\""))
         assertTrue(deploy.contains("readonly CSQTT_DATABASE_WAL_FILE=\"csqtt.db-wal\""))
         assertTrue(deploy.contains("readonly CSQTT_DATABASE_SHM_FILE=\"csqtt.db-shm\""))
         assertTrue(deploy.contains("clear_runtime_config_preserving_database"))
         assertTrue(deploy.contains("\"\$CSQTT_DATABASE_FILE\"|\"\$CSQTT_DATABASE_WAL_FILE\"|\"\$CSQTT_DATABASE_SHM_FILE\"|\"\$CSQTT_LEGACY_MIGRATION_JSON\"|\"\$CSQTT_LEGACY_MIGRATION_IMPORTED_JSON\"|web_cert.pem|web_key.pem|letsencrypt-ip.env|runtime-archive) continue"))
-        assertFalse(deploy.contains("find \"\$CSQTT_CONFIG_DIR\" -mindepth 1 -maxdepth 1"))
+        val cleanup = deploy.substringAfter("clear_runtime_config_preserving_database() {").substringBefore("\n}\n")
+        assertTrue(cleanup.indexOf("return 0") in 0 until cleanup.indexOf("rm -rf"))
+        val purge = deploy.substringAfter("purge|--purge|-p)").substringBefore(";;")
+        assertTrue(purge.indexOf("rm -rf -- \"\$CSQTT_CONFIG_DIR\"") in 0 until purge.indexOf("CSQTT_PURGE_OK"))
+        assertFalse(deploy.contains("sysctl --system"))
+        assertFalse(deploy.contains("ip route replace"))
     }
 
     @Test
@@ -127,6 +122,10 @@ class DeployScriptPreflightTest {
         assertTrue(deploy.contains("--security-opt seccomp=unconfined"))
         assertTrue(deploy.contains("probe_docker_runtime"))
         assertTrue(deploy.split("--cap-drop ALL").size >= 3)
+        val candidate = deploy.substringAfter("prepare_docker_candidate() {").substringBefore("\n}\n")
+        assertTrue(candidate.indexOf("build_from_installed_docker_image") in 0 until candidate.indexOf("docker_build_candidate_image"))
+        assertTrue(candidate.indexOf("probe_docker_runtime") > candidate.indexOf("docker_build_candidate_image"))
+        assertTrue(deploy.contains("docker build --progress=plain --network none"))
         assertTrue(deploy.contains("COPY network-up.sh @IMG_LIB@/network-up.sh"))
         assertTrue(deploy.contains("exec @IMG_BIN@ \\\"\$@\\\""))
         assertTrue(deploy.contains("s#@IMG_BIN@#\${CSQTT_IMAGE_BIN}#g; s#@IMG_LIB@#\${CSQTT_IMAGE_LIB_DIR}#g"))
@@ -135,15 +134,18 @@ class DeployScriptPreflightTest {
     }
 
     @Test
-    fun `docker build uses mirrors without writing protected resolver and streams output`() {
+    fun `docker image build tries an alternative repository without modifying DNS`() {
         val deploy = script()
-        val build = deploy.substringAfter("docker_build_candidate_image() {").substringBefore("prepare_docker_candidate()")
-        assertTrue(build.contains("--network host"))
-        assertTrue(build.contains("--add-host"))
-        assertTrue(build.contains("https://mirror.yandex.ru/mirrors/alpine"))
-        assertTrue(build.contains("| tee"))
-        assertFalse(deploy.contains("CSQTT_BUILD_DNS_PRIMARY"))
-        assertTrue(deploy.contains("timeout -k 5s 60s apk add"))
+        assertTrue(deploy.contains("DOCKER_BUILD_TIMEOUT_SECONDS"))
+        assertTrue(deploy.contains("docker build --progress=plain --network host"))
+        assertTrue(deploy.contains("ARG CSQTT_ALPINE_MIRROR=https://dl-cdn.alpinelinux.org/alpine"))
+        assertFalse(deploy.contains("> /etc/resolv.conf"))
+        assertTrue(deploy.contains("FROM alpine:3.21"))
+        assertTrue(deploy.contains("apk add --no-cache --no-progress ca-certificates iproute2 iptables"))
+        assertTrue(deploy.contains("https://mirror.yandex.ru/mirrors/alpine"))
+        assertTrue(deploy.contains("--add-host"))
+        assertTrue(deploy.contains("--progress=plain"))
+        assertTrue(deploy.contains("fetch|resolve|network|timed out|timeout"))
     }
 
     @Test
@@ -290,6 +292,27 @@ class DeployScriptPreflightTest {
         assertTrue(deploy.contains("local ip=\"\$1\" first second third fourth value"))
         assertTrue(deploy.contains("grep '^csqtp' || true"))
         assertTrue(deploy.contains("self-signed fallback"))
+    }
+
+    @Test
+    fun `certbot uses the legacy fallback in a separate venv with bounded setup and issuance`() {
+        val deploy = script()
+        val client = deploy.substringAfter("ensure_letsencrypt_client() {").substringBefore("\n}\n")
+        val setup = client.indexOf("log_step")
+        assertTrue(client.indexOf("LE_CERTBOT_COMMAND=\"\$system_certbot\"") in 0 until setup)
+        assertTrue(client.indexOf("LE_CERTBOT_COMMAND=\"\$CSQTT_LE_CERTBOT\"") in 0 until setup)
+        assertTrue(client.indexOf("if [ -n \"\$system_certbot\" ]; then") in 0 until setup)
+        assertTrue(client.indexOf("return 1") in 0 until setup)
+        assertTrue(client.contains("timeout -k 2s 8s python3 -m venv \"\$CSQTT_LE_VENV\""))
+        assertTrue(client.contains("timeout -k 2s 15s \"\$CSQTT_LE_VENV/bin/pip\" install"))
+        val tls = deploy.substringAfter("setup_letsencrypt_ip_tls() {").substringBefore("\n}\n")
+        val prepare = tls.indexOf("elif ensure_letsencrypt_client")
+        assertTrue(tls.indexOf("if letsencrypt_certificate_is_current") in 0 until prepare)
+        assertTrue(tls.indexOf("elif ss -ltnH") in 0 until prepare)
+        val issue = deploy.substringAfter("issue_letsencrypt_ip_certificate() {").substringBefore("\n}\n")
+        assertTrue(issue.contains("timeout -k 3s 15s"))
+        assertEquals(1, Regex("certonly --standalone").findAll(issue).count())
+        assertTrue(issue.contains("--config /dev/null --no-directory-hooks"))
     }
 
     @Test

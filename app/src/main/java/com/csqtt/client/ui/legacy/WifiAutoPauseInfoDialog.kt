@@ -41,12 +41,12 @@ internal fun WifiAutoPauseInfoDialog(onDismiss: () -> Unit) {
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 Text(
-                    com.csqtt.client.WifiCopy.TITLE,
+                    "Автопауза при Wi-Fi",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                 )
                 Text(
-                    com.csqtt.client.WifiCopy.HELP,
+                    "Когда функция включена, правило из меню «Wi-Fi списки» определяет, в каких сетях CSQTT должен работать или быть на паузе. В белом списке VPN работает только в указанных SSID; в чёрном списке — ставится на паузу только в указанных SSID. На мобильной сети туннель работает как обычно.\n\nПо умолчанию функция выключена.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     lineHeight = 16.sp,

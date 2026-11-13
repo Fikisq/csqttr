@@ -14,15 +14,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalView
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.unit.Density
-import com.csqtt.client.UiScale
+import com.csqtt.client.BrandDarkColorScheme
+import com.csqtt.client.BrandLightColorScheme
 import androidx.core.view.WindowCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
-import com.csqtt.client.BrandDarkColorScheme
-import com.csqtt.client.BrandLightColorScheme
 
 private fun Context.findActivity(): Activity? = when (this) {
     is Activity -> this
@@ -31,7 +28,24 @@ private fun Context.findActivity(): Activity? = when (this) {
 }
 
 private fun v2ColorScheme(colors: V2Colors, dark: Boolean) =
-    if (colors == V2ClassicOriginalColors || colors == V2ClassicLightColors) {
+    if (colors == V2CsqttrLightColors) {
+        BrandLightColorScheme.copy(
+            background = colors.background,
+            surface = colors.surface,
+            surfaceVariant = colors.surfaceElevated,
+            surfaceBright = colors.surface,
+            surfaceDim = colors.surfaceElevated,
+            surfaceContainerLowest = colors.surface,
+            surfaceContainerLow = colors.background,
+            surfaceContainer = colors.field,
+            surfaceContainerHigh = colors.surfaceElevated,
+            surfaceContainerHighest = colors.surfaceElevated,
+            outlineVariant = colors.outline,
+            error = colors.error,
+            onError = colors.onDanger,
+            surfaceTint = Color.Transparent,
+        )
+    } else if (colors == V2ClassicOriginalColors || colors == V2ClassicLightColors) {
         (if (dark) BrandDarkColorScheme else BrandLightColorScheme).copy(
             error = colors.error,
             onError = colors.onDanger,
@@ -97,13 +111,15 @@ private fun v2ColorScheme(colors: V2Colors, dark: Boolean) =
 @Composable
 fun CsqttV2Theme(
     darkTheme: Boolean = true,
-    themePalette: String? = null,
-    uiScalePercent: Int = 100,
+    themePalette: String? = V2DarkPalette.ORIGINAL,
     content: @Composable () -> Unit,
 ) {
-    val colors = if (darkTheme) v2DarkColorsForPalette(themePalette)
-        else if (themePalette in setOf(V2DarkPalette.ORIGINAL, V2DarkPalette.SOFT)) V2ClassicLightColors
-        else V2LightColors
+    val colors = when {
+        darkTheme -> v2DarkColorsForPalette(themePalette)
+        themePalette == V2DarkPalette.ORIGINAL -> V2CsqttrLightColors
+        themePalette == V2DarkPalette.HISTORICAL -> V2HistoricalLightColors
+        else -> V2LightColors
+    }
     val colorScheme = remember(darkTheme, colors) { v2ColorScheme(colors, darkTheme) }
     val view = LocalView.current
     val activity = view.context.findActivity()
@@ -135,11 +151,7 @@ fun CsqttV2Theme(
         }
     }
 
-    val density = LocalDensity.current
-    val scaledDensity = remember(density, uiScalePercent) {
-        Density(density.density * UiScale.normalize(uiScalePercent) / 100f, density.fontScale)
-    }
-    CompositionLocalProvider(LocalV2Colors provides colors, LocalDensity provides scaledDensity) {
+    CompositionLocalProvider(LocalV2Colors provides colors) {
         MaterialTheme(
             colorScheme = colorScheme,
             typography = V2Typography,
@@ -155,8 +167,8 @@ fun CsqttV2Theme(
  */
 @Composable
 fun CsqttV2Colors(darkTheme: Boolean, content: @Composable () -> Unit) {
-    val colors = if (darkTheme) V2ClassicOriginalColors else V2ClassicLightColors
-    val colorScheme = remember(darkTheme, colors) { v2ColorScheme(colors, darkTheme) }
+    val colors = if (darkTheme) v2DarkColorsForPalette("nordic_slate") else V2LightColors
+    val colorScheme = remember(darkTheme) { v2ColorScheme(colors, darkTheme) }
     CompositionLocalProvider(LocalV2Colors provides colors) {
         MaterialTheme(
             colorScheme = colorScheme,

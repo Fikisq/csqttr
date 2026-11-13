@@ -90,7 +90,7 @@ fun V2WebPanelInfoDialog(onDismiss: () -> Unit) {
                     text = "Веб-панель управления",
                     style = MaterialTheme.typography.titleLarge.copy(
                         fontFamily = V2DisplayFamily,
-                        fontWeight = FontWeight.Normal,
+                        fontWeight = FontWeight.Bold,
                         fontSize = 20.sp,
                     ),
                     color = colors.textPrimary,

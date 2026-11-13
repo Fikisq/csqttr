@@ -5,9 +5,7 @@ param(
     [string]$Mode,
     [string]$Root,
     [ValidateSet("arm64-v8a", "armeabi-v7a", "x86_64")]
-    [string[]]$Abis = @("arm64-v8a", "armeabi-v7a", "x86_64"),
-    [ValidateSet("rust-client/build_so.bat", "rust-client/build_android_wsl.sh")]
-    [string]$Producer = "rust-client/build_so.bat"
+    [string[]]$Abis = @("arm64-v8a", "armeabi-v7a", "x86_64")
 )
 
 Set-StrictMode -Version Latest
@@ -24,6 +22,7 @@ $cargoTomlPath = Join-Path $projectRoot "rust-client\Cargo.toml"
 $cargoLockPath = Join-Path $projectRoot "rust-client\Cargo.lock"
 $marker = "CSQTT_RUST_NATIVE_PRODUCTION_V1"
 $schema = "csqtt.native-client-provenance.v3"
+$producer = "rust-client/build_so.bat"
 $transport = "rust-turn-sans-io-rfc8656-channeldata"
 $transportMarker = "CSQTT_RUST_TURN_SANS_IO_V1"
 $nativeCoreAbi = 1
@@ -91,7 +90,6 @@ function Get-BuildInputHash {
     $entries = @(
         (Join-Path $projectRoot "rust-client\build_so.bat"),
         (Join-Path $projectRoot "rust-client\build_android_abis.ps1"),
-        (Join-Path $projectRoot "rust-client\build_android_wsl.sh"),
         (Join-Path $projectRoot "rust-client\Cargo.toml"),
         (Join-Path $projectRoot "rust-client\Cargo.lock"),
         (Join-Path $projectRoot "rust-client"),
@@ -327,7 +325,7 @@ catch {
 
 if ($manifest.schema -ne $schema -or
     $manifest.marker -ne $marker -or
-    $manifest.producer -notin @("rust-client/build_so.bat", "rust-client/build_android_wsl.sh") -or
+    $manifest.producer -ne $producer -or
     $manifest.runtime -ne "rust" -or
     $manifest.buildSystem -ne "cargo-ndk" -or
     $manifest.profile -ne "release" -or

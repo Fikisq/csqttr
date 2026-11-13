@@ -50,8 +50,8 @@ import com.csqtt.client.ConnectionSource
 import com.csqtt.client.ConnectionStartBlocker
 import com.csqtt.client.ConnectionStartPolicy
 import com.csqtt.client.CsqttConstants
+import com.csqtt.client.GoobyMode
 import com.csqtt.client.R
-import com.csqtt.client.GoobyPolicy
 import com.csqtt.client.SettingsStore
 import com.csqtt.client.StoredSecretState
 import com.csqtt.client.TunnelAuthSnapshot
@@ -59,6 +59,7 @@ import com.csqtt.client.TunnelManager
 import com.csqtt.client.TunnelService
 import com.csqtt.client.VkHashValidationCodec
 import com.csqtt.client.newTunnelSessionId
+import com.csqtt.client.ManualHashGroup
 import com.csqtt.client.resolveConnectionSource
 import com.csqtt.client.showRaisedToast
 import com.csqtt.client.ui.legacy.components.CsqttScreen
@@ -91,8 +92,7 @@ internal fun ConnectionTab(
     val workersPerHash by settingsStore.workersPerHash.collectAsStateWithLifecycle(initialValue = 18)
     val sni by settingsStore.sni.collectAsStateWithLifecycle(initialValue = "")
     val turnTransport by settingsStore.turnTransport.collectAsStateWithLifecycle(initialValue = CsqttConstants.Tunnel.DEFAULT_TURN_TRANSPORT)
-    val goobyStrategy by settingsStore.goobyStrategy.collectAsStateWithLifecycle(GoobyPolicy.DEFAULT_STRATEGY)
-    val goobyEnabled by settingsStore.goobyEnabled.collectAsStateWithLifecycle(initialValue = false)
+    val goobyMode by settingsStore.goobyMode.collectAsStateWithLifecycle(GoobyMode.OFF)
     val srtpMode by settingsStore.srtpMode.collectAsStateWithLifecycle(initialValue = SettingsStore.cachedSrtpMode ?: CsqttConstants.SrtpMode.DEFAULT)
     val customTurnIps by settingsStore.customTurnIps.collectAsStateWithLifecycle(initialValue = "")
     val manualPortsEnabled by settingsStore.manualPortsEnabled.collectAsStateWithLifecycle(initialValue = false)
@@ -110,9 +110,8 @@ internal fun ConnectionTab(
     var pendingStartAfterVpnPermission by remember { mutableStateOf(false) }
 
     val parsedLink = remember(csqttLink) { parseCsqttLink(csqttLink) }
-    val linkHashesRemoved by settingsStore.linkHashesRemoved.collectAsStateWithLifecycle(initialValue = emptySet())
-    // the owner's hashes still in use: the ones the participant took out do not count
-    val linkHashes = parsedLink?.hashes.orEmpty().filterNot { it in linkHashesRemoved }
+    val manualHashGroup by settingsStore.manualHashGroup.collectAsStateWithLifecycle(ManualHashGroup.Owner)
+    val linkHashes = parsedLink?.hashes.orEmpty()
     val linkTokenActive = csqttLinkMode && parsedLink?.vkAccessToken?.isNotEmpty() == true
     val rawManualHashes = remember(vkHashes) {
         vkHashes.split(Regex("[,\\s\\n]+"))
@@ -140,6 +139,7 @@ internal fun ConnectionTab(
         autoHashMode = autoHashMode,
         storedTokenPresent = vkTokenActive,
         manualHashCount = manualHashes.size,
+        manualLinkGroup = manualHashGroup.takeIf { linkHashes.isNotEmpty() },
     )
     val peerPortValid = !manualPortsEnabled || serverPeerPort in 1..65535
     val trimmedPeer = peer.trim()
@@ -174,8 +174,7 @@ internal fun ConnectionTab(
             putExtra("client_ids", activeClientIds)
             putExtra("obfs_mode", CsqttConstants.Tunnel.DEFAULT_OBFS_MODE)
             putExtra("turn_transport", turnTransport)
-            putExtra("gooby_enabled", goobyEnabled)
-            putExtra("gooby_strategy", goobyStrategy)
+            putExtra(GoobyMode.EXTRA, goobyMode.storedValue)
             putExtra("srtp_mode", srtpMode)
             putExtra("custom_turn_ips", customTurnIps)
             putExtra("generation_id", generationId)
@@ -263,8 +262,6 @@ internal fun ConnectionTab(
     }
 
     CsqttScreen {
-        com.csqtt.client.ui.WifiDiscoveryCard(settingsStore)
-        com.csqtt.client.ui.WifiConnectionStatus(settingsStore, tunnelRunning, autoPausedForWifi)
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -362,9 +359,6 @@ private fun TunnelConnectionPanel(
             )
 
             TunnelUptimeText(tunnelRunning = tunnelRunning || autoPausedForWifi || tunnelStopping)
-            if (tunnelRunning && !autoPausedForWifi && !tunnelStopping) {
-                com.csqtt.client.ui.TunnelTrafficSummary()
-            }
 
             // «Экономия батареи» in force: said under the status, where the user looks
             val batterySaving by BatterySaver.active.collectAsStateWithLifecycle()

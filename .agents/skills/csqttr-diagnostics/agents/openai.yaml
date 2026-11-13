@@ -1,6 +1,0 @@
-interface:
-  display_name: "CSQTTR: диагностика"
-  short_description: "Проверка RAM, CPU и батареи с сохранением профилей"
-  default_prompt: "Используй $csqttr-diagnostics для согласованной проверки CSQTTR. Сохрани профили и после проверки отключи беспроводной ADB."
-policy:
-  allow_implicit_invocation: false

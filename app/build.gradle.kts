@@ -72,7 +72,7 @@ android {
         applicationId = "csqtt.quic.amurcanov"
         minSdk = 26
         targetSdk = 37
-        versionCode = 250
+        versionCode = 238
         versionName = "2.5.3"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
@@ -107,11 +107,6 @@ android {
 
     buildTypes {
         getByName("debug") {
-            if (providers.gradleProperty("csqtt.compactApk").orNull == "true") {
-                isMinifyEnabled = true
-                isShrinkResources = true
-                proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-            }
             applicationIdSuffix = providers.gradleProperty("csqtt.debugApplicationIdSuffix")
                 .getOrElse(".forktest")
             manifestPlaceholders["csqttDebugAppLabel"] = providers.gradleProperty("csqtt.debugAppLabel")
@@ -134,9 +129,6 @@ android {
 
     packaging {
         jniLibs {
-            excludes += "**/x86/**"
-            // ABI splits alone do not filter the universal APK.
-            (supportedAbis - selectedAbis.toSet()).forEach { excludes += "**/$it/**" }
             useLegacyPackaging = true
             keepDebugSymbols += "**/libclient.so"
             keepDebugSymbols += "**/libandroidx.graphics.path.so"
@@ -165,16 +157,6 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
         encoding = "UTF-8"
-    }
-
-    androidResources {
-        // Bundle selected VPS architectures; others retain verified download/cache support.
-        val bundled = providers.gradleProperty("csqtt.bundleServerCores").orNull.orEmpty()
-        val architectures = if (bundled == "true") listOf("amd64", "arm64", "armv7")
-            else bundled.split(',').filter { it.isNotBlank() }
-        require(architectures.all { it in listOf("amd64", "arm64", "armv7") })
-        ignoreAssetsPattern = listOf("amd64", "arm64", "armv7")
-            .filter { it !in architectures }.joinToString(":") { "csqtt-linux-$it" }
     }
 
     sourceSets {

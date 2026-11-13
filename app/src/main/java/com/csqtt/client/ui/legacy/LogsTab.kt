@@ -29,6 +29,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
@@ -57,7 +60,26 @@ import androidx.compose.foundation.BorderStroke
 
 @Composable
 fun LogsTab(settingsStore: SettingsStore) {
+    val loggingEnabled by settingsStore.loggingEnabled.collectAsStateWithLifecycle(initialValue = true)
+    val scope = rememberCoroutineScope()
+
     CsqttScreen {
+        AppSectionCard(
+            contentPadding = PaddingValues(horizontal = CsqttSpacing.Md, vertical = CsqttSpacing.Xs),
+            verticalArrangement = Arrangement.spacedBy(CsqttSpacing.None),
+        ) {
+            CsqttSettingRow(
+                title = stringResource(R.string.logs_enabled),
+                checked = loggingEnabled,
+                onCheckedChange = { enabled ->
+                    TunnelManager.isLoggingEnabled = enabled
+                    scope.launch {
+                        settingsStore.saveLoggingEnabled(enabled)
+                    }
+                },
+            )
+        }
+
         Surface(
             modifier = Modifier
                 .fillMaxWidth()
@@ -79,10 +101,13 @@ private fun LogsTerminal() {
     val copiedMessage = stringResource(R.string.logs_copied)
     val isDeploying by DeployManager.isDeploying.collectAsStateWithLifecycle()
 
-    LaunchedEffect(currentLogs.size, isDeploying) {
-        if (isDeploying) {
-            val latestDeployIndex = currentLogs.indexOfLast { it.key.startsWith("deploy_") }
-            if (latestDeployIndex >= 0) listState.animateScrollToItem(latestDeployIndex)
+    val latestDeployIndex = if (isDeploying) currentLogs.indexOfLast { it.key.startsWith("deploy_") } else -1
+    val latestDeployKey = currentLogs.getOrNull(latestDeployIndex)?.key
+    var lastFollowedKey by rememberSaveable { mutableStateOf<String?>(null) }
+    LaunchedEffect(latestDeployKey) {
+        if (latestDeployKey != null && latestDeployKey != lastFollowedKey) {
+            listState.scrollToItem(latestDeployIndex)
+            lastFollowedKey = latestDeployKey
         }
     }
 

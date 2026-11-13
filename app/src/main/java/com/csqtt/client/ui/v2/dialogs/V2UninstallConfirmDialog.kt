@@ -32,7 +32,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -108,7 +107,7 @@ fun V2UninstallConfirmDialog(
                     text = title,
                     style = MaterialTheme.typography.titleLarge.copy(
                         fontFamily = V2DisplayFamily,
-                        fontWeight = FontWeight.Normal,
+                        fontWeight = FontWeight.Bold,
                         fontSize = 20.sp,
                     ),
                     color = colors.textPrimary,
@@ -135,7 +134,7 @@ fun V2UninstallConfirmDialog(
                 text = "Введите «да» для подтверждения:",
                 style = MaterialTheme.typography.bodyMedium.copy(
                     fontFamily = V2BodyFamily,
-                    fontWeight = FontWeight.Normal,
+                    fontWeight = FontWeight.Bold,
                     fontSize = 14.sp,
                 ),
                 color = colors.textPrimary,
@@ -145,7 +144,6 @@ fun V2UninstallConfirmDialog(
                 value = confirmText,
                 onValueChange = { confirmText = it },
                 placeholder = "Введите «да»",
-                modifier = Modifier.testTag("uninstall-confirm-input"),
                 singleLine = true,
             )
 

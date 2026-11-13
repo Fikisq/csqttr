@@ -13,6 +13,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -33,6 +34,7 @@ fun CsqttSettingRow(
     enabled: Boolean = true,
     onInfoClick: (() -> Unit)? = null,
     infoContentDescription: String = "Подробнее",
+    titleMaxLines: Int = 1,
 ) {
     val interactionModifier = if (onCheckedChange == null) {
         Modifier
@@ -65,9 +67,9 @@ fun CsqttSettingRow(
                     text = title,
                     style = MaterialTheme.typography.bodyLarge,
                     color = if (enabled) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f),
-                    maxLines = 1,
+                    maxLines = titleMaxLines,
                     overflow = TextOverflow.Ellipsis,
-                    softWrap = false,
+                    softWrap = titleMaxLines > 1,
                 )
                 if (onInfoClick != null) {
                     IconButton(
@@ -95,8 +97,13 @@ fun CsqttSettingRow(
                 )
             }
         }
+        val colors = MaterialTheme.colorScheme
         Switch(
             checked = checked,
+            colors = SwitchDefaults.colors(
+                uncheckedTrackColor = colors.surfaceVariant,
+                disabledUncheckedTrackColor = colors.surfaceVariant.copy(alpha = 0.5f),
+            ),
             onCheckedChange = null,
             enabled = enabled,
             modifier = Modifier.padding(start = CsqttSpacing.Xs),

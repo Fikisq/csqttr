@@ -147,7 +147,7 @@ object CsqttConstants {
                 "&response_type=token" +
                 "&revoke=1" +
                 "&v=5.199"
-        const val VK_LOGIN_URL = "https://m.vk.ru/login"
+        const val VK_LOGIN_URL = "https://vk.ru/"
         const val API_METHOD_BASE_URL = "https://api.vk.ru/method/"
         const val API_VERSION = "5.199"
 
@@ -175,9 +175,10 @@ object CsqttConstants {
         const val PALETTE_ESPRESSO = "espresso"
         const val PALETTE_FOREST = "forest"
 
-        /** The app's look: the classic interface (default) or the V2 redesign. */
         const val DESIGN_CLASSIC = "classic"
         const val DESIGN_V2 = "v2"
+        const val DESIGN_OLD = "old"
+        val DESIGNS = setOf(DESIGN_CLASSIC, DESIGN_V2, DESIGN_OLD)
     }
 
     object Links {

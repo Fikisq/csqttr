@@ -139,7 +139,7 @@ fun V2DeploySecretsDialog(
                         text = "Авторизация",
                         style = MaterialTheme.typography.titleMedium.copy(
                             fontFamily = V2BodyFamily,
-                            fontWeight = FontWeight.Normal,
+                            fontWeight = FontWeight.Bold,
                             fontSize = 18.sp,
                         ),
                         color = colors.textPrimary,
@@ -169,7 +169,7 @@ fun V2DeploySecretsDialog(
                 text = "Пароль подключения к туннелю",
                 style = MaterialTheme.typography.bodySmall.copy(
                     fontFamily = V2BodyFamily,
-                    fontWeight = FontWeight.Normal,
+                    fontWeight = FontWeight.SemiBold,
                     fontSize = 13.sp,
                 ),
                 color = colors.accent,
@@ -214,7 +214,7 @@ fun V2DeploySecretsDialog(
                 text = "Данные доступа к web панели",
                 style = MaterialTheme.typography.bodySmall.copy(
                     fontFamily = V2BodyFamily,
-                    fontWeight = FontWeight.Normal,
+                    fontWeight = FontWeight.SemiBold,
                     fontSize = 13.sp,
                 ),
                 color = colors.accent,
@@ -262,7 +262,7 @@ fun V2DeploySecretsDialog(
                     text = if (passwordsVisible) "Скрыть пароли" else "Показать пароли",
                     style = MaterialTheme.typography.bodySmall.copy(
                         fontFamily = V2BodyFamily,
-                        fontWeight = FontWeight.Normal,
+                        fontWeight = FontWeight.SemiBold,
                     ),
                     color = colors.textSecondary,
                 )

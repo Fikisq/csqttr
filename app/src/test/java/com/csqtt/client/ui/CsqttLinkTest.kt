@@ -7,6 +7,7 @@ import com.csqtt.client.ui.legacy.utils.generate16CharPassword
 import com.csqtt.client.ui.legacy.utils.isValidTunnelPassword
 import com.csqtt.client.ui.legacy.utils.parseCsqttLink
 import com.csqtt.client.ui.legacy.utils.peerAddress
+import com.csqtt.client.ui.legacy.utils.normalizeVkHashInput
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -44,6 +45,20 @@ class CsqttLinkTest {
         )
         requireNotNull(link)
         assertEquals(hashes, link.hashes)
+    }
+
+    @Test
+    fun normalizesSixManualEntriesAsLinksHashesOrMixed() {
+        val hashes = (1..6).map { "Review-Hash_12345678$it" }
+        val links = hashes.mapIndexed { index, hash ->
+            val host = listOf("vk.com", "vk.ru", "m.vk.com", "m.vk.ru", "VK.COM", "VK.RU")[index]
+            "https://$host/call/join/$hash/?source=test#fragment"
+        }
+        val mixed = hashes.mapIndexed { index, hash -> if (index % 2 == 0) links[index] else hash }
+
+        for (inputs in listOf(links, hashes, mixed)) {
+            assertEquals(hashes, inputs.map(::normalizeVkHashInput))
+        }
     }
 
     @Test

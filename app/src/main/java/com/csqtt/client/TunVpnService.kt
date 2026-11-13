@@ -52,12 +52,11 @@ class TunVpnService : VpnService() {
             private set
     }
 
-    // LOW_LATENCY Wi-Fi lock is active only with the screen on, so the deprecated HIGH_PERF mode is kept for the background VPN.
     @Suppress("DEPRECATION")
     @Synchronized
     private fun acquireLocks() {
-        // «Экономия батареи» in force: no CPU wake lock (the Wi-Fi lock stays)
-        if (!BatterySaver.active.value && wakeLock?.isHeld != true) {
+        if (BatterySaver.active.value) return
+        if (wakeLock?.isHeld != true) {
             val pm = getSystemService(PowerManager::class.java)
             wakeLock = pm?.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "csqtt:tun_vpn_service")?.apply {
                 setReferenceCounted(false)
@@ -76,9 +75,10 @@ class TunVpnService : VpnService() {
     @Synchronized
     fun onBatterySaverChanged(save: Boolean) {
         if (save) {
-            runCatching { if (wakeLock?.isHeld == true) wakeLock?.release() }
-            wakeLock = null
-        } else if (!stopRequested && !serviceDestroyed) acquireLocks()
+            releaseLocks()
+        } else if (!stopRequested && !serviceDestroyed) {
+            acquireLocks()
+        }
     }
 
     @Synchronized
@@ -176,9 +176,8 @@ class TunVpnService : VpnService() {
                 userSelected = serverRule.packages.filter { it.isNotEmpty() }.toSet()
             } else {
                 val settingsStore = SettingsStore(applicationContext)
-                val allApps = settingsStore.appRoutingAll.first() == true
-                isWhitelist = !allApps && settingsStore.isWhitelist.first()
-                val savedApps = if (allApps) "" else if (isWhitelist) {
+                isWhitelist = settingsStore.isWhitelist.first()
+                val savedApps = if (isWhitelist) {
                     settingsStore.whitelistApps.first()
                 } else {
                     settingsStore.excludedApps.first()
@@ -186,7 +185,9 @@ class TunVpnService : VpnService() {
                 userSelected = savedApps.split(",").filter { it.isNotEmpty() }.toSet()
             }
             val transportPackages = setOf(
-                applicationContext.packageName
+                applicationContext.packageName,
+                CsqttConstants.General.PACKAGE_VK,
+                CsqttConstants.General.PACKAGE_VK_CALLS
             )
 
             val existing = synchronized(interfaceLock) {

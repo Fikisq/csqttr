@@ -71,7 +71,7 @@ fun V2HeroCard(
                         text = title,
                         style = MaterialTheme.typography.titleLarge.copy(
                             fontFamily = V2DisplayFamily,
-                            fontWeight = FontWeight.Normal,
+                            fontWeight = FontWeight.ExtraBold,
                             fontSize = 20.sp,
                             letterSpacing = 0.sp,
                         ),
@@ -84,7 +84,7 @@ fun V2HeroCard(
                             text = subtitle,
                             style = MaterialTheme.typography.bodyMedium.copy(
                                 fontFamily = V2DisplayFamily,
-                                fontWeight = FontWeight.Normal,
+                                fontWeight = FontWeight.Bold,
                             ),
                             color = colors.textSecondary,
                         )
@@ -120,7 +120,7 @@ fun V2HeroCard(
                                     text = "GitHub",
                                     style = MaterialTheme.typography.labelMedium.copy(
                                         fontFamily = V2DisplayFamily,
-                                        fontWeight = FontWeight.Normal,
+                                        fontWeight = FontWeight.ExtraBold,
                                     ),
                                     color = colors.textPrimary,
                                 )

@@ -24,7 +24,7 @@ import kotlinx.coroutines.CancellationException
 @Composable
 internal fun V2VkAccountsDialog(
     store: SettingsStore,
-    onAuthorize: (chooseAccount: Boolean) -> Unit,
+    onAuthorize: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     val accounts by store.savedVkAccountIds.collectAsStateWithLifecycle<List<String>?>(null)
@@ -45,36 +45,36 @@ internal fun V2VkAccountsDialog(
         } else {
             accounts.orEmpty().forEachIndexed { index, id ->
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                V2PillButton(
-                    text = "Аккаунт ${index + 1}" + if (id == selected) " · выбран" else "",
-                    onClick = {
-                        saving = true
-                        scope.launch(Dispatchers.Main.immediate) {
-                            try {
-                                store.selectSavedVkAccount(id)
-                                context.showRaisedToast("Аккаунт VK выбран", Toast.LENGTH_SHORT)
-                                onDismiss()
-                            } catch (cancelled: CancellationException) {
-                                throw cancelled
-                            } catch (_: Exception) {
-                                context.showRaisedToast("Не удалось выбрать аккаунт. Остановите туннель или войдите снова", Toast.LENGTH_LONG)
-                            } finally { saving = false }
-                        }
-                    },
-                    enabled = enabled,
-                    style = if (id == selected) V2PillStyle.Contrast else V2PillStyle.Outline,
-                    modifier = Modifier.weight(1f),
-                )
-                IconButton(onClick = { removingId = id }, enabled = enabled) {
-                    Icon(Icons.Outlined.Delete, "Удалить аккаунт ${index + 1}", tint = colors.error)
-                }
+                    V2PillButton(
+                        text = "Аккаунт ${index + 1}" + if (id == selected) " · выбран" else "",
+                        onClick = {
+                            saving = true
+                            scope.launch(Dispatchers.Main.immediate) {
+                                try {
+                                    store.selectSavedVkAccount(id)
+                                    context.showRaisedToast("Аккаунт VK выбран", Toast.LENGTH_SHORT)
+                                    onDismiss()
+                                } catch (cancelled: CancellationException) {
+                                    throw cancelled
+                                } catch (_: Exception) {
+                                    context.showRaisedToast("Не удалось выбрать аккаунт. Остановите туннель или войдите снова", Toast.LENGTH_LONG)
+                                } finally { saving = false }
+                            }
+                        },
+                        enabled = enabled,
+                        style = if (id == selected) V2PillStyle.Contrast else V2PillStyle.Outline,
+                        modifier = Modifier.weight(1f),
+                    )
+                    IconButton(onClick = { removingId = id }, enabled = enabled) {
+                        Icon(Icons.Outlined.Delete, "Удалить аккаунт ${index + 1}", tint = colors.error)
+                    }
                 }
                 Spacer(Modifier.height(8.dp))
             }
             if (accounts.orEmpty().isEmpty()) Text("Сохранённых аккаунтов пока нет", color = colors.textSecondary)
             Text("Сохранённый аккаунт можно выбрать здесь. Для другого аккаунта выполните новый вход.", color = colors.textSecondary)
             Spacer(Modifier.height(12.dp))
-            V2PillButton("Добавить / сменить аккаунт", onClick = { onAuthorize(true) }, enabled = enabled, modifier = Modifier.fillMaxWidth())
+            V2PillButton("Добавить / сменить аккаунт", onClick = onAuthorize, enabled = enabled, modifier = Modifier.fillMaxWidth())
             if (!enabled && (running || starting || stopping)) Text("Для смены аккаунта остановите туннель", color = colors.textSecondary)
         }
     }

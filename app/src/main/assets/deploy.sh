@@ -107,6 +107,7 @@ DEPLOY_PHASE="initial"
 PRESERVE_CONFIG=0
 DOCKER_CONTEXT_DIR=""
 CSQTT_DOCKER_CANDIDATE_IMAGE=""
+CSQTT_DOCKER_BASE_IMAGE=""
 
 validate_port() {
     local name="$1" value="$2"
@@ -329,9 +330,14 @@ force_release_peer_port() {
         found=0
         while IFS= read -r pid; do
             [ -n "$pid" ] || continue
+            if ! csqtt_process_is_owned "$pid"; then
+                log_error "UDP/${PEER_PORT} занят чужим процессом; остановка отменена"
+                return 1
+            fi
             found=1
             container="$(docker_container_for_pid "$pid" 2>/dev/null || true)"
             if [ -n "$container" ]; then
+                [ "$(docker inspect --format '{{.Name}}' "$container" 2>/dev/null)" = "/$CSQTT_DOCKER_CONTAINER" ] || return 1
                 log_warn "Принудительное удаление Docker runtime на UDP/${PEER_PORT}: ${container:0:12}"
                 docker update --restart=no "$container" >/dev/null 2>&1 || true
                 docker rm -f "$container" >/dev/null 2>&1 || true
@@ -450,7 +456,7 @@ assert_peer_port_is_available() {
     local listeners
     listeners="$(peer_port_listeners)"
     [ -z "$listeners" ] && return 0
-    [ "$CSQTT_ROLE" = side ] && refuse_foreign_port_holder u "$PEER_PORT" "UDP-порт"
+    refuse_foreign_port_holder u "$PEER_PORT" "UDP-порт" "UDP-порт"
     log_warn "UDP/${PEER_PORT} занят; выполняется принудительное освобождение"
     force_release_peer_port || die "Не удалось принудительно освободить UDP/${PEER_PORT}"
     [ -z "$(peer_port_listeners)" ] || die "UDP/${PEER_PORT} остался занят после принудительной очистки"
@@ -608,9 +614,9 @@ remove_all_csqtt_systemd_units() {
 prog() { echo "CSQTT_PROGRESS|$1|$2"; }
 
 run_timed() {
-    local label="$1" started=$SECONDS
-    shift
-    log_step "Начало этапа: $label"
+    local label="$1" progress="$2" started=$SECONDS
+    shift 2
+    prog "$progress" "$label"
     "$@"
     log_info "Время этапа «$label»: $((SECONDS - started))с"
 }
@@ -688,7 +694,6 @@ pkg_install_with_refresh() {
 }
 
 install_prerequisites() {
-    prog 0.10 "Пакеты..."
     log_step "Проверка базовых зависимостей..."
 
     local ip_package procps_package
@@ -836,7 +841,6 @@ fw_add_input_tcp() {
 fw_add_forward() {
     ipt_add_or_ensure filter INPUT -i "$CSQTT_IFACE" -s "$CSQTT_SUBNET" -m comment --comment "$IPT_COMMENT" -j ACCEPT || \
         die "Не удалось установить INPUT -i $CSQTT_IFACE"
-    ipt_add_or_ensure filter FORWARD -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT || true
     ipt_add_or_ensure filter FORWARD -i "$CSQTT_IFACE" -m comment --comment "$IPT_COMMENT" -j ACCEPT || \
         die "Не удалось установить FORWARD -i $CSQTT_IFACE"
     ipt_add_or_ensure filter FORWARD -o "$CSQTT_IFACE" -m comment --comment "$IPT_COMMENT" -j ACCEPT || \
@@ -938,6 +942,10 @@ ensure_csqtt_directory() {
 }
 
 clear_runtime_config_preserving_database() {
+    if [ "$PRESERVE_CONFIG" = "1" ]; then
+        secure_persistent_state
+        return 0
+    fi
     local entry base
     ensure_csqtt_directory "$CSQTT_CONFIG_DIR" 700
     shopt -s nullglob dotglob
@@ -975,6 +983,10 @@ cleanup_deploy_uploads() {
         docker image rm "$CSQTT_DOCKER_CANDIDATE_IMAGE" >/dev/null 2>&1 || true
         CSQTT_DOCKER_CANDIDATE_IMAGE=""
     fi
+    if [ -n "$CSQTT_DOCKER_BASE_IMAGE" ]; then
+        docker image rm "$CSQTT_DOCKER_BASE_IMAGE" >/dev/null 2>&1 || true
+        CSQTT_DOCKER_BASE_IMAGE=""
+    fi
     rm -f -- "$UPLOAD_BINARY" "$UPLOAD_ENV_FILE" "$UPLOAD_OVERRIDES_FILE"
 }
 
@@ -990,22 +1002,14 @@ validate_candidate_environment() {
 
 prepare_uploaded_release() {
     DEPLOY_PHASE="preflight"
-    if [ "$PRESERVE_CONFIG" = "1" ]; then
-        # Explicit panel update uses the freshly uploaded profile configuration.
-        # Old clients/CLI updates still preserve the server environment by default.
-        if [ "${CSQTT_APPLY_TUNNEL_PASSWORD:-0}" != "1" ]; then
-            rm -f -- "$UPLOAD_OVERRIDES_FILE"
-        fi
-        if [ "${CSQTT_APPLY_PANEL:-0}" = "1" ]; then
-            [ -s "$UPLOAD_ENV_FILE" ] || die "WEB-конфигурация профиля не загружена" "$EXIT_PREFLIGHT_FAILED"
-        else
-            rm -f -- "$UPLOAD_ENV_FILE"
-            [ -s "$CSQTT_ENV_FILE" ] || die "Не найдена WEB-конфигурация сервера" "$EXIT_PREFLIGHT_FAILED"
-            install -m 0600 "$CSQTT_ENV_FILE" "$UPLOAD_ENV_FILE" || die "Не удалось прочитать WEB-конфигурацию" "$EXIT_PREFLIGHT_FAILED"
-        fi
-        if [ "${CSQTT_APPLY_TUNNEL_PASSWORD:-0}" = "1" ]; then
-            [ -s "$UPLOAD_OVERRIDES_FILE" ] || die "Пароль туннеля из профиля не загружен" "$EXIT_PREFLIGHT_FAILED"
-        elif [ -s "$CSQTT_DEPLOY_OVERRIDES_FILE" ]; then
+    if [ "$PRESERVE_CONFIG" = "1" ] && [ ! -s "$UPLOAD_ENV_FILE" ] && [ ! -s "$UPLOAD_OVERRIDES_FILE" ]; then
+        # A legacy update uploads neither file (the app keeps the server's own), so one already in /tmp is a leftover — maybe
+        # the other instance's, from a deploy cut off after its upload: this instance's own config always wins.
+        rm -f -- "$UPLOAD_ENV_FILE" "$UPLOAD_OVERRIDES_FILE"
+        [ -s "$CSQTT_ENV_FILE" ] || \
+            die "Не найдена существующая WEB-конфигурация ${CSQTT_ENV_FILE}; выполните первый деплой" "$EXIT_PREFLIGHT_FAILED"
+        install -m 0600 "$CSQTT_ENV_FILE" "$UPLOAD_ENV_FILE" || die "Не удалось прочитать существующую WEB-конфигурацию" "$EXIT_PREFLIGHT_FAILED"
+        if [ -s "$CSQTT_DEPLOY_OVERRIDES_FILE" ]; then
             install -m 0600 "$CSQTT_DEPLOY_OVERRIDES_FILE" "$UPLOAD_OVERRIDES_FILE" || die "Не удалось прочитать существующую deploy-конфигурацию" "$EXIT_PREFLIGHT_FAILED"
         else
             # The server deletes its deploy overrides once it has applied them (main.rs), so a server that has started
@@ -1016,7 +1020,7 @@ prepare_uploaded_release() {
             ( umask 077; printf '{"main_password":""}\n' > "$UPLOAD_OVERRIDES_FILE" ) || \
                 die "Не удалось подготовить deploy-конфигурацию обновления" "$EXIT_PREFLIGHT_FAILED"
         fi
-        log_info "Режим обновления: база клиентов и их настройки сохраняются"
+        log_info "Режим обновления: логин, пароли и путь панели сохраняются"
     fi
     [ -f "$UPLOAD_BINARY" ] && [ -s "$UPLOAD_BINARY" ] || \
         die "Новый бинарник не загружен или пуст" "$EXIT_PREFLIGHT_FAILED"
@@ -1082,7 +1086,6 @@ remove_csqtt_tun_interface() {
 }
 
 csqtt_cleanup() {
-    prog 0.38 "Очистка..."
     echo "🧹 Переключение со старой установки CSQTT..."
 
     local had_old_install=0 managed_systemd_unit=0
@@ -1129,66 +1132,8 @@ csqtt_cleanup() {
 }
 
 setup_sysctl() {
-    prog 0.25 "Sysctl..."
-    echo "⚙️  Настройка сетевых параметров..."
-
-    modprobe tcp_bbr 2>/dev/null || true
-    if [ -d /etc/modules-load.d ]; then
-        echo "tcp_bbr" > /etc/modules-load.d/bbr.conf 2>/dev/null || true
-    fi
-
-    echo 1 > /proc/sys/net/ipv4/ip_forward 2>/dev/null || true
-    echo 2 > /proc/sys/net/ipv4/conf/all/rp_filter 2>/dev/null || true
-    echo 2 > /proc/sys/net/ipv4/conf/default/rp_filter 2>/dev/null || true
-    echo 0 > /proc/sys/net/ipv6/conf/all/disable_ipv6 2>/dev/null || true
-    echo 0 > /proc/sys/net/ipv6/conf/default/disable_ipv6 2>/dev/null || true
-    echo 1 > /proc/sys/net/ipv6/conf/all/forwarding 2>/dev/null || true
-    echo 1 > /proc/sys/net/ipv6/conf/default/forwarding 2>/dev/null || true
-    echo 2 > /proc/sys/net/ipv6/conf/all/accept_ra 2>/dev/null || true
-    echo 2 > /proc/sys/net/ipv6/conf/default/accept_ra 2>/dev/null || true
-    for dev in /proc/sys/net/ipv6/conf/*; do
-        if [ -d "$dev" ]; then
-            echo 0 > "$dev/disable_ipv6" 2>/dev/null || true
-            echo 2 > "$dev/accept_ra" 2>/dev/null || true
-        fi
-    done
-    mkdir -p /etc/sysctl.d
-    cat > "$CSQTT_SYSCTL_FILE" << 'SYSEOF'
-net.ipv4.ip_forward = 1
-net.ipv4.conf.all.rp_filter = 2
-net.ipv4.conf.default.rp_filter = 2
-net.ipv6.conf.all.disable_ipv6 = 0
-net.ipv6.conf.default.disable_ipv6 = 0
-net.ipv6.conf.all.forwarding = 1
-net.ipv6.conf.default.forwarding = 1
-net.ipv6.conf.all.accept_ra = 2
-net.ipv6.conf.default.accept_ra = 2
-net.core.default_qdisc = fq
-net.ipv4.tcp_congestion_control = bbr
-net.core.netdev_max_backlog = 10000
-net.core.somaxconn = 65535
-net.ipv4.tcp_rmem = 4096 131072 67108864
-net.ipv4.tcp_wmem = 4096 131072 67108864
-net.ipv4.tcp_mtu_probing = 1
-net.ipv4.tcp_slow_start_after_idle = 0
-net.ipv4.tcp_window_scaling = 1
-net.ipv4.tcp_sack = 1
-net.ipv4.tcp_timestamps = 1
-net.ipv4.tcp_fastopen = 3
-SYSEOF
-
-    cat > "$CSQTT_UDP_SYSCTL_FILE" << 'SYSEOF'
-net.core.rmem_max = 67108864
-net.core.wmem_max = 67108864
-SYSEOF
-
-    sysctl -p "$CSQTT_SYSCTL_FILE" >>"$LOG_FILE" 2>&1 || log_warn "Не удалось применить обязательные параметры маршрутизации"
-    sysctl -p "$CSQTT_UDP_SYSCTL_FILE" >>"$LOG_FILE" 2>&1 || log_warn "Ядро ограничило лимиты сетевых буферов; сервер продолжит работу с доступными значениями"
-
     [ "$(cat /proc/sys/net/ipv4/ip_forward 2>/dev/null || echo 0)" = "1" ] || \
-        die "IPv4 forwarding невозможно включить на этом VPS"
-
-    echo "✓ Sysctl настроен (IPv4/IPv6 forwarding + BBR + буферы)"
+        die "На VPS должен быть включён IPv4 forwarding. Установщик не меняет глобальные сетевые параметры." "$EXIT_PREFLIGHT_FAILED"
 }
 
 # 2.5.0 added "mitigations=off nowatchdog" to the GRUB kernel command line here: it switched the kernel's CPU-vulnerability
@@ -1197,7 +1142,6 @@ SYSEOF
 # A box that already has the flag keeps it: nothing here edits GRUB.
 
 setup_nat_and_firewall() {
-    prog 0.40 "NAT + Firewall..."
     echo "🛡  Настройка NAT и фаервола..."
 
     local iface
@@ -1209,19 +1153,9 @@ setup_nat_and_firewall() {
     ip link show "$iface" >/dev/null 2>&1 || die "Определённый WAN-интерфейс $iface не существует"
 
     log_info "WAN-интерфейс: $iface"
-    sysctl -w "net.ipv4.conf.${iface}.rp_filter=2" >>"$LOG_FILE" 2>&1 || true
-    sysctl -w "net.ipv6.conf.${iface}.disable_ipv6=0" >>"$LOG_FILE" 2>&1 || true
-    sysctl -w "net.ipv6.conf.${iface}.accept_ra=2" >>"$LOG_FILE" 2>&1 || true
-    sysctl -w "net.ipv6.conf.${iface}.forwarding=1" >>"$LOG_FILE" 2>&1 || true
     # 2.5.0 ran `netplan apply` here. It re-applies the whole network configuration mid-install (the uplink can drop, and on a
     # box running other software networkd may remove routes it did not configure), and on a netplan box it undoes the line
     # above: networkd resets accept_ra on the links it manages. The server is IPv4-only; 2.1.9 never did it. Dropped in 2.5.2.
-
-    local gw_ip
-    gw_ip="$(ip -4 route show default 2>/dev/null | awk '/default/ {for(i=1;i<=NF;i++) if($i=="via") {print $(i+1); break}}')"
-    if [ -n "$gw_ip" ]; then
-        ip route replace "$gw_ip" dev "$iface" scope link >>"$LOG_FILE" 2>&1 || true
-    fi
 
     fw_add_input_udp "$PEER_PORT"
     fw_add_input_tcp "$WEB_PORT"
@@ -1256,12 +1190,7 @@ NETWORK_READY_FILE="$CSQTT_DOCKER_NETWORK_READY"
 
 command -v ip >/dev/null 2>&1 || exit 20
 command -v iptables >/dev/null 2>&1 || exit 21
-[ -w /proc/sys/net/ipv4/ip_forward ] && echo 1 > /proc/sys/net/ipv4/ip_forward 2>/dev/null || true
-[ -w /proc/sys/net/ipv6/conf/all/forwarding ] && echo 1 > /proc/sys/net/ipv6/conf/all/forwarding 2>/dev/null || true
-[ -w /proc/sys/net/ipv4/conf/all/rp_filter ] && echo 2 > /proc/sys/net/ipv4/conf/all/rp_filter 2>/dev/null || true
-[ -w /proc/sys/net/ipv4/conf/default/rp_filter ] && echo 2 > /proc/sys/net/ipv4/conf/default/rp_filter 2>/dev/null || true
-[ -w /proc/sys/net/ipv4/tcp_notsent_lowat ] && echo 131072 > /proc/sys/net/ipv4/tcp_notsent_lowat 2>/dev/null || true
-
+[ "\$(cat /proc/sys/net/ipv4/ip_forward 2>/dev/null || echo 0)" = "1" ] || exit 21
 is_ignored_wan_interface() {
     ignored_iface="\${1%%@*}"
     case "\$ignored_iface" in
@@ -1318,14 +1247,7 @@ while [ "\$network_waited" -lt 90 ]; do
     sleep 1
 done
 [ -n "\$WAN_IFACE" ] || exit 22
-[ -w "/proc/sys/net/ipv4/conf/\$WAN_IFACE/rp_filter" ] && echo 2 > "/proc/sys/net/ipv4/conf/\$WAN_IFACE/rp_filter" 2>/dev/null || true
 [ -w "/proc/sys/net/ipv4/conf/\$CSQTT_IFACE/rp_filter" ] && echo 2 > "/proc/sys/net/ipv4/conf/\$CSQTT_IFACE/rp_filter" 2>/dev/null || true
-
-# Для /32 сетей с onlink-шлюзом обеспечиваем явный host route к шлюзу
-gw=\$(ip -4 route show default 2>/dev/null | awk '/default/ {for(i=1;i<=NF;i++) if(\$i=="via") {print \$(i+1); break}}')
-if [ -n "\$gw" ]; then
-    ip route replace "\$gw" dev "\$WAN_IFACE" scope link 2>/dev/null || true
-fi
 
 if ip link show "\$CSQTT_IFACE" >/dev/null 2>&1; then
     ip link set dev "\$CSQTT_IFACE" txqueuelen 1000 2>/dev/null || true
@@ -1336,7 +1258,6 @@ ipt -C INPUT -p udp --dport "\$PEER_PORT" -m comment --comment "\$IPT_COMMENT" -
 ipt -C INPUT -p tcp --dport "\$WEB_PORT" -m comment --comment "\$IPT_COMMENT" -j ACCEPT 2>/dev/null || ipt -I INPUT -p tcp --dport "\$WEB_PORT" -m comment --comment "\$IPT_COMMENT" -j ACCEPT
 ipt -C INPUT -p tcp --dport "\$LE_HTTP_PORT" -m comment --comment "\$IPT_COMMENT" -j ACCEPT 2>/dev/null || ipt -I INPUT -p tcp --dport "\$LE_HTTP_PORT" -m comment --comment "\$IPT_COMMENT" -j ACCEPT
 ipt -C INPUT -i "\$CSQTT_IFACE" -s "\$SUBNET" -m comment --comment "\$IPT_COMMENT" -j ACCEPT 2>/dev/null || ipt -I INPUT -i "\$CSQTT_IFACE" -s "\$SUBNET" -m comment --comment "\$IPT_COMMENT" -j ACCEPT
-ipt -C FORWARD -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT 2>/dev/null || ipt -I FORWARD 1 -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
 ipt -C FORWARD -i "\$CSQTT_IFACE" -m comment --comment "\$IPT_COMMENT" -j ACCEPT 2>/dev/null || ipt -I FORWARD -i "\$CSQTT_IFACE" -m comment --comment "\$IPT_COMMENT" -j ACCEPT
 ipt -C FORWARD -o "\$CSQTT_IFACE" -m comment --comment "\$IPT_COMMENT" -j ACCEPT 2>/dev/null || ipt -I FORWARD -o "\$CSQTT_IFACE" -m comment --comment "\$IPT_COMMENT" -j ACCEPT
 ipt -t nat -C POSTROUTING -s "\$SUBNET" -o "\$WAN_IFACE" -m comment --comment "\$IPT_COMMENT" -j MASQUERADE 2>/dev/null || ipt -t nat -A POSTROUTING -s "\$SUBNET" -o "\$WAN_IFACE" -m comment --comment "\$IPT_COMMENT" -j MASQUERADE || true
@@ -1351,7 +1272,6 @@ ipt -t mangle -C FORWARD -d "\$SUBNET" -p tcp -m tcp --tcp-flags SYN,RST SYN -m 
 
 if command -v ip6tables >/dev/null 2>&1 && ip -6 route show default 2>/dev/null | grep -q .; then
     ip6t() { ip6tables -w "\$XT_WAIT" "\$@"; }
-    ip6t -C FORWARD -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT 2>/dev/null || ip6t -I FORWARD 1 -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
     ip6t -C FORWARD -i "\$CSQTT_IFACE" -m comment --comment "\$IPT_COMMENT" -j ACCEPT 2>/dev/null || ip6t -I FORWARD -i "\$CSQTT_IFACE" -m comment --comment "\$IPT_COMMENT" -j ACCEPT
     ip6t -C FORWARD -o "\$CSQTT_IFACE" -m comment --comment "\$IPT_COMMENT" -j ACCEPT 2>/dev/null || ip6t -I FORWARD -o "\$CSQTT_IFACE" -m comment --comment "\$IPT_COMMENT" -j ACCEPT
     ip6t -t nat -C POSTROUTING -s "\$SUBNET6" ! -o "\$CSQTT_IFACE" -m comment --comment "\$IPT_COMMENT" -j MASQUERADE 2>/dev/null || ip6t -t nat -A POSTROUTING -s "\$SUBNET6" ! -o "\$CSQTT_IFACE" -m comment --comment "\$IPT_COMMENT" -j MASQUERADE || true
@@ -1419,7 +1339,7 @@ release_owned_peer_port() {
         for pid in \$pids; do
             # next to a stock server: only our own stale runtime is ours to stop; anything else holding the port is
             # refused (the deploy picked a free one), so this start fails loudly instead of killing a neighbour
-            if [ "\$CSQTT_ROLE" = side ] && ! csqtt_process_is_owned "\$pid"; then
+            if ! csqtt_process_is_owned "\$pid"; then
                 echo "[CSQTT] UDP/\$PEER_PORT is held by PID \$pid, which is not this server; not touching it" >&2
                 return 24
             fi
@@ -1475,7 +1395,6 @@ verify_configured_network() {
 }
 
 setup_csqtt_binary() {
-    prog 0.60 "Бинарник..."
     echo "Установка csqtt..."
 
     mkdir -p "$(dirname "$CSQTT_BIN")"     # never re-chmod an existing /usr/local/bin (Debian: 2775 root:staff)
@@ -1570,7 +1489,9 @@ detect_public_ipv4() {
 }
 
 certbot_supports_ip_certificates() {
-    "$1" certonly --help all 2>&1 | grep -Fq -- "--ip-address"
+    local help
+    help="$(timeout 5 "$1" certonly --help all 2>&1)" || return 1
+    [[ "$help" == *--ip-address* && "$help" == *--no-directory-hooks* ]]
 }
 
 ensure_letsencrypt_client() {
@@ -1580,12 +1501,21 @@ ensure_letsencrypt_client() {
         system_certbot="$(command -v certbot)"
         if certbot_supports_ip_certificates "$system_certbot"; then
             LE_CERTBOT_COMMAND="$system_certbot"
+            log_info "Используется установленный системный Certbot"
             return 0
         fi
     fi
     if [ -x "$CSQTT_LE_CERTBOT" ] && certbot_supports_ip_certificates "$CSQTT_LE_CERTBOT"; then
         LE_CERTBOT_COMMAND="$CSQTT_LE_CERTBOT"
+        log_info "Используется ранее установленный Certbot CSQTT"
         return 0
+    fi
+    if [ -n "$system_certbot" ]; then
+        log_info "Системный Certbot не подходит для IP-сертификата; используется отдельное окружение CSQTT"
+        if ! command -v openssl >/dev/null 2>&1 || ! python3 -c 'import ensurepip' >/dev/null 2>&1; then
+            log_warn "Для Certbot CSQTT не хватает Python venv или OpenSSL; используется имеющийся TLS или самоподписанный сертификат"
+            return 1
+        fi
     fi
 
     log_step "Подготовка Let’s Encrypt клиента..."
@@ -1608,13 +1538,12 @@ ensure_letsencrypt_client() {
     fi
     if [ ! -x "$CSQTT_LE_CERTBOT" ] || ! "$CSQTT_LE_CERTBOT" --version >/dev/null 2>&1; then
         rm -rf "$CSQTT_LE_VENV"
-        if ! python3 -m venv "$CSQTT_LE_VENV" >>"$LOG_FILE" 2>&1; then
+        if ! timeout -k 2s 8s python3 -m venv "$CSQTT_LE_VENV" >>"$LOG_FILE" 2>&1; then
             log_warn "Не удалось создать изолированный Let’s Encrypt client; WEB-панель временно останется на self-signed TLS"
             return 1
         fi
     fi
-    log_step "Загрузка Certbot: ожидание не более 45 секунд..."
-    if ! timeout -k 5s 45s "$CSQTT_LE_VENV/bin/pip" install --disable-pip-version-check --no-cache-dir --retries 0 --timeout 10 --upgrade 'certbot>=5.4,<6' 2>&1 | tee -a "$LOG_FILE"; then
+    if ! timeout -k 2s 15s "$CSQTT_LE_VENV/bin/pip" install --disable-pip-version-check --no-cache-dir --upgrade 'certbot>=5.4,<6' >>"$LOG_FILE" 2>&1; then
         log_warn "Не удалось установить актуальный Certbot с поддержкой IP-сертификатов; WEB-панель временно останется на self-signed TLS"
         return 1
     fi
@@ -1750,17 +1679,12 @@ issue_letsencrypt_ip_certificate() {
         log_warn "TCP/${LE_HTTP_PORT} уже занят другим сервисом; Let’s Encrypt IP-сертификат отложен, сохранён self-signed fallback"
         return 1
     fi
-    if ! timeout -k 5s 30s "$certbot" certonly --standalone --http-01-port "$LE_HTTP_PORT" \
-        --non-interactive --agree-tos --register-unsafely-without-email \
+    if ! timeout -k 3s 15s "$certbot" certonly --standalone --http-01-port "$LE_HTTP_PORT" \
+        --config /dev/null --no-directory-hooks --non-interactive --agree-tos --register-unsafely-without-email \
         --preferred-profile shortlived --ip-address "$public_ip" \
         --cert-name "$cert_name" --keep-until-expiring >>"$LOG_FILE" 2>&1; then
-        if ! timeout -k 5s 30s "$certbot" certonly --standalone --http-01-port "$LE_HTTP_PORT" \
-            --non-interactive --agree-tos --register-unsafely-without-email \
-            --ip-address "$public_ip" \
-            --cert-name "$cert_name" --keep-until-expiring >>"$LOG_FILE" 2>&1; then
-            log_warn "Let’s Encrypt не подтвердил IP ${public_ip}; сохранён self-signed fallback, следующая проверка выполнится автоматически"
-            return 1
-        fi
+        log_warn "Let’s Encrypt не подтвердил IP ${public_ip}; сохранён self-signed fallback, следующая проверка выполнится автоматически"
+        return 1
     fi
     if ! install_letsencrypt_certificate "$public_ip" "$cert_name"; then
         log_warn "Let’s Encrypt выдал сертификат, но CSQTT не смог безопасно активировать его"
@@ -2040,12 +1964,12 @@ main() {
         return 0
     fi
     cert_name="csqtt-ip-${current_ip//./-}"
-    if ! timeout 90 "$CERTBOT" certonly --standalone --http-01-port "$HTTP_PORT" --non-interactive --agree-tos --register-unsafely-without-email --preferred-profile shortlived --ip-address "$current_ip" --cert-name "$cert_name" --force-renewal; then
-        if ! timeout 90 "$CERTBOT" certonly --standalone --http-01-port "$HTTP_PORT" --non-interactive --agree-tos --register-unsafely-without-email --ip-address "$current_ip" --cert-name "$cert_name" --force-renewal; then
-            log "Let’s Encrypt: перевыпуск IP-сертификата не удался, текущий сертификат сохранён"
-            fallback_if_expired "$current_ip"
-            return 0
-        fi
+    if ! timeout -k 5s 90s "$CERTBOT" certonly --standalone --http-01-port "$HTTP_PORT" \
+        --config /dev/null --no-directory-hooks --non-interactive --agree-tos --register-unsafely-without-email \
+        --preferred-profile shortlived --ip-address "$current_ip" --cert-name "$cert_name" --force-renewal; then
+        log "Let’s Encrypt: перевыпуск IP-сертификата не удался, текущий сертификат сохранён"
+        fallback_if_expired "$current_ip"
+        return 0
     fi
     if ! install_certificate "$current_ip" "$cert_name"; then
         log "Let’s Encrypt: не удалось безопасно активировать новый сертификат"
@@ -2107,7 +2031,6 @@ LETIMER
 
 setup_letsencrypt_ip_tls() {
     local public_ip cert_name
-    prog 0.45 "Проверка TLS-сертификата веб-панели..."
     if ! certificate_is_csqtt_letsencrypt && adopt_letsencrypt_certificate; then
         log_info "Let’s Encrypt IP-сертификат CSQTT принят под автоматическое продление"
     fi
@@ -2117,33 +2040,15 @@ setup_letsencrypt_ip_tls() {
         log_info "Используется заранее установленный TLS-сертификат пользователя; CSQTT сохраняет его и не заменяет Let’s Encrypt"
         return 0
     fi
-    public_ip="$(detect_public_ipv4 2>/dev/null || true)"
-    if [ -z "$public_ip" ]; then
-        public_ip="$(state_value IP 2>/dev/null || true)"
+    public_ip="${CSQTT_PUBLIC_IP:-}"
+    if ! is_public_ipv4 "$public_ip"; then
+        public_ip="$(detect_public_ipv4 2>/dev/null || state_value IP 2>/dev/null || true)"
     fi
-    # Check before installing Python/Certbot: another service owns HTTP/80,
-    # so standalone HTTP-01 cannot run regardless of the client installation.
-    if ss -ltnH "sport = :${LE_HTTP_PORT}" 2>/dev/null | grep -q .; then
-        log_warn "TCP/${LE_HTTP_PORT} занят: установка Certbot и выпуск сертификата пропущены; чужой сервис не изменён"
-        if [ ! -s "$CSQTT_CONFIG_DIR/web_cert.pem" ] || ! openssl x509 -noout -checkend 0 -in "$CSQTT_CONFIG_DIR/web_cert.pem" >/dev/null 2>&1; then
-            generate_rcgen_fallback_certificate "$public_ip" || true
-        fi
-        return 0
-    fi
-    prog 0.47 "Подготовка клиента сертификатов..."
-    if ! ensure_letsencrypt_client; then
-        if [ ! -s "$CSQTT_CONFIG_DIR/web_cert.pem" ] || ! openssl x509 -noout -checkend 0 -in "$CSQTT_CONFIG_DIR/web_cert.pem" >/dev/null 2>&1; then
-            generate_rcgen_fallback_certificate "$public_ip" || true
-        fi
-        return 0
-    fi
-    write_letsencrypt_renewal_helper
     if [ -z "$public_ip" ]; then
         log_warn "Публичный IPv4 не определён; WEB-панель временно останется на self-signed TLS"
         if [ ! -s "$CSQTT_CONFIG_DIR/web_cert.pem" ] || ! openssl x509 -noout -checkend 0 -in "$CSQTT_CONFIG_DIR/web_cert.pem" >/dev/null 2>&1; then
             generate_rcgen_fallback_certificate "" || true
         fi
-        install_letsencrypt_renewal_timer
         return 0
     fi
     if [ "$CSQTT_ROLE" = side ] && ! letsencrypt_certificate_is_current "$public_ip"; then
@@ -2157,25 +2062,29 @@ setup_letsencrypt_ip_tls() {
     fi
     if letsencrypt_certificate_is_current "$public_ip"; then
         log_info "Let’s Encrypt IP-сертификат действителен; перевыпуск не требуется"
-    else
+        LE_CERTBOT_COMMAND="$(command -v certbot || printf '%s' "$CSQTT_LE_CERTBOT")"
+    elif ss -ltnH "sport = :${LE_HTTP_PORT}" 2>/dev/null | grep -q .; then
+        log_warn "TCP/${LE_HTTP_PORT} уже занят; выпуск Let’s Encrypt отложен"
+        LE_CERTBOT_COMMAND="$(command -v certbot || printf '%s' "$CSQTT_LE_CERTBOT")"
+    elif ensure_letsencrypt_client; then
         cert_name="$(letsencrypt_cert_name "$public_ip")"
-        prog 0.52 "Получение TLS-сертификата..."
-        if ! issue_letsencrypt_ip_certificate "$LE_CERTBOT_COMMAND" "$public_ip" "$cert_name"; then
-            if [ ! -s "$CSQTT_CONFIG_DIR/web_cert.pem" ] || ! openssl x509 -noout -checkend 0 -in "$CSQTT_CONFIG_DIR/web_cert.pem" >/dev/null 2>&1; then
-                generate_rcgen_fallback_certificate "$public_ip" || true
-            fi
-        fi
+        issue_letsencrypt_ip_certificate "$LE_CERTBOT_COMMAND" "$public_ip" "$cert_name" || true
     fi
-    install_letsencrypt_renewal_timer
+    if [ -n "$LE_CERTBOT_COMMAND" ]; then
+        write_letsencrypt_renewal_helper
+        install_letsencrypt_renewal_timer
+    fi
+    if [ ! -s "$CSQTT_CONFIG_DIR/web_cert.pem" ] || ! openssl x509 -noout -checkend 0 -in "$CSQTT_CONFIG_DIR/web_cert.pem" >/dev/null 2>&1; then
+        generate_rcgen_fallback_certificate "$public_ip" || true
+    fi
+    return 0
 }
 
 verify_web_panel() {
     local attempt scheme code
     local probe_file="/tmp/csqtt-web-probe.$$"
     local secret_path="${CSQTT_WEB_SECRET_PATH:-}"
-    # Probe the configuration actually used by the running server, not the
-    # caller's stale form value (especially after switching Android clients).
-    if [ -f "$CSQTT_ENV_FILE" ]; then
+    if [ -z "$secret_path" ] && [ -f "$CSQTT_ENV_FILE" ]; then
         secret_path="$(grep -E '^[[:space:]]*(export[[:space:]]+)?CSQTT_WEB_SECRET_PATH=' "$CSQTT_ENV_FILE" 2>/dev/null | head -n1 | cut -d= -f2- | tr -d '\"' | tr -d "'\"'" | tr -d '[:space:]' || true)"
     fi
     local probe_path=""
@@ -2211,15 +2120,9 @@ ensure_docker() {
             pkg_install docker || die "Не удалось установить Docker Engine"
         else
             pkg_install ca-certificates curl || die "Не удалось установить curl и ca-certificates для Docker"
-            local installer http_status
-            installer="$(mktemp)" || die "Не удалось создать временный файл для установщика Docker"
-            # Execute only a direct HTTPS response from the official endpoint.
-            if ! http_status="$(curl -q -fsS --proto '=https' --connect-timeout 15 --max-time 120 \
-                -o "$installer" -w '%{http_code}' https://get.docker.com)" ||
-                [ "$http_status" != 200 ] || [ ! -s "$installer" ]; then
-                rm -f -- "$installer"
-                die "Не удалось загрузить официальный установщик Docker"
-            fi
+            local installer
+            installer="$(mktemp)"
+            curl -fsSL https://get.docker.com -o "$installer" || die "Не удалось загрузить официальный установщик Docker"
             sh "$installer" >>"$LOG_FILE" 2>&1 || {
                 rm -f "$installer"
                 die "Не удалось установить Docker Engine"
@@ -2228,10 +2131,12 @@ ensure_docker() {
         fi
     fi
 
-    if command -v systemctl >/dev/null 2>&1; then
-        systemctl enable --now docker >>"$LOG_FILE" 2>&1 || true
-    elif command -v service >/dev/null 2>&1; then
-        service docker start >>"$LOG_FILE" 2>&1 || true
+    if ! docker info >/dev/null 2>&1; then
+        if command -v systemctl >/dev/null 2>&1; then
+            systemctl start docker >>"$LOG_FILE" 2>&1 || true
+        elif command -v service >/dev/null 2>&1; then
+            service docker start >>"$LOG_FILE" 2>&1 || true
+        fi
     fi
 
     docker --version | tee -a "$LOG_FILE"
@@ -2241,7 +2146,6 @@ ensure_docker() {
 
 ensure_tun_device() {
     if [ -c /dev/net/tun ]; then
-        chmod 666 /dev/net/tun 2>/dev/null || true
         return 0
     fi
     if command -v modprobe >/dev/null 2>&1; then
@@ -2250,7 +2154,6 @@ ensure_tun_device() {
     mkdir -p /dev/net
     [ -c /dev/net/tun ] || mknod /dev/net/tun c 10 200 >>"$LOG_FILE" 2>&1 || true
     [ -c /dev/net/tun ] || die "Устройство /dev/net/tun недоступно на этом VPS"
-    chmod 666 /dev/net/tun 2>/dev/null || true
 }
 
 check_kernel_compatibility() {
@@ -2299,7 +2202,6 @@ probe_tun_support() {
 }
 
 run_platform_preflight() {
-    prog 0.28 "Совместимость ядра..."
     log_step "Проверка совместимости ядра и VPS..."
     check_kernel_compatibility
     probe_tun_support
@@ -2321,12 +2223,10 @@ if [ ! -c /dev/net/tun ]; then
 fi
 
 [ -c /dev/net/tun ] || exit 20
-chmod 666 /dev/net/tun 2>/dev/null || true
 mkdir -p ${CSQTT_RUNTIME_DIR}
 chmod 0755 ${CSQTT_RUNTIME_DIR} 2>/dev/null || true
 rm -f ${CSQTT_DOCKER_NETWORK_READY}
 touch /run/xtables.lock
-chmod 600 /run/xtables.lock 2>/dev/null || true
 PREREQ
     chmod 0755 "$CSQTT_DOCKER_PREREQ_HELPER"
 
@@ -2344,7 +2244,7 @@ RemainAfterExit=yes
 ExecStart=${CSQTT_DOCKER_PREREQ_HELPER}
 
 [Install]
-RequiredBy=docker.service
+WantedBy=docker.service
 PREREQUNIT
     install -m 0644 "$unit_tmp" "/etc/systemd/system/${CSQTT_DOCKER_PREREQ_SERVICE}"
     rm -f "$unit_tmp"
@@ -2361,10 +2261,16 @@ write_csqtt_dockerfile() {
     local target="$1"
     # in-image paths: the stock ones in main mode; /opt/csqtt25 in side mode (stock's container matcher looks for
     # /usr/local/bin/csqtt in the entrypoint)
-    cat > "$target" << 'DOCKERFILE'
+    if [ -n "${2:-}" ]; then
+        printf 'FROM %s\n' "$2" > "$target"
+    else
+        cat > "$target" << 'DOCKERFILE'
 FROM alpine:3.21
-ARG CSQTT_APK_MIRROR=https://dl-cdn.alpinelinux.org/alpine
-RUN set -eu; printf '%s/v3.21/main\n%s/v3.21/community\n' "$CSQTT_APK_MIRROR" "$CSQTT_APK_MIRROR" > /etc/apk/repositories; timeout -k 5s 60s apk add --no-cache --no-progress ca-certificates iproute2 iptables; rm -rf /var/cache/apk/*
+ARG CSQTT_ALPINE_MIRROR=https://dl-cdn.alpinelinux.org/alpine
+RUN set -eu; printf '%s/v3.21/main\n%s/v3.21/community\n' "$CSQTT_ALPINE_MIRROR" "$CSQTT_ALPINE_MIRROR" > /etc/apk/repositories; timeout -k 5s 60s apk add --no-cache --no-progress ca-certificates iproute2 iptables
+DOCKERFILE
+    fi
+    cat >> "$target" << 'DOCKERFILE'
 COPY csqtt @IMG_BIN@
 COPY network-up.sh @IMG_LIB@/network-up.sh
 COPY tun-recover.sh @IMG_LIB@/tun-recover.sh
@@ -2380,7 +2286,7 @@ docker_build_candidate_image() {
     for mirror in https://dl-cdn.alpinelinux.org/alpine https://mirror.yandex.ru/mirrors/alpine; do
         attempt=$((attempt + 1))
         host="${mirror#https://}"; host="${host%%/*}"
-        prog 0.30 "Docker: загрузка зависимостей, попытка ${attempt}/2 (${host})"
+        prog 0.32 "Docker: загрузка пакетов ($attempt/2, $host)"
         log_step "Сборка Docker: ${mirror}"
         host_args=()
         ip="$(timeout 10 getent ahostsv4 "$host" 2>/dev/null | awk 'NR == 1 {print $1}' || true)"
@@ -2388,8 +2294,8 @@ docker_build_candidate_image() {
             host_args=(--add-host "${host}:${ip}")
         fi
         build_log="$(mktemp)" || return 1
-        if timeout -k 15s "${DOCKER_BUILD_TIMEOUT_SECONDS}s" docker build --network host \
-            "${host_args[@]}" --build-arg "CSQTT_APK_MIRROR=$mirror" \
+        if timeout -k 15s "${DOCKER_BUILD_TIMEOUT_SECONDS}s" docker build --progress=plain --network host \
+            "${host_args[@]}" --build-arg "CSQTT_ALPINE_MIRROR=$mirror" \
             -t "$image" "$context_dir" 2>&1 | tee "$build_log" | tee -a "$LOG_FILE"; then
             rm -f -- "$build_log"
             log_info "Docker-образ собран"
@@ -2400,9 +2306,24 @@ docker_build_candidate_image() {
             return 1
         fi
         rm -f -- "$build_log"
-        log_warn "Сборка не завершилась через ${host}; проверяется резервное зеркало, если осталось"
+        log_warn "Не удалось получить пакеты Alpine через ${host}"
     done
     return 1
+}
+
+build_from_installed_docker_image() {
+    local candidate="$1" context_dir="$2" image_id base
+    csqtt_docker_container_exists && docker_container_runs_csqtt "$CSQTT_DOCKER_CONTAINER" || return 1
+    [ "$(docker inspect --format '{{index .Config.Labels "com.csqtt.managed"}}' "$CSQTT_DOCKER_CONTAINER")" = true ] || return 1
+    image_id="$(docker inspect --format '{{.Image}}' "$CSQTT_DOCKER_CONTAINER")" || return 1
+    [[ "$image_id" =~ ^sha256:[0-9a-f]{64}$ ]] || return 1
+    docker image inspect "$image_id" >/dev/null 2>&1 || return 1
+    base="${CSQTT_DOCKER_IMAGE}-base-$$"
+    docker tag "$image_id" "$base" || return 1
+    CSQTT_DOCKER_BASE_IMAGE="$base"
+    prog 0.32 "Docker-образ: использование установленных пакетов..."
+    write_csqtt_dockerfile "$context_dir/Dockerfile" "$base" || return 1
+    timeout -k 5s 30s docker build --progress=plain --network none -t "$candidate" "$context_dir" 2>&1 | tee -a "$LOG_FILE"
 }
 
 prepare_docker_candidate() {
@@ -2419,12 +2340,13 @@ prepare_docker_candidate() {
         die "Не удалось подготовить Docker network helper" "$EXIT_PREFLIGHT_FAILED"
     write_tun_recovery_helper "$context_dir/tun-recover.sh" || \
         die "Не удалось подготовить Docker TUN recovery helper" "$EXIT_PREFLIGHT_FAILED"
-    write_csqtt_dockerfile "$context_dir/Dockerfile"
-
     CSQTT_DOCKER_CANDIDATE_IMAGE="${CSQTT_DOCKER_IMAGE}-candidate-$$"
-    if ! docker_build_candidate_image "$CSQTT_DOCKER_CANDIDATE_IMAGE" "$context_dir"; then
-        tail -n 80 "$LOG_FILE" | sed 's/^/   >> /' >&2 || true
-        die "Сборка Docker-образа CSQTT завершилась ошибкой" "$EXIT_PREFLIGHT_FAILED"
+    if ! build_from_installed_docker_image "$CSQTT_DOCKER_CANDIDATE_IMAGE" "$context_dir"; then
+        write_csqtt_dockerfile "$context_dir/Dockerfile"
+        if ! docker_build_candidate_image "$CSQTT_DOCKER_CANDIDATE_IMAGE" "$context_dir"; then
+            tail -n 80 "$LOG_FILE" | sed 's/^/   >> /' >&2 || true
+            die "Сборка Docker-образа CSQTT завершилась ошибкой" "$EXIT_PREFLIGHT_FAILED"
+        fi
     fi
     probe_docker_runtime "$CSQTT_DOCKER_CANDIDATE_IMAGE"
     remove_managed_work_dir "$DOCKER_CONTEXT_DIR" || true
@@ -2433,7 +2355,6 @@ prepare_docker_candidate() {
 }
 
 setup_csqtt_docker() {
-    prog 0.75 "Docker-образ..."
     [ -n "$CSQTT_DOCKER_CANDIDATE_IMAGE" ] || \
         die "Не найден проверенный Docker-кандидат" "$EXIT_PREFLIGHT_FAILED"
     docker tag "$CSQTT_DOCKER_CANDIDATE_IMAGE" "$CSQTT_DOCKER_IMAGE" || \
@@ -2471,7 +2392,6 @@ done
 }
 
 start_csqtt_docker() {
-    prog 0.90 "Запуск Docker..."
     ensure_tun_device
     remove_all_csqtt_docker_containers
     assert_peer_port_is_available
@@ -2554,7 +2474,6 @@ start_csqtt_docker() {
 }
 
 setup_csqtt_service() {
-    prog 0.75 "Сервис..."
     echo "🔧 Создание systemd-сервиса CSQTT..."
 
     local unit_tmp
@@ -2619,7 +2538,6 @@ start_csqtt() {
         start_csqtt_docker
         return
     fi
-    prog 0.90 "Запуск..."
     echo "🚀 Запуск CSQTT VPN Server..."
 
     [ -x "$CSQTT_BIN" ] || die "Исполняемый файл $CSQTT_BIN не установлен"
@@ -2714,11 +2632,11 @@ csqtt_instance_installed() {
 
 do_uninstall() {
     log_step "Удаление CSQTT..."
-    if ! csqtt_instance_installed; then
-        log_info "Сервер ${CSQTT_NAME} уже отсутствует"
-        echo "CSQTT_UNINSTALL_OK"
-        return 0
-    fi
+    csqtt_instance_installed || csqtt_persistent_state_exists || die "Сервер ${CSQTT_NAME} на этом VPS не установлен — удалять нечего"
+    refuse_anothers_server
+    refuse_foreign_port_holder u "$PEER_PORT" "UDP-порт"
+    refuse_foreign_port_holder t "$WEB_PORT" "TCP-порт WEB-панели"
+    prog 0.20 "Остановка экземпляра CSQTT..."
     if [ "$CSQTT_ROLE" = main ]; then
         # this removal's cleanup stops, kills and deletes every csqtt unit, container and process it matches
         local strangers
@@ -2740,7 +2658,7 @@ do_uninstall() {
         stop_csqtt_docker_prereq
         stop_all_running_csqtt_systemd_units
     fi
-    force_stop_csqtt_processes || log_warn "Не все процессы CSQTT завершились до удаления runtime"
+    force_stop_csqtt_processes || die "Не удалось остановить все процессы удаляемого CSQTT"
     remove_all_csqtt_systemd_units
     rm -f "/etc/systemd/system/${CSQTT_DOCKER_PREREQ_SERVICE}"
     rm -f "/etc/systemd/system/docker.service.requires/${CSQTT_DOCKER_PREREQ_SERVICE}"
@@ -2749,7 +2667,7 @@ do_uninstall() {
     command -v systemctl >/dev/null 2>&1 && systemctl daemon-reload >/dev/null 2>&1 || true
 
     [ "$CSQTT_ROLE" = side ] || cleanup_legacy_proxy_interfaces
-    remove_csqtt_tun_interface || log_warn "Не удалось удалить TUN-интерфейс $CSQTT_IFACE во время uninstall"
+    remove_csqtt_tun_interface || die "Не удалось удалить TUN-интерфейс $CSQTT_IFACE"
     cleanup_csqtt_netfilter_rules || true
 
     rm -f "$CSQTT_BIN" "$CSQTT_LE_RENEW_HELPER"
@@ -2760,7 +2678,6 @@ do_uninstall() {
     fi
     secure_persistent_state
     rm -f "$CSQTT_SYSCTL_FILE" "$CSQTT_UDP_SYSCTL_FILE"
-    sysctl --system >/dev/null 2>&1 || true
 
     log_info "CSQTT${CSQTT_ROLE_LABEL} удалён. SQLite state и конфигурация сохранены в ${CSQTT_CONFIG_DIR}"
     echo "CSQTT_UNINSTALL_OK"
@@ -3097,8 +3014,11 @@ main() {
         purge|--purge|-p)
             DEPLOY_PHASE="validation"
             validate_port "CSQTT_PEER_PORT" "$PEER_PORT"
+            validate_port "CSQTT_WEB_PORT" "$WEB_PORT"
             do_uninstall
-            rm -rf -- "$CSQTT_CONFIG_DIR"
+            prog 0.90 "Удаление базы и настроек CSQTT..."
+            rm -rf -- "$CSQTT_CONFIG_DIR" || die "Не удалось удалить данные выбранного CSQTT"
+            [ ! -e "$CSQTT_CONFIG_DIR" ] || die "Данные выбранного CSQTT остались на сервере"
             log_info "Конфигурация, SQLite-база и сертификаты CSQTT удалены"
             echo "CSQTT_PURGE_OK"
             ;;
@@ -3116,40 +3036,42 @@ main() {
 
             local total_started=$SECONDS
             detect_os
-            run_timed "зависимости" install_prerequisites
+            run_timed "Пакеты..." 0.10 install_prerequisites
             require_runtime_tools
             if [ "$CSQTT_ROLE" = side ]; then side_preflight; else main_preflight; fi
             if [ "$DEPLOY_MODE" = "docker" ]; then
-                prog 0.12 "Docker..."
-                run_timed "Docker" ensure_docker
+                run_timed "Docker..." 0.15 ensure_docker
             fi
-            run_timed "sysctl" setup_sysctl
+            run_timed "Проверка сети..." 0.20 setup_sysctl
 
-            run_timed "проверка upload" prepare_uploaded_release
+            run_timed "Проверка полученных файлов" 0.25 prepare_uploaded_release
             if [ "$DEPLOY_MODE" = "docker" ]; then
-                run_timed "Docker preflight" prepare_docker_candidate "$UPLOAD_BINARY"
+                run_timed "Docker-образ: загрузка пакетов..." 0.32 prepare_docker_candidate "$UPLOAD_BINARY"
             fi
+            run_timed "Совместимость ядра..." 0.42 run_platform_preflight
             DEPLOY_PHASE="cutover"
-            prog 0.36 "Переключение серверного сервиса..."
-            run_timed "переключение runtime" csqtt_cleanup
-            run_timed "preflight" run_platform_preflight
+            run_timed "Очистка..." 0.46 csqtt_cleanup
             detect_firewall
-            run_timed "NAT/firewall" setup_nat_and_firewall
+            run_timed "NAT + Firewall..." 0.54 setup_nat_and_firewall
             install_network_helper
             if [ "$PRESERVE_CONFIG" = "1" ]; then
-                log_info "Режим обновления: база клиентов и их настройки сохраняются"
+                log_info "Повторная установка: данные клиентов и правила сохраняются"
             fi
             setup_csqtt_environment
-            run_timed "Let’s Encrypt" setup_letsencrypt_ip_tls
+            run_timed "Подготовка сертификата веб-панели" 0.62 setup_letsencrypt_ip_tls
             DEPLOY_PHASE="activation"
-            run_timed "бинарник" setup_csqtt_binary
-            run_timed "принудительная остановка" force_stop_csqtt_processes
+            run_timed "Бинарник..." 0.68 setup_csqtt_binary
+            run_timed "Проверка остановки старого процесса CSQTT" 0.72 force_stop_csqtt_processes
             if [ "$DEPLOY_MODE" = "docker" ]; then
-                run_timed "Docker activation" setup_csqtt_docker
+                run_timed "Docker-образ..." 0.75 setup_csqtt_docker
             else
-                run_timed "systemd unit" setup_csqtt_service
+                run_timed "Сервис..." 0.75 setup_csqtt_service
             fi
-            run_timed "запуск" start_csqtt
+            if [ "$DEPLOY_MODE" = "docker" ]; then
+                run_timed "Запуск Docker..." 0.90 start_csqtt
+            else
+                run_timed "Запуск..." 0.90 start_csqtt
+            fi
             log_info "Общее время deploy.sh: $((SECONDS - total_started))с"
             ;;
         *) die "Неизвестная команда установщика: $action" ;;

@@ -32,7 +32,7 @@ internal fun V2AdaptiveForm(
         val minField = maxOf(40.dp, with(density) { 20.sp.toDp() } + 12.dp)
         val roomyField = maxOf(48.dp, minField)
         val controlHeight = maxOf(48.dp, minField)
-        val profileHeight = maxOf(48.dp, with(density) { 36.sp.toDp() } + 8.dp)
+        val profileHeight = happProfileHeaderHeight()
         val fixed = profileHeight + labelHeight * fieldRows + controlHeight * controlRows + extraHeight
         // Two cards (four vertical paddings), two inter-card gaps, three row gaps.
         val roomForSpacing = maxHeight - fixed - roomyField * fieldRows

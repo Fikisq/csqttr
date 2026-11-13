@@ -8,7 +8,8 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.HelpOutline
-import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material3.*
@@ -32,13 +33,17 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.csqtt.client.ui.legacy.ModeIndicator
+import com.csqtt.client.ui.legacy.ModeProgressBar
+import com.csqtt.client.ui.legacy.TunnelDropdownMenu
 import com.csqtt.client.ui.v2.design.V2Theme
 
 @Composable
 internal fun HappField(label: String, value: String, onChange: (String) -> Unit, modifier: Modifier = Modifier,
     password: Boolean = false, number: Boolean = false, enabled: Boolean = true,
     placeholder: String = fieldFormatHint(label), compact: Boolean = false, visibilityKey: Any? = null,
-    shape: androidx.compose.ui.graphics.Shape = RoundedCornerShape(14.dp), floatingLabel: Boolean = false, maxFieldHeight: Dp? = null) {
+    shape: androidx.compose.ui.graphics.Shape = RoundedCornerShape(14.dp), floatingLabel: Boolean = false, maxFieldHeight: Dp? = null,
+    onGeneratePassword: (() -> Unit)? = null) {
     val c = V2Theme.colors
     val layout = LocalV2AdaptiveMetrics.current
     val density = LocalDensity.current
@@ -68,6 +73,16 @@ internal fun HappField(label: String, value: String, onChange: (String) -> Unit,
                         if(password) IconButton(onClick = { showPassword = !showPassword }, enabled = enabled, modifier = Modifier.size(36.dp)) {
                             Icon(if(showPassword) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility,
                                 "${if(showPassword) "Скрыть" else "Показать"} ${label.lowercase()}", tint = c.textSecondary, modifier = Modifier.size(17.dp))
+                        }
+                        if (password && onGeneratePassword != null) {
+                            IconButton(onClick = onGeneratePassword, enabled = enabled, modifier = Modifier.size(36.dp)) {
+                                Icon(
+                                    Icons.Default.Refresh,
+                                    contentDescription = "Сгенерировать ${label.lowercase()}",
+                                    tint = c.accent,
+                                    modifier = Modifier.size(20.dp),
+                                )
+                            }
                         }
                     }
                 }
@@ -100,7 +115,8 @@ internal fun HappHelp(title: String, text: String) {
     IconButton(onClick = { open = true }, modifier = Modifier.size(36.dp)) {
         Icon(Icons.AutoMirrored.Outlined.HelpOutline, "Подсказка: $title", tint = V2Theme.colors.textSecondary, modifier = Modifier.size(17.dp))
     }
-    if (open) AlertDialog(onDismissRequest = { open = false }, title = { Text(title) }, text = {
+    if (open) AlertDialog(onDismissRequest = { open = false }, title = { Text(title) },
+        containerColor = V2Theme.colors.surface, tonalElevation = 0.dp, text = {
         Column(Modifier.heightIn(max = 440.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             helpSections(title, text).forEach { section ->
                 Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
@@ -115,11 +131,12 @@ internal fun HappHelp(title: String, text: String) {
 
 @Composable
 internal fun HappChoice(label: String, value: String, options: List<String>, onSelect: (String) -> Unit,
-    modifier: Modifier = Modifier, tone: Color? = null, help: String? = null, enabled: Boolean = true, compact: Boolean = false,
+    modifier: Modifier = Modifier, indicators: Map<String, ModeIndicator> = emptyMap(), help: String? = null, enabled: Boolean = true, compact: Boolean = false,
     valueMaxLines: Int = 1, labelContent: (@Composable () -> Unit)? = null,
-    shape: androidx.compose.ui.graphics.Shape = RoundedCornerShape(14.dp)) {
+    shape: androidx.compose.ui.graphics.Shape = RoundedCornerShape(14.dp), optionHelp: Map<String, String> = emptyMap()) {
     val c = V2Theme.colors
     var expanded by remember { mutableStateOf(false) }
+    var helpOption by remember { mutableStateOf<String?>(null) }
     Row(modifier.fillMaxWidth().heightIn(min = LocalV2AdaptiveMetrics.current.rowHeight + if (compact) 0.dp else 8.dp), verticalAlignment = Alignment.CenterVertically) {
         if (labelContent == null) Text(label, modifier = Modifier.weight(1f), color = c.textPrimary, fontSize = V2TextSizes.Body)
         else Box(Modifier.weight(1f)) { labelContent() }
@@ -130,15 +147,40 @@ internal fun HappChoice(label: String, value: String, options: List<String>, onS
                 Column(Modifier.heightIn(min = LocalV2AdaptiveMetrics.current.fieldHeight).padding(horizontal = 10.dp, vertical = 6.dp), verticalArrangement = Arrangement.Center) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(value, modifier = Modifier.weight(1f), fontSize = V2TextSizes.Body, maxLines = valueMaxLines, overflow = TextOverflow.Ellipsis, color = c.textPrimary)
-                        Icon(Icons.Default.KeyboardArrowDown, null, tint = c.textSecondary, modifier = Modifier.size(18.dp))
+                        Icon(Icons.Default.ArrowDropDown, null, tint = c.textSecondary, modifier = Modifier.size(20.dp))
                     }
-                    if (tone != null) Box(Modifier.padding(top = 4.dp).fillMaxWidth().height(3.dp).background(tone, RoundedCornerShape(2.dp)))
+                    val indicator = indicators[value]
+                    if (indicator != null) {
+                        Spacer(Modifier.height(2.dp))
+                        ModeProgressBar(indicator.progress, indicator.color, Modifier.fillMaxWidth())
+                    }
+                    else if (indicators.isNotEmpty()) Spacer(Modifier.height(6.dp))
                 }
             }
-            DropdownMenu(expanded, { expanded = false }, containerColor = c.surface) {
-                options.forEach { option -> DropdownMenuItem(text = { Text(option, fontSize = V2TextSizes.Body) }, onClick = { expanded = false; onSelect(option) }) }
-            }
+            TunnelDropdownMenu(
+                expanded = expanded,
+                onDismiss = { expanded = false },
+                options = options.map { it to it },
+                onSelected = onSelect,
+                onInfo = { helpOption = it },
+                hasInfo = { it in optionHelp },
+                indicatorProvider = indicators::get,
+            )
         }
+    }
+    helpOption?.let { option ->
+        AlertDialog(
+            onDismissRequest = { helpOption = null },
+            title = { Text(option) },
+            containerColor = c.surface,
+            tonalElevation = 0.dp,
+            text = {
+                Column(Modifier.heightIn(max = 440.dp).verticalScroll(rememberScrollState())) {
+                    Text(optionHelp.getValue(option))
+                }
+            },
+            confirmButton = { TextButton(onClick = { helpOption = null }) { Text("Понятно") } },
+        )
     }
 }
 

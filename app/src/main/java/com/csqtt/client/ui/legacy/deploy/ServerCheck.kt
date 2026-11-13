@@ -1,9 +1,20 @@
 package com.csqtt.client.ui.legacy
 
 import com.csqtt.client.CsqttConstants
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 
 // What `deploy.sh inventory` found on the server, and what the app offers for it (deploy-check-first-design.md §1–§3).
 // The app looks before it offers: the user picks an action that fits the server, never a mode that assumes what is there.
+
+internal class DeployCheckState {
+    var plan by mutableStateOf<DeployPlan?>(null)
+    var replacement by mutableStateOf<PlanAction?>(null)
+    var removable by mutableStateOf<List<FoundServer>?>(null)
+    var removalNotes by mutableStateOf(emptyList<String>())
+    var removal by mutableStateOf<FoundServer?>(null)
+}
 
 internal enum class ServerPlace { STANDARD, SIDE, PANEL, OTHER, LEFTOVER }
 
@@ -85,6 +96,8 @@ internal data class PlanAction(
     val detail: String,
 ) {
     val destructive: Boolean get() = kind == PlanKind.REPLACE
+    val actionMode: DeployActionMode get() =
+        if (kind == PlanKind.UPDATE) DeployActionMode.Update else DeployActionMode.Install
 }
 
 internal data class DeployPlan(
@@ -92,6 +105,15 @@ internal data class DeployPlan(
     val actions: List<PlanAction>,
     val notes: List<String>,
 )
+
+internal fun DeployPlan.directInstall(): PlanAction? =
+    actions.singleOrNull()?.takeUnless { action ->
+        action.destructive ||
+            (action.instance == DeployInstance.MAIN && servers.any { it.place == ServerPlace.LEFTOVER })
+    }
+
+internal fun directRemoval(servers: List<FoundServer>, notes: List<String>, profilePeerPort: Int): FoundServer? =
+    servers.singleOrNull()?.takeIf { notes.isEmpty() && it.peerPortOrDefault() == profilePeerPort }
 
 private fun runtimeLabel(runtime: String): String = when (runtime) {
     "systemd" -> "служба systemd"
@@ -201,7 +223,7 @@ internal fun planDeploy(
 
     val updates = listOfNotNull(liveStandard?.takeIf { isLine25(it.version) && others.isEmpty() }, side)
         .sortedByDescending { it.peerPort == profilePeerPort }
-    for (server in updates) update(server, if (updates.size > 1) "Обновить: порт ${server.peerPort}" else "Обновить")
+    for (server in updates) update(server, if (updates.size > 1) "Установить: порт ${server.peerPort}" else "Установить")
 
     when {
         liveStandard != null && !isLine25(liveStandard.version) && side == null -> {
@@ -267,10 +289,8 @@ internal fun removalNotes(inventory: ServerInventory): List<String> {
 internal fun FoundServer.deployInstance(): DeployInstance =
     if (place == ServerPlace.SIDE) DeployInstance.SIDE else DeployInstance.MAIN
 
+internal fun FoundServer.webPortOrDefault(): Int = webPort ?: deployInstance().defaultWebPort
+
 internal fun FoundServer.peerPortOrDefault(): Int =
     peerPort ?: if (place == ServerPlace.SIDE) CsqttConstants.Network.DEFAULT_SIDE_SERVER_PEER_PORT
     else CsqttConstants.Network.DEFAULT_SERVER_PEER_PORT
-
-/** Only an unambiguous installed instance matching the selected VPS profile is removable. */
-internal fun removalTargetForProfile(inventory: ServerInventory, peerPort: Int, webPort: Int): FoundServer? =
-    removableServers(inventory).filter { it.peerPort == peerPort && it.webPort == webPort }.singleOrNull()

@@ -24,6 +24,33 @@ class ServerCheckTest {
     private fun DeployPlan.kinds() = actions.map { "${it.kind}:${it.instance}:${it.peerPort}/${it.webPort}" }
 
     @Test
+    fun `one install or update starts directly and replacement or multiple targets need a choice`() {
+        assertEquals(PlanKind.INSTALL, plan(inv()).directInstall()?.kind)
+        for (docker in listOf(false, true)) {
+            assertEquals(PlanKind.UPDATE, plan(inv(std250), docker = docker).directInstall()?.kind)
+        }
+        assertNull(plan(inv(std21)).directInstall())
+        assertNull(plan(inv(std250, side252)).directInstall())
+        val leftover = server("leftover", "?", 47000, 47002, state = "stopped", name = "csqtt47.service")
+        assertNull(plan(inv(std250, leftover)).directInstall())
+        val foreign = server("panel", "2.5.0", 47000, 47002)
+        assertNull(plan(inv(foreign)).directInstall())
+    }
+
+    @Test
+    fun `direct removal requires one permitted server on the profile port with no additional cleanup`() {
+        fun direct(inventory: ServerInventory, peer: Int = 46000) =
+            directRemoval(removableServers(inventory), removalNotes(inventory), peer)
+        assertEquals(ServerPlace.STANDARD, direct(inv(std250))?.place)
+        assertEquals(ServerPlace.SIDE, direct(inv(side252), 46100)?.place)
+        assertNull(direct(inv(side252)))
+        assertNull(direct(inv(std250, side252)))
+        assertNull(direct(inv()))
+        val leftover = server("leftover", "?", 47000, 47002, state = "stopped", name = "csqtt47.service")
+        assertNull(direct(inv(std250, leftover)))
+    }
+
+    @Test
     fun `the check result is trusted only when it finished`() {
         assertNull(parseServerInventory(std250))
         val parsed = inv("noise", std250 + "|future=1", "CSQTT_INV|server|place=nowhere|state=running", "CSQTT_INV|busy|proto=udp|port=46000|by=nginx (PID 9, /usr/sbin/nginx)")
@@ -53,7 +80,8 @@ class ServerCheckTest {
     fun `a 2_5 server is updated on its own ports, whatever the form says`() {
         val p = plan(inv(server("standard", "2.5.0", 47000, 47002)), EffectiveServerPorts(22, 46000, 46002))
         assertEquals(listOf("UPDATE:MAIN:47000/47002"), p.kinds())
-        assertEquals("Обновить", p.actions[0].title)
+        assertEquals("Установить", p.actions[0].title)
+        assertEquals(DeployActionMode.Update, p.actions[0].actionMode)
         assertTrue(p.actions[0].detail.contains("2.5.0 → 2.5.2"))
         assertTrue(plan(inv(std250), docker = true).actions[0].detail.contains("будет Docker"))
         assertFalse(plan(inv(std250)).actions[0].detail.contains("будет"))
@@ -81,7 +109,7 @@ class ServerCheckTest {
         // two 2.5 servers (the old one replaced later): each updated, the profile's first
         val two = plan(inv(std250, side252), profilePeer = 46100)
         assertEquals(listOf("UPDATE:SIDE:46100/46102", "UPDATE:MAIN:46000/46002"), two.kinds())
-        assertEquals("Обновить: порт 46100", two.actions[0].title)
+        assertEquals("Установить: порт 46100", two.actions[0].title)
         assertTrue(describeServer(two.servers[1], 46100).second.contains("подключение профиля"))
         assertFalse(describeServer(two.servers[0], 46100).second.contains("подключение профиля"))
     }
@@ -141,18 +169,5 @@ class ServerCheckTest {
     fun `an update or a replace says the tunnel password and web login come from this profile`() {
         assertTrue(plan(inv(std250)).actions[0].detail.contains("«Авторизации» этого профиля"))
         assertTrue(plan(inv(std21)).actions[1].detail.contains("«Авторизации» этого профиля"))
-    }
-
-    @Test fun removalTargetsOnlySelectedProfilePorts() {
-        val inventory = inv(std250, side252)
-        assertEquals(ServerPlace.STANDARD, removalTargetForProfile(inventory, 46000, 46002)?.place)
-        assertEquals(ServerPlace.SIDE, removalTargetForProfile(inventory, 46100, 46102)?.place)
-        assertNull(removalTargetForProfile(inventory, 47000, 47002))
-        assertNull(removalTargetForProfile(inventory, 46000, 46102))
-    }
-    @Test fun removalRejectsMissingAmbiguousAndUnsafeTargets() {
-        assertNull(removalTargetForProfile(inv(storeOnly), 46000, 46002))
-        assertNull(removalTargetForProfile(inv(std250, std250), 46000, 46002))
-        assertNull(removalTargetForProfile(inv(std250, server("other", "2.5.3", 47000, 47002)), 46000, 46002))
     }
 }

@@ -125,7 +125,7 @@ fun V2PowerSlider(
                 text = if (isFixed) "Потоки (лимит)" else "Потоки",
                 style = MaterialTheme.typography.titleMedium.copy(
                     fontFamily = V2DisplayFamily,
-                    fontWeight = FontWeight.Normal,
+                    fontWeight = FontWeight.Bold,
                     fontSize = 16.sp,
                 ),
                 color = colors.accent,
@@ -144,7 +144,7 @@ fun V2PowerSlider(
                 text = "${if (isFixed) fixedWorkers else localValue.toInt()} потоков",
                 style = MaterialTheme.typography.titleMedium.copy(
                     fontFamily = V2DisplayFamily,
-                    fontWeight = FontWeight.Normal,
+                    fontWeight = FontWeight.Bold,
                     fontSize = 16.sp,
                 ),
                 color = colors.accent,
@@ -163,7 +163,7 @@ fun V2PowerSlider(
         Canvas(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(48.dp)
+                .height(34.dp)
                 .pointerInput(enabled, isFixed, validSteps) {
                     if (!enabled || isFixed) return@pointerInput
                     detectTapGestures(
