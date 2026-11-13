@@ -1561,161 +1561,155 @@ fun ExceptionsTab(
                                         context.showRaisedToast("Буфер обмена пуст", Toast.LENGTH_SHORT)
                                         return@Button
                                     }
-                                    var importedAny = false
-                                    val rootJson = runCatching { JSONObject(clipText) }.getOrNull()
-                                    if (rootJson != null) {
-                                        if (transferAppsSelected && rootJson.has("apps")) {
-                                            val appsObj = rootJson.getJSONObject("apps")
-                                            val isWhite = if (appsObj.has("active_mode")) {
-                                                appsObj.optString("active_mode") == "whitelist"
-                                            } else {
-                                                appsObj.optBoolean("is_whitelist", isWhitelist)
-                                            }
-                                            val newBlack = mutableSetOf<String>()
-                                            val blackArr = appsObj.optJSONArray("blacklist")
-                                            if (blackArr != null) {
-                                                for (i in 0 until blackArr.length()) {
-                                                    val pkg = blackArr.optString(i)
-                                                    if (isValidPackage(pkg)) newBlack.add(pkg)
+                                    scope.launch(Dispatchers.Main.immediate) {
+                                        var importedAny = false
+                                        val rootJson = runCatching { JSONObject(clipText) }.getOrNull()
+                                        if (rootJson != null) {
+                                            if (transferAppsSelected && rootJson.has("apps")) {
+                                                val appsObj = rootJson.getJSONObject("apps")
+                                                val isWhite = if (appsObj.has("active_mode")) {
+                                                    appsObj.optString("active_mode") == "whitelist"
+                                                } else {
+                                                    appsObj.optBoolean("is_whitelist", isWhitelist)
                                                 }
-                                            }
-                                            val newWhite = mutableSetOf<String>()
-                                            val whiteArr = appsObj.optJSONArray("whitelist")
-                                            if (whiteArr != null) {
-                                                for (i in 0 until whiteArr.length()) {
-                                                    val pkg = whiteArr.optString(i)
-                                                    if (isValidPackage(pkg)) newWhite.add(pkg)
-                                                }
-                                            }
-                                            blacklistSelection = newBlack
-                                            whitelistSelection = newWhite
-                                            persistAppSelections(black = newBlack, white = newWhite, mode = isWhite)
-                                            importedAny = true
-                                        }
-                                        if (transferDomainsSelected && rootJson.has("domains")) {
-                                            val domainsObj = rootJson.getJSONObject("domains")
-                                            val isWhite = if (domainsObj.has("active_mode")) {
-                                                domainsObj.optString("active_mode") == "whitelist"
-                                            } else {
-                                                domainsObj.optBoolean("is_whitelist", domainIsWhitelist)
-                                            }
-                                            val isTemplate = domainsObj.optBoolean("template_domains", false)
-                                            val impBlack = mutableListOf<String>()
-                                            val blackArr = domainsObj.optJSONArray("blacklist")
-                                            if (blackArr != null) {
-                                                for (i in 0 until blackArr.length()) {
-                                                    val d = cleanDomain(blackArr.optString(i))
-                                                    if (isValidDomain(d)) impBlack.add(d)
-                                                }
-                                            }
-                                            val impWhite = mutableListOf<String>()
-                                            val whiteArr = domainsObj.optJSONArray("whitelist")
-                                            if (whiteArr != null) {
-                                                for (i in 0 until whiteArr.length()) {
-                                                    val d = cleanDomain(whiteArr.optString(i))
-                                                    if (isValidDomain(d)) impWhite.add(d)
-                                                }
-                                            }
-                                            val flatArr = domainsObj.optJSONArray("direct_domains")
-                                            if (flatArr != null && impBlack.isEmpty() && impWhite.isEmpty()) {
-                                                for (i in 0 until flatArr.length()) {
-                                                    val d = cleanDomain(flatArr.optString(i))
-                                                    if (isValidDomain(d)) {
-                                                        if (isWhite) impWhite.add(d) else impBlack.add(d)
+                                                val newBlack = mutableSetOf<String>()
+                                                val blackArr = appsObj.optJSONArray("blacklist")
+                                                if (blackArr != null) {
+                                                    for (i in 0 until blackArr.length()) {
+                                                        val pkg = blackArr.optString(i)
+                                                        if (isValidPackage(pkg)) newBlack.add(pkg)
                                                     }
                                                 }
+                                                val newWhite = mutableSetOf<String>()
+                                                val whiteArr = appsObj.optJSONArray("whitelist")
+                                                if (whiteArr != null) {
+                                                    for (i in 0 until whiteArr.length()) {
+                                                        val pkg = whiteArr.optString(i)
+                                                        if (isValidPackage(pkg)) newWhite.add(pkg)
+                                                    }
+                                                }
+                                                blacklistSelection = newBlack
+                                                whitelistSelection = newWhite
+                                                settingsStore.saveAppRoutingLists(newBlack.joinToString(","), newWhite.joinToString(","), isWhite)
+                                                importedAny = true
                                             }
-                                            val formattedBlack = impBlack.distinct().take(1024).joinToString(",")
-                                            val formattedWhite = impWhite.distinct().take(1024).joinToString(",")
-                                            scope.launch {
+                                            if (transferDomainsSelected && rootJson.has("domains")) {
+                                                val domainsObj = rootJson.getJSONObject("domains")
+                                                val isWhite = if (domainsObj.has("active_mode")) {
+                                                    domainsObj.optString("active_mode") == "whitelist"
+                                                } else {
+                                                    domainsObj.optBoolean("is_whitelist", domainIsWhitelist)
+                                                }
+                                                val isTemplate = domainsObj.optBoolean("template_domains", false)
+                                                val impBlack = mutableListOf<String>()
+                                                val blackArr = domainsObj.optJSONArray("blacklist")
+                                                if (blackArr != null) {
+                                                    for (i in 0 until blackArr.length()) {
+                                                        val d = cleanDomain(blackArr.optString(i))
+                                                        if (isValidDomain(d)) impBlack.add(d)
+                                                    }
+                                                }
+                                                val impWhite = mutableListOf<String>()
+                                                val whiteArr = domainsObj.optJSONArray("whitelist")
+                                                if (whiteArr != null) {
+                                                    for (i in 0 until whiteArr.length()) {
+                                                        val d = cleanDomain(whiteArr.optString(i))
+                                                        if (isValidDomain(d)) impWhite.add(d)
+                                                    }
+                                                }
+                                                val flatArr = domainsObj.optJSONArray("direct_domains")
+                                                if (flatArr != null && impBlack.isEmpty() && impWhite.isEmpty()) {
+                                                    for (i in 0 until flatArr.length()) {
+                                                        val d = cleanDomain(flatArr.optString(i))
+                                                        if (isValidDomain(d)) {
+                                                            if (isWhite) impWhite.add(d) else impBlack.add(d)
+                                                        }
+                                                    }
+                                                }
+                                                val formattedBlack = impBlack.distinct().take(1024).joinToString(",")
+                                                val formattedWhite = impWhite.distinct().take(1024).joinToString(",")
                                                 settingsStore.saveDomainIsWhitelist(isWhite)
                                                 settingsStore.saveTemplateDomainsEnabled(isTemplate)
                                                 if (impBlack.isNotEmpty() || !isWhite) settingsStore.saveDirectDomainsBlack(formattedBlack)
                                                 if (impWhite.isNotEmpty() || isWhite) settingsStore.saveDirectDomainsWhite(formattedWhite)
                                                 TunnelManager.pushLocalRouting(context)
+                                                importedAny = true
                                             }
-                                            importedAny = true
-                                        }
-                                        if (transferIpsSelected && rootJson.has("ips")) {
-                                            val ipsObj = rootJson.getJSONObject("ips")
-                                            val isWhite = if (ipsObj.has("active_mode")) {
-                                                ipsObj.optString("active_mode") == "whitelist"
-                                            } else {
-                                                ipsObj.optBoolean("is_whitelist", ipIsWhitelist)
-                                            }
-                                            val impBlack = mutableListOf<String>()
-                                            val blackArr = ipsObj.optJSONArray("blacklist")
-                                            if (blackArr != null) {
-                                                for (i in 0 until blackArr.length()) {
-                                                    val r = cleanIpRule(blackArr.optString(i))
-                                                    if (isValidIpRule(r)) impBlack.add(r)
+                                            if (transferIpsSelected && rootJson.has("ips")) {
+                                                val ipsObj = rootJson.getJSONObject("ips")
+                                                val isWhite = if (ipsObj.has("active_mode")) {
+                                                    ipsObj.optString("active_mode") == "whitelist"
+                                                } else {
+                                                    ipsObj.optBoolean("is_whitelist", ipIsWhitelist)
                                                 }
-                                            }
-                                            val impWhite = mutableListOf<String>()
-                                            val whiteArr = ipsObj.optJSONArray("whitelist")
-                                            if (whiteArr != null) {
-                                                for (i in 0 until whiteArr.length()) {
-                                                    val r = cleanIpRule(whiteArr.optString(i))
-                                                    if (isValidIpRule(r)) impWhite.add(r)
-                                                }
-                                            }
-                                            val flatArr = ipsObj.optJSONArray("direct_ips")
-                                            if (flatArr != null && impBlack.isEmpty() && impWhite.isEmpty()) {
-                                                for (i in 0 until flatArr.length()) {
-                                                    val r = cleanIpRule(flatArr.optString(i))
-                                                    if (isValidIpRule(r)) {
-                                                        if (isWhite) impWhite.add(r) else impBlack.add(r)
+                                                val impBlack = mutableListOf<String>()
+                                                val blackArr = ipsObj.optJSONArray("blacklist")
+                                                if (blackArr != null) {
+                                                    for (i in 0 until blackArr.length()) {
+                                                        val r = cleanIpRule(blackArr.optString(i))
+                                                        if (isValidIpRule(r)) impBlack.add(r)
                                                     }
                                                 }
-                                            }
-                                            val formattedBlack = impBlack.distinct().take(1024).joinToString(",")
-                                            val formattedWhite = impWhite.distinct().take(1024).joinToString(",")
-                                            scope.launch {
+                                                val impWhite = mutableListOf<String>()
+                                                val whiteArr = ipsObj.optJSONArray("whitelist")
+                                                if (whiteArr != null) {
+                                                    for (i in 0 until whiteArr.length()) {
+                                                        val r = cleanIpRule(whiteArr.optString(i))
+                                                        if (isValidIpRule(r)) impWhite.add(r)
+                                                    }
+                                                }
+                                                val flatArr = ipsObj.optJSONArray("direct_ips")
+                                                if (flatArr != null && impBlack.isEmpty() && impWhite.isEmpty()) {
+                                                    for (i in 0 until flatArr.length()) {
+                                                        val r = cleanIpRule(flatArr.optString(i))
+                                                        if (isValidIpRule(r)) {
+                                                            if (isWhite) impWhite.add(r) else impBlack.add(r)
+                                                        }
+                                                    }
+                                                }
+                                                val formattedBlack = impBlack.distinct().take(1024).joinToString(",")
+                                                val formattedWhite = impWhite.distinct().take(1024).joinToString(",")
                                                 settingsStore.saveIpIsWhitelist(isWhite)
                                                 settingsStore.saveIpRoutingEnabled(true)
                                                 if (impBlack.isNotEmpty() || !isWhite) settingsStore.saveDirectIpsBlack(formattedBlack)
                                                 if (impWhite.isNotEmpty() || isWhite) settingsStore.saveDirectIpsWhite(formattedWhite)
                                                 TunnelManager.pushLocalRouting(context)
+                                                importedAny = true
                                             }
-                                            importedAny = true
-                                        }
-                                    } else {
-                                        if (transferAppsSelected) {
-                                            val parsed = parseAppExportFromText(clipText)
-                                            if (parsed != null) {
-                                                val (impBlack, impWhite) = parsed
-                                                val nBlack = if (impBlack.isNotEmpty()) blacklistSelection + impBlack else null
-                                                val nWhite = if (impWhite.isNotEmpty()) whitelistSelection + impWhite else null
-                                                if (nBlack != null || nWhite != null) {
-                                                    nBlack?.let { blacklistSelection = it }
-                                                    nWhite?.let { whitelistSelection = it }
-                                                    persistAppSelections(black = nBlack, white = nWhite)
-                                                    importedAny = true
+                                        } else {
+                                            if (transferAppsSelected) {
+                                                val parsed = parseAppExportFromText(clipText)
+                                                if (parsed != null) {
+                                                    val (impBlack, impWhite) = parsed
+                                                    val nBlack = if (impBlack.isNotEmpty()) blacklistSelection + impBlack else null
+                                                    val nWhite = if (impWhite.isNotEmpty()) whitelistSelection + impWhite else null
+                                                    if (nBlack != null || nWhite != null) {
+                                                        nBlack?.let { blacklistSelection = it }
+                                                        nWhite?.let { whitelistSelection = it }
+                                                        settingsStore.saveAppRoutingLists(blacklistSelection.joinToString(","), whitelistSelection.joinToString(","))
+                                                        importedAny = true
+                                                    }
                                                 }
                                             }
-                                        }
-                                        if (transferDomainsSelected) {
-                                            val importedDomains = parseDomainsFromText(clipText)
-                                            if (importedDomains.isNotEmpty()) {
-                                                val currentList = if (domainIsWhitelist) parseDomainsFromText(directDomainsWhiteStr) else parseDomainsFromText(directDomainsBlackStr)
-                                                val combined = (currentList + importedDomains).distinct().take(1024).joinToString(",")
-                                                scope.launch {
+                                            if (transferDomainsSelected) {
+                                                val importedDomains = parseDomainsFromText(clipText)
+                                                if (importedDomains.isNotEmpty()) {
+                                                    val currentList = if (domainIsWhitelist) parseDomainsFromText(directDomainsWhiteStr) else parseDomainsFromText(directDomainsBlackStr)
+                                                    val combined = (currentList + importedDomains).distinct().take(1024).joinToString(",")
                                                     if (domainIsWhitelist) {
                                                         settingsStore.saveDirectDomainsWhite(combined)
                                                     } else {
                                                         settingsStore.saveDirectDomainsBlack(combined)
                                                     }
                                                     TunnelManager.pushLocalRouting(context)
+                                                    importedAny = true
                                                 }
-                                                importedAny = true
                                             }
-                                        }
-                                        if (transferIpsSelected) {
-                                            val importedIps = parseIpsFromText(clipText)
-                                            if (importedIps.isNotEmpty()) {
-                                                val currentList = if (ipIsWhitelist) parseIpsFromText(directIpsWhiteStr) else parseIpsFromText(directIpsBlackStr)
-                                                val combined = (currentList + importedIps).distinct().take(1024).joinToString(",")
-                                                scope.launch {
+                                            if (transferIpsSelected) {
+                                                val importedIps = parseIpsFromText(clipText)
+                                                if (importedIps.isNotEmpty()) {
+                                                    val currentList = if (ipIsWhitelist) parseIpsFromText(directIpsWhiteStr) else parseIpsFromText(directIpsBlackStr)
+                                                    val combined = (currentList + importedIps).distinct().take(1024).joinToString(",")
                                                     settingsStore.saveIpRoutingEnabled(true)
                                                     if (ipIsWhitelist) {
                                                         settingsStore.saveDirectIpsWhite(combined)
@@ -1723,19 +1717,19 @@ fun ExceptionsTab(
                                                         settingsStore.saveDirectIpsBlack(combined)
                                                     }
                                                     TunnelManager.pushLocalRouting(context)
+                                                    importedAny = true
                                                 }
-                                                importedAny = true
                                             }
                                         }
-                                    }
-                                    if (importedAny) {
-                                        if (transferAppsSelected) {
-                                            TunnelManager.reloadVpn()
+                                        if (importedAny) {
+                                            if (transferAppsSelected) {
+                                                TunnelManager.reloadVpn()
+                                            }
+                                            context.showRaisedToast("Правила успешно импортированы", Toast.LENGTH_SHORT)
+                                            showRulesTransferDialog = false
+                                        } else {
+                                            context.showRaisedToast("В буфере обмена нет подходящих данных", Toast.LENGTH_SHORT)
                                         }
-                                        context.showRaisedToast("Правила успешно импортированы", Toast.LENGTH_SHORT)
-                                        showRulesTransferDialog = false
-                                    } else {
-                                        context.showRaisedToast("В буфере обмена нет подходящих данных", Toast.LENGTH_SHORT)
                                     }
                                 },
                                 modifier = Modifier
