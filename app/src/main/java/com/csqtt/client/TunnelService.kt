@@ -250,14 +250,7 @@ class TunnelService : Service() {
                             return@launch
                         }
 
-                        val domainWhite = store.domainIsWhitelist.first()
-                        val domainList = if (domainWhite) store.directDomainsWhite.first() else store.directDomainsBlack.first()
-                        val ipWhite = store.ipIsWhitelist.first()
-                        val ipList = if (ipWhite) store.directIpsWhite.first() else store.directIpsBlack.first()
-                        val hasDomains = if (domainWhite) domainList.isNotBlank() else (domainList.isNotBlank() || store.templateDomainsEnabled.first() || store.excludeRuZonesEnabled.first())
-                        val effectiveDomainEnabled = store.domainRoutingEnabled.first() && hasDomains
-                        val hasIps = ipList.isNotBlank()
-                        val effectiveIpEnabled = hasIps   // the list is the switch (TunVpnService)
+                        val routing = store.routingScreenSnapshot.first()
 
                         val params = TunnelParams(
                             peer = intent.getStringExtra("peer") ?: "",
@@ -287,14 +280,14 @@ class TunnelService : Service() {
                             allowHashRedistribution = resolvedHashes.allowWorkerRedistribution,
                             vkHashMode = resolvedHashes.mode,
                             vkAccessToken = resolvedHashes.accessToken,
-                            domainRoutingEnabled = effectiveDomainEnabled,
-                            domainIsWhitelist = domainWhite,
-                            excludeRuZones = if (domainWhite) false else store.excludeRuZonesEnabled.first(),
-                            templateDomains = if (domainWhite) false else store.templateDomainsEnabled.first(),
-                            directDomains = domainList,
-                            ipRoutingEnabled = effectiveIpEnabled,
-                            ipIsWhitelist = ipWhite,
-                            directIps = ipList,
+                            domainRoutingEnabled = routing.hasDomainRules,
+                            domainIsWhitelist = routing.domainIsWhitelist,
+                            excludeRuZones = routing.useRuZones,
+                            templateDomains = routing.useTemplate,
+                            directDomains = routing.activeDomains,
+                            ipRoutingEnabled = routing.activeIps.isNotBlank(),
+                            ipIsWhitelist = routing.ipIsWhitelist,
+                            directIps = routing.activeIps,
                         )
                         launch(Dispatchers.Main) {
                             if (isCurrentStart(requestGeneration)) startTunnel(params)
@@ -480,11 +473,7 @@ class TunnelService : Service() {
                         tokenFromLink = source.tokenFromLink,
                     )
                 }
-                val domainWhite = store.domainIsWhitelist.first()
-                val domainList = if (domainWhite) store.directDomainsWhite.first() else store.directDomainsBlack.first()
-                val ipWhite = store.ipIsWhitelist.first()
-                val ipList = if (ipWhite) store.directIpsWhite.first() else store.directIpsBlack.first()
-                val ipRouting = ipList.isNotBlank()   // the list is the switch (TunVpnService)
+                val routing = store.routingScreenSnapshot.first()
 
                 val params = TunnelParams(
                     peer = source.peer,
@@ -509,17 +498,14 @@ class TunnelService : Service() {
                     allowHashRedistribution = restoredHashes?.allowWorkerRedistribution == true,
                     vkHashMode = restoredHashes?.mode ?: CsqttConstants.VkAutoHash.MODE_MANUAL,
                     vkAccessToken = restoredHashes?.accessToken.orEmpty(),
-                    domainRoutingEnabled = store.domainRoutingEnabled.first() ||
-                        (!domainWhite && store.templateDomainsEnabled.first()) ||
-                        domainList.isNotBlank() ||
-                        (!domainWhite && store.excludeRuZonesEnabled.first()),
-                    domainIsWhitelist = domainWhite,
-                    excludeRuZones = if (domainWhite) false else store.excludeRuZonesEnabled.first(),
-                    templateDomains = if (domainWhite) false else store.templateDomainsEnabled.first(),
-                    directDomains = domainList,
-                    ipRoutingEnabled = ipRouting,
-                    ipIsWhitelist = ipWhite,
-                    directIps = ipList,
+                    domainRoutingEnabled = routing.hasDomainRules,
+                    domainIsWhitelist = routing.domainIsWhitelist,
+                    excludeRuZones = routing.useRuZones,
+                    templateDomains = routing.useTemplate,
+                    directDomains = routing.activeDomains,
+                    ipRoutingEnabled = routing.activeIps.isNotBlank(),
+                    ipIsWhitelist = routing.ipIsWhitelist,
+                    directIps = routing.activeIps,
                 )
                 if (
                     params.peer.isNotEmpty() &&
@@ -1101,28 +1087,8 @@ class TunnelService : Service() {
     private fun observeDomainRoutingSettings() {
         domainRoutingSettingsJob?.cancel()
         domainRoutingSettingsJob = serviceScope.launch {
-            val store = SettingsStore(applicationContext)
-            combine(
-                store.domainRoutingEnabled,
-                store.excludeRuZonesEnabled,
-                store.templateDomainsEnabled,
-                store.directDomains,
-            ) { domainEnabled, excludeRu, templateEnabled, domains ->
-                DomainRoutingUpdate(
-                    enabled = domainEnabled || templateEnabled || domains.isNotBlank() || excludeRu,
-                    excludeRuZones = excludeRu,
-                    templateDomains = templateEnabled,
-                    directDomains = domains,
-                )
-            }.distinctUntilChanged().collect { update ->
-                if (TunnelManager.running.value && !TunnelManager.serverRoutingActive.value) {
-                    TunnelManager.updateDomainRouting(
-                        enabled = update.enabled,
-                        excludeRuZones = update.excludeRuZones,
-                        templateDomains = update.templateDomains,
-                        directDomains = update.directDomains,
-                    )
-                }
+            SettingsStore(applicationContext).routingScreenSnapshot.collect { routing ->
+                if (TunnelManager.running.value) TunnelManager.applyLocalRouting(routing)
             }
         }
     }
@@ -1643,10 +1609,3 @@ class TunnelService : Service() {
 
     override fun onBind(intent: Intent?): IBinder? = null
 }
-
-private data class DomainRoutingUpdate(
-    val enabled: Boolean,
-    val excludeRuZones: Boolean,
-    val templateDomains: Boolean,
-    val directDomains: String,
-)

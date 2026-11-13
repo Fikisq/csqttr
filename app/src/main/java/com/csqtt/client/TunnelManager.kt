@@ -1999,28 +1999,7 @@ object TunnelManager {
                 }
             } else if (previousRule != null) {
                 activeScope.launch {
-                    val settingsStore = SettingsStore(ctx)
-                    val domainWhite = settingsStore.domainIsWhitelist.first()
-                    val domainEnabled = settingsStore.domainRoutingEnabled.first()
-                    val excludeRu = settingsStore.excludeRuZonesEnabled.first()
-                    val templateEnabled = settingsStore.templateDomainsEnabled.first()
-                    val domains = if (domainWhite) settingsStore.directDomainsWhite.first() else settingsStore.directDomainsBlack.first()
-                    val ipWhite = settingsStore.ipIsWhitelist.first()
-                    val ips = if (ipWhite) settingsStore.directIpsWhite.first() else settingsStore.directIpsBlack.first()
-                    val hasDomains = if (domainWhite) domains.isNotBlank() else (domains.isNotBlank() || templateEnabled || excludeRu)
-                    val effectiveDomainEnabled = domainEnabled && hasDomains
-                    val hasIps = ips.isNotBlank()
-                    val effectiveIpEnabled = hasIps   // the list is the switch (TunVpnService)
-                    updateDomainRouting(
-                        enabled = effectiveDomainEnabled,
-                        excludeRuZones = if (domainWhite) false else excludeRu,
-                        templateDomains = if (domainWhite) false else templateEnabled,
-                        directDomains = domains,
-                        isWhitelist = domainWhite,
-                        ipRoutingEnabled = effectiveIpEnabled,
-                        ipIsWhitelist = ipWhite,
-                        directIps = ips,
-                    )
+                    applyLocalRouting(SettingsStore(ctx).routingScreenSnapshot.first())
                     if (vpnReady.value) {
                         val reloadIntent = Intent(ctx, TunVpnService::class.java).apply {
                             action = "RELOAD_ROUTING"
@@ -2050,32 +2029,23 @@ object TunnelManager {
         writeProcessCommand(identity, command, "domain_routing_err")
     }
 
+    internal fun applyLocalRouting(routing: RoutingScreenSnapshot) {
+        if (serverRoutingActive.value) return
+        updateDomainRouting(
+            enabled = routing.hasDomainRules,
+            excludeRuZones = routing.useRuZones,
+            templateDomains = routing.useTemplate,
+            directDomains = routing.activeDomains,
+            isWhitelist = routing.domainIsWhitelist,
+            ipRoutingEnabled = routing.activeIps.isNotBlank(),
+            ipIsWhitelist = routing.ipIsWhitelist,
+            directIps = routing.activeIps,
+        )
+    }
+
     fun pushLocalRouting(ctx: Context) {
         if (serverRoutingActive.value) return
-        activeScope.launch {
-            val settingsStore = SettingsStore(ctx)
-            val domainWhite = settingsStore.domainIsWhitelist.first()
-            val domainEnabled = settingsStore.domainRoutingEnabled.first()
-            val excludeRu = settingsStore.excludeRuZonesEnabled.first()
-            val templateEnabled = settingsStore.templateDomainsEnabled.first()
-            val domains = if (domainWhite) settingsStore.directDomainsWhite.first() else settingsStore.directDomainsBlack.first()
-            val ipWhite = settingsStore.ipIsWhitelist.first()
-            val ips = if (ipWhite) settingsStore.directIpsWhite.first() else settingsStore.directIpsBlack.first()
-            val hasDomains = if (domainWhite) domains.isNotBlank() else (domains.isNotBlank() || templateEnabled || excludeRu)
-            val effectiveDomainEnabled = domainEnabled && hasDomains
-            val hasIps = ips.isNotBlank()
-            val effectiveIpEnabled = hasIps   // the list is the switch (TunVpnService)
-            updateDomainRouting(
-                enabled = effectiveDomainEnabled,
-                excludeRuZones = if (domainWhite) false else excludeRu,
-                templateDomains = if (domainWhite) false else templateEnabled,
-                directDomains = domains,
-                isWhitelist = domainWhite,
-                ipRoutingEnabled = effectiveIpEnabled,
-                ipIsWhitelist = ipWhite,
-                directIps = ips,
-            )
-        }
+        activeScope.launch { applyLocalRouting(SettingsStore(ctx).routingScreenSnapshot.first()) }
     }
 
     private fun writeCaptchaResult(result: String, identity: ProcessIdentity) {

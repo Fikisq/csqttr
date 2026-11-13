@@ -92,7 +92,14 @@ internal data class RoutingScreenSnapshot(
     val ipIsWhitelist: Boolean,
     val directIpsBlack: String,
     val directIpsWhite: String,
-)
+    val excludeRuZonesEnabled: Boolean,
+) {
+    val activeDomains: String get() = if (domainIsWhitelist) directDomainsWhite else directDomainsBlack
+    val activeIps: String get() = if (ipIsWhitelist) directIpsWhite else directIpsBlack
+    val useRuZones: Boolean get() = !domainIsWhitelist && excludeRuZonesEnabled
+    val useTemplate: Boolean get() = !domainIsWhitelist && templateDomainsEnabled
+    val hasDomainRules: Boolean get() = activeDomains.isNotBlank() || useRuZones || useTemplate
+}
 
 internal data class TunnelScreenSnapshot(
     val profile: Int,
@@ -870,6 +877,7 @@ private val DEPLOY_LAST_INSPECTION_PANEL = booleanPreferencesKey("deploy_last_in
             ipIsWhitelist = prefs[getProfileKey(IP_IS_WHITELIST, profile)] ?: false,
             directIpsBlack = prefs[getProfileKey(DIRECT_IPS_BLACK, profile)].orEmpty(),
             directIpsWhite = prefs[getProfileKey(DIRECT_IPS_WHITE, profile)].orEmpty(),
+            excludeRuZonesEnabled = prefs[getProfileKey(EXCLUDE_RU_ZONES_ENABLED, profile)] ?: false,
         )
     }.distinctUntilChanged()
 
