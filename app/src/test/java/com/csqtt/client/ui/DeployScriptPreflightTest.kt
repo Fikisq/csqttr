@@ -294,6 +294,20 @@ class DeployScriptPreflightTest {
     }
 
     @Test
+    fun `an installed certbot prevents package setup and issuance has one bounded attempt`() {
+        val deploy = script()
+        val client = deploy.substringAfter("ensure_letsencrypt_client() {").substringBefore("\n}\n")
+        val setup = client.indexOf("log_step")
+        assertTrue(client.indexOf("LE_CERTBOT_COMMAND=\"\$system_certbot\"") in 0 until setup)
+        assertTrue(client.indexOf("LE_CERTBOT_COMMAND=\"\$CSQTT_LE_CERTBOT\"") in 0 until setup)
+        assertTrue(client.indexOf("return 1") in 0 until setup)
+        val issue = deploy.substringAfter("issue_letsencrypt_ip_certificate() {").substringBefore("\n}\n")
+        assertTrue(issue.contains("timeout -k 3s 15s"))
+        assertEquals(1, Regex("certonly --standalone").findAll(issue).count())
+        assertTrue(issue.contains("--config /dev/null --no-directory-hooks"))
+    }
+
+    @Test
     fun `certificate ownership keeps user TLS untouched and renews only CSQTT certificates`() {
         val deploy = script()
         assertTrue(deploy.contains("certificate_is_csqtt_rcgen()"))

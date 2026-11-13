@@ -1489,7 +1489,9 @@ detect_public_ipv4() {
 }
 
 certbot_supports_ip_certificates() {
-    "$1" certonly --help all 2>&1 | grep -Fq -- "--ip-address"
+    local help
+    help="$(timeout 5 "$1" certonly --help all 2>&1)" || return 1
+    [[ "$help" == *--ip-address* && "$help" == *--no-directory-hooks* ]]
 }
 
 ensure_letsencrypt_client() {
@@ -1499,12 +1501,18 @@ ensure_letsencrypt_client() {
         system_certbot="$(command -v certbot)"
         if certbot_supports_ip_certificates "$system_certbot"; then
             LE_CERTBOT_COMMAND="$system_certbot"
+            log_info "Используется установленный системный Certbot"
             return 0
         fi
     fi
     if [ -x "$CSQTT_LE_CERTBOT" ] && certbot_supports_ip_certificates "$CSQTT_LE_CERTBOT"; then
         LE_CERTBOT_COMMAND="$CSQTT_LE_CERTBOT"
+        log_info "Используется ранее установленный Certbot CSQTT"
         return 0
+    fi
+    if [ -n "$system_certbot" ]; then
+        log_warn "Системный Certbot не поддерживает выпуск IP-сертификата; используется имеющийся TLS или самоподписанный сертификат"
+        return 1
     fi
 
     log_step "Подготовка Let’s Encrypt клиента..."
@@ -1668,17 +1676,12 @@ issue_letsencrypt_ip_certificate() {
         log_warn "TCP/${LE_HTTP_PORT} уже занят другим сервисом; Let’s Encrypt IP-сертификат отложен, сохранён self-signed fallback"
         return 1
     fi
-    if ! timeout 90 "$certbot" certonly --standalone --http-01-port "$LE_HTTP_PORT" \
-        --non-interactive --agree-tos --register-unsafely-without-email \
+    if ! timeout -k 3s 15s "$certbot" certonly --standalone --http-01-port "$LE_HTTP_PORT" \
+        --config /dev/null --no-directory-hooks --non-interactive --agree-tos --register-unsafely-without-email \
         --preferred-profile shortlived --ip-address "$public_ip" \
         --cert-name "$cert_name" --keep-until-expiring >>"$LOG_FILE" 2>&1; then
-        if ! timeout 90 "$certbot" certonly --standalone --http-01-port "$LE_HTTP_PORT" \
-            --non-interactive --agree-tos --register-unsafely-without-email \
-            --ip-address "$public_ip" \
-            --cert-name "$cert_name" --keep-until-expiring >>"$LOG_FILE" 2>&1; then
-            log_warn "Let’s Encrypt не подтвердил IP ${public_ip}; сохранён self-signed fallback, следующая проверка выполнится автоматически"
-            return 1
-        fi
+        log_warn "Let’s Encrypt не подтвердил IP ${public_ip}; сохранён self-signed fallback, следующая проверка выполнится автоматически"
+        return 1
     fi
     if ! install_letsencrypt_certificate "$public_ip" "$cert_name"; then
         log_warn "Let’s Encrypt выдал сертификат, но CSQTT не смог безопасно активировать его"
@@ -1958,12 +1961,12 @@ main() {
         return 0
     fi
     cert_name="csqtt-ip-${current_ip//./-}"
-    if ! timeout 90 "$CERTBOT" certonly --standalone --http-01-port "$HTTP_PORT" --non-interactive --agree-tos --register-unsafely-without-email --preferred-profile shortlived --ip-address "$current_ip" --cert-name "$cert_name" --force-renewal; then
-        if ! timeout 90 "$CERTBOT" certonly --standalone --http-01-port "$HTTP_PORT" --non-interactive --agree-tos --register-unsafely-without-email --ip-address "$current_ip" --cert-name "$cert_name" --force-renewal; then
-            log "Let’s Encrypt: перевыпуск IP-сертификата не удался, текущий сертификат сохранён"
-            fallback_if_expired "$current_ip"
-            return 0
-        fi
+    if ! timeout -k 5s 90s "$CERTBOT" certonly --standalone --http-01-port "$HTTP_PORT" \
+        --config /dev/null --no-directory-hooks --non-interactive --agree-tos --register-unsafely-without-email \
+        --preferred-profile shortlived --ip-address "$current_ip" --cert-name "$cert_name" --force-renewal; then
+        log "Let’s Encrypt: перевыпуск IP-сертификата не удался, текущий сертификат сохранён"
+        fallback_if_expired "$current_ip"
+        return 0
     fi
     if ! install_certificate "$current_ip" "$cert_name"; then
         log "Let’s Encrypt: не удалось безопасно активировать новый сертификат"
