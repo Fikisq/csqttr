@@ -159,8 +159,7 @@ class HappInterfaceTest {
             deploy.saveActiveProfile(25)
         }
         compose.onNodeWithText("Деплой").performClick()
-        compose.onNodeWithText("https://203.0.113.125:46002/uuid").performScrollTo().performClick()
-        compose.onNodeWithText("Сменить путь панели").performClick()
+        compose.onNodeWithContentDescription("Изменить секретный путь").performScrollTo().performClick()
         compose.onNodeWithText("Смена пути панели").assertExists()
         compose.onNodeWithText("Отмена").performClick()
         runBlocking { check(!DeployManager.isDeploying.value) }
