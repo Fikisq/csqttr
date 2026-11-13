@@ -58,7 +58,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -1057,7 +1059,9 @@ internal fun V2RulesTransferDialog(
             }
         }
         if (importedAny) {
-            context.showRaisedToast("Правила успешно импортированы", Toast.LENGTH_SHORT)
+            withContext(Dispatchers.Main.immediate) {
+                context.showRaisedToast("Правила успешно импортированы", Toast.LENGTH_SHORT)
+            }
             sheetState.hide()
             onClose()
         } else {
