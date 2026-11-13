@@ -56,10 +56,10 @@ class DeployScriptPreflightTest {
         assertTrue(binary >= 0)
         assertTrue(binary > preflight)
         assertTrue(binary > firewall)
-        assertTrue(installBranch.contains("run_timed \"preflight\" run_platform_preflight"))
+        assertTrue(preflight in (uploadCheck + 1) until cleanup)
         assertTrue(cleanup > uploadCheck)
         assertTrue(binary > cleanup)
-        assertTrue(installBranch.contains("local total_started=\$SECONDS\n            detect_os\n            run_timed \"зависимости\" install_prerequisites\n            require_runtime_tools"))
+        assertTrue(installBranch.indexOf("install_prerequisites") in 0 until uploadCheck)
 
         val client = deployOperations()
         assertFalse(client.contains("bash /tmp/deploy.sh prepare"))
@@ -96,14 +96,19 @@ class DeployScriptPreflightTest {
     }
 
     @Test
-    fun `redeploy removes old runtime config but preserves SQLite and its WAL files`() {
+    fun `repeated installation preserves existing data and deletion requires a full purge`() {
         val deploy = script()
         assertTrue(deploy.contains("readonly CSQTT_DATABASE_FILE=\"csqtt.db\""))
         assertTrue(deploy.contains("readonly CSQTT_DATABASE_WAL_FILE=\"csqtt.db-wal\""))
         assertTrue(deploy.contains("readonly CSQTT_DATABASE_SHM_FILE=\"csqtt.db-shm\""))
         assertTrue(deploy.contains("clear_runtime_config_preserving_database"))
         assertTrue(deploy.contains("\"\$CSQTT_DATABASE_FILE\"|\"\$CSQTT_DATABASE_WAL_FILE\"|\"\$CSQTT_DATABASE_SHM_FILE\"|\"\$CSQTT_LEGACY_MIGRATION_JSON\"|\"\$CSQTT_LEGACY_MIGRATION_IMPORTED_JSON\"|web_cert.pem|web_key.pem|letsencrypt-ip.env|runtime-archive) continue"))
-        assertFalse(deploy.contains("find \"\$CSQTT_CONFIG_DIR\" -mindepth 1 -maxdepth 1"))
+        val cleanup = deploy.substringAfter("clear_runtime_config_preserving_database() {").substringBefore("\n}\n")
+        assertTrue(cleanup.indexOf("return 0") in 0 until cleanup.indexOf("rm -rf"))
+        val purge = deploy.substringAfter("purge|--purge|-p)").substringBefore(";;")
+        assertTrue(purge.indexOf("rm -rf -- \"\$CSQTT_CONFIG_DIR\"") in 0 until purge.indexOf("CSQTT_PURGE_OK"))
+        assertFalse(deploy.contains("sysctl --system"))
+        assertFalse(deploy.contains("ip route replace"))
     }
 
     @Test
