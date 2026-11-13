@@ -203,23 +203,6 @@ fun FloatingToolbar(
         ImportExportDialog(
             settingsStore = settingsStore,
             onDismissRequest = { showImportExportDialog = false },
-            profileSelector = {
-                CompactDropdownSetting(
-                    title = "Профиль",
-                    selectedKey = activeProfile.toString(),
-                    options = (CsqttConstants.Profiles.MIN_INDEX..CsqttConstants.Profiles.MAX_INDEX)
-                        .map { profile -> profile.toString() to (profileNames[profile] ?: "Профиль $profile") },
-                    enabled = true,
-                    onSelected = { profile ->
-                        profile.toIntOrNull()?.let(onActiveProfileChange)
-                    },
-                    onItemEdit = { key ->
-                        val p = key.toIntOrNull() ?: 0
-                        editingProfileIndex = p
-                        editingProfileName = profileNames[p] ?: "Профиль $p"
-                    },
-                )
-            },
         )
     }
 
@@ -285,6 +268,22 @@ fun FloatingToolbar(
                             )
                         }
                     }
+
+                    CompactDropdownSetting(
+                        title = "Профиль конфигурации",
+                        selectedKey = activeProfile.toString(),
+                        options = (CsqttConstants.Profiles.MIN_INDEX..CsqttConstants.Profiles.MAX_INDEX)
+                            .map { profile -> profile.toString() to (profileNames[profile] ?: "Профиль $profile") },
+                        enabled = true,
+                        onSelected = { profile ->
+                            profile.toIntOrNull()?.let(onActiveProfileChange)
+                        },
+                        onItemEdit = { key ->
+                            val p = key.toIntOrNull() ?: 0
+                            editingProfileIndex = p
+                            editingProfileName = profileNames[p] ?: "Профиль $p"
+                        },
+                    )
 
                     Text(
                         "Ваша роль использования",

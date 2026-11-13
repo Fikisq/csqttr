@@ -54,7 +54,6 @@ private enum class ImportExportTab {
 fun ImportExportDialog(
     settingsStore: SettingsStore,
     onDismissRequest: () -> Unit,
-    profileSelector: @Composable () -> Unit,
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -156,8 +155,6 @@ fun ImportExportDialog(
                         )
                     }
                 }
-
-                profileSelector()
 
                 CsqttSegmentedControl(
                     options = listOf(
