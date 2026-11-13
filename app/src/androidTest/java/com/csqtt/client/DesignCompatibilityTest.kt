@@ -360,6 +360,63 @@ class DesignCompatibilityTest {
         }
     }
 
+    @Test fun settingsAndTunnelControlsStayReachableAtTheCurrentWindowSize() {
+        val store = SettingsStore(compose.activity)
+        val oldDesign = runBlocking { store.uiDesign.first() }
+        val oldOwner = runBlocking { store.uiOwnerMode.first() }
+        val oldAuth = runBlocking { store.vkAuthMode.first() }
+        val oldLogs = runBlocking { store.participantShowLogs.first() }
+        try {
+            runBlocking {
+                store.saveUiOwnerMode(true)
+                store.saveParticipantShowLogs(true)
+                store.saveVkAuthMode(CsqttConstants.VkAuth.MODE_CAPTCHA)
+            }
+            for (design in listOf("classic", "v2", "old")) {
+                runBlocking { store.saveUiDesign(design) }
+                val gear = if (design == "classic") "Быстрые настройки" else "Настройки"
+                val settings = compose.onNodeWithContentDescription(gear)
+                settings.performClick()
+                val about = compose.onNodeWithText("О приложении")
+                val aboutInitiallyVisible = about.isDisplayed()
+                for (label in listOf("Экстра потоки", "Автопауза Wi-Fi", "Дизайн", "Импорт / экспорт", "О приложении")) {
+                    compose.onNodeWithText(label).performScrollTo().assertIsDisplayed()
+                }
+                compose.activityRule.scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
+                compose.onAllNodesWithText("Туннель").onFirst().performClick()
+                val goobyInitiallyVisible = compose.onNodeWithText("Gooby").isDisplayed()
+                for (label in listOf("Режим кредов", "Режим SRTP", "Транспорт", "Gooby")) {
+                    val title = compose.onNodeWithText(label)
+                    title.performScrollTo().assertIsDisplayed()
+                    val helpPrefix = if (design == "classic") "Информация" else "Подсказка"
+                    val help = compose.onNodeWithContentDescription("$helpPrefix: $label")
+                    val titleBounds = title.getUnclippedBoundsInRoot()
+                    val helpBounds = help.getUnclippedBoundsInRoot()
+                    check(titleBounds.right <= helpBounds.left || helpBounds.right <= titleBounds.left) {
+                        "Overlapping title and help for $label in $design: $titleBounds / $helpBounds"
+                    }
+                }
+                compose.onNodeWithText("Капча").performScrollTo().performClick()
+                compose.onNodeWithContentDescription("Информация: Капча").assertIsDisplayed().performClick()
+                compose.onNodeWithText("Понятно").performClick()
+                for (tab in listOf("Деплой", "Логи", "Маршрут", "Подкл.")) {
+                    compose.onAllNodesWithText(tab).onFirst().assertIsDisplayed().performClick()
+                }
+                android.util.Log.i(
+                    "CSQTTR-layout",
+                    "$design aboutInitiallyVisible=$aboutInitiallyVisible goobyInitiallyVisible=$goobyInitiallyVisible",
+                )
+            }
+        } finally {
+            runBlocking {
+                store.saveUiDesign(oldDesign)
+                store.saveUiOwnerMode(oldOwner)
+                store.saveVkAuthMode(oldAuth)
+                store.saveParticipantShowLogs(oldLogs)
+            }
+        }
+    }
+
     @Test fun threeDesignsShareSettingsAndPreserveSelectedConnection() {
         val store = SettingsStore(compose.activity)
         val oldDesign = runBlocking { store.uiDesign.first() }
