@@ -240,8 +240,17 @@ class SshConnectionSmokeTest {
                                 printf 'CERTBOT_CSQTT '
                                 timeout 5 /opt/csqtt-certbot/bin/certbot --version 2>&1
                             fi
-                            if [ -n "${'$'}(ss -H -ltn 'sport = :80')" ]; then
+                            listeners="${'$'}(ss -H -ltnp 'sport = :80')"
+                            if [ -n "${'$'}listeners" ]; then
                                 echo CERTBOT_PORT_80_BUSY
+                                printf '%s\n' "${'$'}listeners" |
+                                    grep -oE '\("[A-Za-z0-9_.-]+",pid=[0-9]+' |
+                                    sed -E 's/^\("([^"]+)",pid=([0-9]+)${'$'}/CERTBOT_PORT_80_OWNER \1 pid=\2/' |
+                                    sort -u
+                            fi
+                            if [ -r /etc/csqtt/web_cert.pem ]; then
+                                openssl x509 -in /etc/csqtt/web_cert.pem -noout -issuer -enddate |
+                                    sed 's/^/CERTBOT_PANEL_TLS /'
                             fi
                             tac /var/log/csqtt-install.log | sed '/Повторная установка: данные клиентов и правила сохраняются/q' |
                                 tac | grep -E 'Используется (установленный системный|ранее установленный) Certbot|Системный Certbot не подходит|TCP/80 уже занят|IP-сертификат (действителен|активирован)|Let.s Encrypt не подтвердил IP|Подготовка Let.s Encrypt клиента|самоподписанный сертификат|Общее время deploy.sh' |
