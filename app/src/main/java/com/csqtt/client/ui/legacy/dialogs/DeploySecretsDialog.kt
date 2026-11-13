@@ -37,9 +37,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalConfiguration
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -88,7 +85,6 @@ fun DeploySecretsDialog(
         webPasswordVisible = false
     }
 
-    val compact = LocalConfiguration.current.screenHeightDp / LocalDensity.current.fontScale < 520f
     Dialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false),
@@ -103,11 +99,10 @@ fun DeploySecretsDialog(
         ) {
             Column(
                 modifier = Modifier
-                    .padding(horizontal = 16.dp, vertical = if (compact) 8.dp else 12.dp)
+                    .padding(horizontal = 16.dp, vertical = 12.dp)
                     .fillMaxWidth()
-                    .testTag("classic-deploy-authorization")
                     .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(if (compact) 4.dp else 8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
