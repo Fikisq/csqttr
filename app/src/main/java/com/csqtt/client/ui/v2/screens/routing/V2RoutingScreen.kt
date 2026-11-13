@@ -40,6 +40,7 @@ import androidx.core.graphics.drawable.toBitmap
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.csqtt.client.R
 import com.csqtt.client.SettingsStore
+import com.csqtt.client.RoutingScreenSnapshot
 import com.csqtt.client.TunnelManager
 import com.csqtt.client.ui.legacy.AppItem
 import com.csqtt.client.ui.v2.components.V2Card
@@ -60,8 +61,9 @@ private object V2AppCache {
 }
 
 @Composable
-fun V2RoutingScreen(
+internal fun V2RoutingScreen(
     settingsStore: SettingsStore,
+    snapshot: RoutingScreenSnapshot,
     version: String,
     onSettings: () -> Unit,
     modifier: Modifier = Modifier,
@@ -73,28 +75,17 @@ fun V2RoutingScreen(
 
     val serverRoutingActiveLive by TunnelManager.serverRoutingActive.collectAsStateWithLifecycle()
     val isServerRouting = serverRoutingActiveLive
-    val showSystemApps by settingsStore.showSystemApps.collectAsStateWithLifecycle(false)
-
-    val savedExcluded by settingsStore.excludedApps.collectAsStateWithLifecycle(
-        initialValue = SettingsStore.cachedExcludedApps ?: "",
-    )
-    val savedWhitelist by settingsStore.whitelistApps.collectAsStateWithLifecycle(
-        initialValue = SettingsStore.cachedWhitelistApps ?: "",
-    )
-    val isWhitelist by settingsStore.isWhitelist.collectAsStateWithLifecycle(
-        initialValue = SettingsStore.cachedIsWhitelist ?: false,
-    )
-    val templateDomainsEnabled by settingsStore.templateDomainsEnabled.collectAsStateWithLifecycle(
-        initialValue = SettingsStore.cachedTemplateDomainsEnabled ?: false,
-    )
-    val domainIsWhitelist by settingsStore.domainIsWhitelist.collectAsStateWithLifecycle(initialValue = false)
-    val directDomainsBlackStr by settingsStore.directDomainsBlack.collectAsStateWithLifecycle(
-        initialValue = SettingsStore.cachedDirectDomains ?: "",
-    )
-    val directDomainsWhiteStr by settingsStore.directDomainsWhite.collectAsStateWithLifecycle(initialValue = "")
-    val ipIsWhitelist by settingsStore.ipIsWhitelist.collectAsStateWithLifecycle(initialValue = false)
-    val directIpsBlackStr by settingsStore.directIpsBlack.collectAsStateWithLifecycle(initialValue = "")
-    val directIpsWhiteStr by settingsStore.directIpsWhite.collectAsStateWithLifecycle(initialValue = "")
+    val showSystemApps = snapshot.showSystemApps
+    val savedExcluded = snapshot.excludedApps
+    val savedWhitelist = snapshot.whitelistApps
+    val isWhitelist = snapshot.isWhitelist
+    val templateDomainsEnabled = snapshot.templateDomainsEnabled
+    val domainIsWhitelist = snapshot.domainIsWhitelist
+    val directDomainsBlackStr = snapshot.directDomainsBlack
+    val directDomainsWhiteStr = snapshot.directDomainsWhite
+    val ipIsWhitelist = snapshot.ipIsWhitelist
+    val directIpsBlackStr = snapshot.directIpsBlack
+    val directIpsWhiteStr = snapshot.directIpsWhite
 
     val templateDomains = remember {
         val text = runCatching {

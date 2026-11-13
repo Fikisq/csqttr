@@ -80,6 +80,20 @@ internal data class TunnelAuthSnapshot(
 }
 
 /** Snapshot of the connection settings of a concrete profile slot (not necessarily active). */
+internal data class RoutingScreenSnapshot(
+    val showSystemApps: Boolean,
+    val excludedApps: String,
+    val whitelistApps: String,
+    val isWhitelist: Boolean,
+    val templateDomainsEnabled: Boolean,
+    val domainIsWhitelist: Boolean,
+    val directDomainsBlack: String,
+    val directDomainsWhite: String,
+    val ipIsWhitelist: Boolean,
+    val directIpsBlack: String,
+    val directIpsWhite: String,
+)
+
 internal data class TunnelScreenSnapshot(
     val profile: Int,
     val name: String,
@@ -841,6 +855,23 @@ private val DEPLOY_LAST_INSPECTION_PANEL = booleanPreferencesKey("deploy_last_in
         val profile = prefs[ACTIVE_PROFILE] ?: 0
         prefs[getProfileKey(DIRECT_IPS_WHITE, profile)] ?: ""
     }
+
+    internal val routingScreenSnapshot: Flow<RoutingScreenSnapshot> = dataStore.data.map { prefs ->
+        val profile = prefs[ACTIVE_PROFILE] ?: 0
+        RoutingScreenSnapshot(
+            showSystemApps = prefs[SHOW_SYSTEM_APPS] ?: false,
+            excludedApps = prefs[getProfileKey(EXCLUDED_APPS, profile)].orEmpty(),
+            whitelistApps = prefs[getProfileKey(WHITELIST_APPS, profile)].orEmpty(),
+            isWhitelist = prefs[getProfileKey(IS_WHITELIST, profile)] ?: false,
+            templateDomainsEnabled = prefs[getProfileKey(TEMPLATE_DOMAINS_ENABLED, profile)] ?: false,
+            domainIsWhitelist = prefs[getProfileKey(DOMAIN_IS_WHITELIST, profile)] ?: false,
+            directDomainsBlack = prefs[getProfileKey(DIRECT_DOMAINS_BLACK, profile)] ?: prefs[getProfileKey(DIRECT_DOMAINS, profile)].orEmpty(),
+            directDomainsWhite = prefs[getProfileKey(DIRECT_DOMAINS_WHITE, profile)].orEmpty(),
+            ipIsWhitelist = prefs[getProfileKey(IP_IS_WHITELIST, profile)] ?: false,
+            directIpsBlack = prefs[getProfileKey(DIRECT_IPS_BLACK, profile)].orEmpty(),
+            directIpsWhite = prefs[getProfileKey(DIRECT_IPS_WHITE, profile)].orEmpty(),
+        )
+    }.distinctUntilChanged()
 
     val profileNames: Flow<Map<Int, String>> = dataStore.data.map { prefs ->
         (CsqttConstants.Profiles.MIN_INDEX..CsqttConstants.Profiles.MAX_INDEX).associateWith { p ->

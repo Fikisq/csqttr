@@ -101,6 +101,7 @@ fun CsqttV2Root(
         val occupiedProfiles by settingsStore.occupiedProfiles.collectAsStateWithLifecycle(emptySet())
         val profileNames by settingsStore.profileNames.collectAsStateWithLifecycle(emptyMap())
         val deployServers by settingsStore.deployServers.collectAsStateWithLifecycle(emptyList())
+        val routingSettings by settingsStore.routingScreenSnapshot.collectAsStateWithLifecycle(initialValue = null)
         val participantShowLogs by settingsStore.participantShowLogs.collectAsStateWithLifecycle(
             initialValue = SettingsStore.DEFAULT_PARTICIPANT_SHOW_LOGS,
         )
@@ -306,12 +307,15 @@ fun CsqttV2Root(
                                             onVersionClick = { showVersionSheet = true },
                                         )
 
-                                        V2Tab.Routing -> V2RoutingScreen(
-                                            settingsStore = settingsStore,
-                                            version = version,
-                                            onSettings = { overlay = OVERLAY_SETTINGS },
-                                            onVersionClick = { showVersionSheet = true },
-                                        )
+                                        V2Tab.Routing -> routingSettings?.let { snapshot ->
+                                            V2RoutingScreen(
+                                                settingsStore = settingsStore,
+                                                snapshot = snapshot,
+                                                version = version,
+                                                onSettings = { overlay = OVERLAY_SETTINGS },
+                                                onVersionClick = { showVersionSheet = true },
+                                            )
+                                        }
                                     }
                                 }
                             }
