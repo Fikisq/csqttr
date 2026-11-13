@@ -58,6 +58,7 @@ import com.csqtt.client.ui.v2.dialogs.V2ResourceSheet
 import com.csqtt.client.ui.v2.dialogs.V2VersionSheet
 import com.csqtt.client.ui.v2.screens.connection.V2ConnectionScreen
 import com.csqtt.client.ui.v2.screens.deploy.V2DeployScreen
+import com.csqtt.client.ui.legacy.DeployCheckState
 import com.csqtt.client.ui.v2.screens.logs.V2LogsScreen
 import com.csqtt.client.ui.v2.screens.routing.V2RoutingScreen
 import com.csqtt.client.ui.v2.screens.settings.V2AboutScreen
@@ -97,6 +98,7 @@ fun CsqttV2Root(
         val deployStore = remember(context) { SettingsStore(context, deployScope = true) }
         // Keep this store's own snapshot ready, without reviving a saved form from another VPS.
         val deploySettings by deployStore.deploySettingsSnapshot.collectAsStateWithLifecycle(DeploySettingsSnapshot())
+        val deployCheckState = remember(deploySettings.profile, deploySettings.ip) { DeployCheckState() }
         val tunnelProfile by settingsStore.tunnelScreenSnapshot.collectAsStateWithLifecycle(initialValue = null)
         val occupiedProfiles by settingsStore.occupiedProfiles.collectAsStateWithLifecycle(emptySet())
         val profileNames by settingsStore.profileNames.collectAsStateWithLifecycle(emptyMap())
@@ -302,6 +304,7 @@ fun CsqttV2Root(
                                         V2Tab.Deploy -> V2DeployScreen(
                                             settingsStore = deployStore,
                                             savedSettings = deploySettings,
+                                            checkState = deployCheckState,
                                             version = version,
                                             onSettings = { overlay = OVERLAY_SETTINGS },
                                             onVersionClick = { showVersionSheet = true },

@@ -211,6 +211,7 @@ private fun showDeployToast(context: android.content.Context, message: String) {
 internal fun DeployTab(
     settingsStore: SettingsStore,
     savedSettings: DeploySettingsSnapshot,
+    checkState: DeployCheckState,
 ) {
     val context = LocalContext.current.applicationContext
     val scope = rememberCoroutineScope()
@@ -261,11 +262,6 @@ internal fun DeployTab(
     var showSshKeysDialog by rememberSaveable(savedSettings.profile) { mutableStateOf(false) }
     var showDockerInfoDialog by rememberSaveable(savedSettings.profile) { mutableStateOf(false) }
     // the server check's result while its dialog is open (a rotation closes it: the check is run again)
-    var checkPlan by remember(savedSettings.profile) { mutableStateOf<DeployPlan?>(null) }
-    var removable by remember(savedSettings.profile) { mutableStateOf<List<FoundServer>?>(null) }
-    var removeNotes by remember(savedSettings.profile) { mutableStateOf<List<String>>(emptyList()) }
-    var pendingReplace by remember(savedSettings.profile) { mutableStateOf<PlanAction?>(null) }
-    var pendingRemove by remember(savedSettings.profile) { mutableStateOf<FoundServer?>(null) }
     // the server presented another SSH key than the remembered one: the change and the check to run again if trusted
     var keyChange by remember(savedSettings.profile) {
         mutableStateOf<Pair<SshHostKeyStore.KeyChange, (ServerInventory) -> Unit>?>(null)
@@ -576,7 +572,7 @@ internal fun DeployTab(
                     showValidation = true
                     if (state.canInstall) {
                         runServerCheck { inventory ->
-                            checkPlan = planDeploy(
+                            checkState.plan = planDeploy(
                                 inventory = inventory,
                                 manualPorts = if (savedManualPorts) resolveServerPorts(true, sshPort, peerPort, webPort) else null,
                                 profilePeerPort = resolveServerPorts(savedManualPorts, sshPort, peerPort, webPort).peer,
@@ -600,7 +596,7 @@ internal fun DeployTab(
                         }
                     }
                 }
-                DeployAction.Uninstall -> if (state.canUninstall) runServerCheck { removable = removableServers(it); removeNotes = removalNotes(it) }
+                DeployAction.Uninstall -> if (state.canUninstall) runServerCheck { checkState.removable = removableServers(it); checkState.removalNotes = removalNotes(it) }
                 DeployAction.PanelInfo -> showPanelInfoDialog = true
                 DeployAction.OpenControlPanel -> {
                     if (host.isBlank()) {
@@ -645,7 +641,7 @@ internal fun DeployTab(
     }
 
     val profilePeer = resolveServerPorts(savedManualPorts, sshPort, peerPort, webPort).peer
-    checkPlan?.let { plan ->
+    checkState.plan?.let { plan ->
         ServerCheckDialog(
             title = "На сервере",
             servers = plan.servers.map { describeServer(it, profilePeer) },
@@ -664,21 +660,21 @@ internal fun DeployTab(
             },
             onChoose = { index ->
                 val action = plan.actions[index]
-                checkPlan = null
-                if (action.destructive) pendingReplace = action else startDeploy(action)
+                checkState.plan = null
+                if (action.destructive) checkState.replacement = action else startDeploy(action)
             },
-            onDismiss = { checkPlan = null },
+            onDismiss = { checkState.plan = null },
         )
     }
-    pendingReplace?.let { action ->
+    checkState.replacement?.let { action ->
         AlertDialog(
-            onDismissRequest = { pendingReplace = null },
+            onDismissRequest = { checkState.replacement = null },
             title = { Text("Заменить сервер?") },
             text = { Text(action.detail) },
             confirmButton = {
                 Button(
                     onClick = {
-                        pendingReplace = null
+                        checkState.replacement = null
                         startDeploy(action)
                     },
                     colors = ButtonDefaults.buttonColors(
@@ -687,34 +683,34 @@ internal fun DeployTab(
                     ),
                 ) { Text("Заменить") }
             },
-            dismissButton = { TextButton(onClick = { pendingReplace = null }) { Text("Отмена") } },
+            dismissButton = { TextButton(onClick = { checkState.replacement = null }) { Text("Отмена") } },
         )
     }
-    removable?.let { servers ->
+    checkState.removable?.let { servers ->
         ServerCheckDialog(
             title = "Удаление с сервера",
             servers = emptyList(),
-            emptyText = if (servers.isEmpty() && removeNotes.isEmpty()) "Серверов, установленных этим приложением, здесь нет" else "",
-            notes = removeNotes,
+            emptyText = if (servers.isEmpty() && checkState.removalNotes.isEmpty()) "Серверов, установленных этим приложением, здесь нет" else "",
+            notes = checkState.removalNotes,
             choices = servers.map { server ->
                 val (name, detail) = describeServer(server, profilePeer)
                 CheckChoice("Удалить: $name", detail, CheckChoiceStyle.DESTRUCTIVE)
             },
             onChoose = { index ->
-                pendingRemove = servers[index]
-                removable = null
+                checkState.removal = servers[index]
+                checkState.removable = null
             },
-            onDismiss = { removable = null },
+            onDismiss = { checkState.removable = null },
         )
     }
-    pendingRemove?.let { server ->
+    checkState.removal?.let { server ->
         val (name, _) = describeServer(server, profilePeer)
         UninstallConfirmDialog(
             title = "Удаление: $name",
             text = "Будут удалены выбранный экземпляр CSQTT, его клиенты, хеши, общий токен, правила маршрутизации, DNS и настройки панели. Это действие необратимо.",
-            onDismiss = { pendingRemove = null },
+            onDismiss = { checkState.removal = null },
             onConfirm = {
-                pendingRemove = null
+                checkState.removal = null
                 startUninstall(server)
             },
         )

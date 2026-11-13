@@ -1,9 +1,20 @@
 package com.csqtt.client.ui.legacy
 
 import com.csqtt.client.CsqttConstants
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 
 // What `deploy.sh inventory` found on the server, and what the app offers for it (deploy-check-first-design.md §1–§3).
 // The app looks before it offers: the user picks an action that fits the server, never a mode that assumes what is there.
+
+internal class DeployCheckState {
+    var plan by mutableStateOf<DeployPlan?>(null)
+    var replacement by mutableStateOf<PlanAction?>(null)
+    var removable by mutableStateOf<List<FoundServer>?>(null)
+    var removalNotes by mutableStateOf(emptyList<String>())
+    var removal by mutableStateOf<FoundServer?>(null)
+}
 
 internal enum class ServerPlace { STANDARD, SIDE, PANEL, OTHER, LEFTOVER }
 

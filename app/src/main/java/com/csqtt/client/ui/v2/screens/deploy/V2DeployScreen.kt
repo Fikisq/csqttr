@@ -110,6 +110,7 @@ import com.csqtt.client.ui.legacy.EffectiveServerPorts as CheckPorts
 import com.csqtt.client.ui.legacy.FoundServer
 import com.csqtt.client.ui.legacy.PlanAction
 import com.csqtt.client.ui.legacy.DeployProgressContent
+import com.csqtt.client.ui.legacy.DeployCheckState
 import com.csqtt.client.ui.legacy.ServerCheckDialog
 import com.csqtt.client.ui.legacy.ServerInventory
 import com.csqtt.client.ui.legacy.ServerPlace
@@ -202,6 +203,7 @@ private fun DeploySettingsSnapshot.toInspectionResult(): ServerInspectionResult?
 internal fun V2DeployScreen(
     settingsStore: SettingsStore,
     savedSettings: DeploySettingsSnapshot,
+    checkState: DeployCheckState,
     version: String,
     onSettings: () -> Unit,
     modifier: Modifier = Modifier,
@@ -276,11 +278,6 @@ internal fun V2DeployScreen(
     var showRegenConfirmDialog by rememberSaveable(savedSettings.profile) { mutableStateOf(false) }
     // A server that presented another SSH key than the remembered one, and the action to run again once it is trusted.
     var keyChange by remember(savedSettings.profile) { mutableStateOf<Pair<SshHostKeyStore.KeyChange, () -> Unit>?>(null) }
-    var checkPlan by remember(savedSettings.profile) { mutableStateOf<DeployPlan?>(null) }
-    var pendingReplace by remember(savedSettings.profile) { mutableStateOf<PlanAction?>(null) }
-    var removable by remember(savedSettings.profile) { mutableStateOf<List<FoundServer>?>(null) }
-    var removeNotes by remember(savedSettings.profile) { mutableStateOf<List<String>>(emptyList()) }
-    var pendingRemove by remember(savedSettings.profile) { mutableStateOf<FoundServer?>(null) }
 
     // Load drafts from their own stored slot; tab state must not restore another VPS draft.
     var syncedHost by remember(savedSettings.profile) { mutableStateOf(savedIp) }
@@ -734,7 +731,7 @@ internal fun V2DeployScreen(
     fun checkThenDeploy() {
         runServerCheck { inventory ->
             val ports = resolveServerPorts(true, sshPort, peerPort, webPort)
-            checkPlan = planDeploy(
+            checkState.plan = planDeploy(
                 inventory = inventory,
                 manualPorts = if (manualPorts) CheckPorts(ports.ssh, ports.peer, ports.web) else null,
                 profilePeerPort = ports.peer,
@@ -777,8 +774,8 @@ internal fun V2DeployScreen(
         }
         if (hostHasPortRefused()) return
         runServerCheck {
-            removable = removableServers(it)
-            removeNotes = removalNotes(it)
+            checkState.removable = removableServers(it)
+            checkState.removalNotes = removalNotes(it)
         }
     }
 
@@ -1175,7 +1172,7 @@ internal fun V2DeployScreen(
     }
 
     val profilePeer = resolveServerPorts(true, sshPort, peerPort, webPort).peer
-    checkPlan?.let { plan ->
+    checkState.plan?.let { plan ->
         ServerCheckDialog(
             title = "На сервере",
             servers = plan.servers.map { describeServer(it, profilePeer) },
@@ -1194,18 +1191,18 @@ internal fun V2DeployScreen(
             },
             onChoose = { index ->
                 val action = plan.actions[index]
-                checkPlan = null
-                if (action.destructive) pendingReplace = action else launchDeploy(action)
+                checkState.plan = null
+                if (action.destructive) checkState.replacement = action else launchDeploy(action)
             },
-            onDismiss = { checkPlan = null },
+            onDismiss = { checkState.plan = null },
         )
     }
 
-    pendingReplace?.let { action ->
+    checkState.replacement?.let { action ->
         V2DialogContainer(
             title = "Заменить сервер?",
             icon = Icons.Filled.Delete,
-            onDismiss = { pendingReplace = null },
+            onDismiss = { checkState.replacement = null },
             actions = {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -1213,7 +1210,7 @@ internal fun V2DeployScreen(
                 ) {
                     V2PillButton(
                         text = "Отмена",
-                        onClick = { pendingReplace = null },
+                        onClick = { checkState.replacement = null },
                         style = V2PillStyle.Contrast,
                         modifier = Modifier.weight(1f),
                         height = 50.dp,
@@ -1221,7 +1218,7 @@ internal fun V2DeployScreen(
                     V2PillButton(
                         text = "Заменить",
                         onClick = {
-                            pendingReplace = null
+                            checkState.replacement = null
                             launchDeploy(action)
                         },
                         style = V2PillStyle.Danger,
@@ -1240,30 +1237,30 @@ internal fun V2DeployScreen(
         }
     }
 
-    removable?.let { servers ->
+    checkState.removable?.let { servers ->
         ServerCheckDialog(
             title = "Удаление с сервера",
             servers = emptyList(),
-            emptyText = if (servers.isEmpty() && removeNotes.isEmpty()) "Серверов, установленных этим приложением, здесь нет" else "",
-            notes = removeNotes,
+            emptyText = if (servers.isEmpty() && checkState.removalNotes.isEmpty()) "Серверов, установленных этим приложением, здесь нет" else "",
+            notes = checkState.removalNotes,
             choices = servers.map { server ->
                 val (name, detail) = describeServer(server, profilePeer)
                 CheckChoice("Удалить: $name", detail, CheckChoiceStyle.DESTRUCTIVE)
             },
             onChoose = { index ->
-                pendingRemove = servers[index]
-                removable = null
+                checkState.removal = servers[index]
+                checkState.removable = null
             },
-            onDismiss = { removable = null },
+            onDismiss = { checkState.removable = null },
         )
     }
 
-    pendingRemove?.let { server ->
+    checkState.removal?.let { server ->
         val (name, _) = describeServer(server, profilePeer)
         V2UninstallConfirmDialog(
-            onDismiss = { pendingRemove = null },
+            onDismiss = { checkState.removal = null },
             onConfirm = {
-                pendingRemove = null
+                checkState.removal = null
                 startUninstall(server)
             },
             title = "Удаление: $name",
