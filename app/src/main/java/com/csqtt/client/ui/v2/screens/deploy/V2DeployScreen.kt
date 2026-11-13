@@ -546,7 +546,10 @@ internal fun V2DeployScreen(
     var draftDiscarded by remember(savedSettings.profile) { mutableStateOf(false) }
     val draftTracker = remember(savedSettings.profile) { mutableStateOf<DeploySettingsSnapshot?>(null) }
     SideEffect {
-        draftTracker.value = if(savedSettings.isLoaded && portsValid && !actionsBusy && !addingServer && !draftDiscarded) serverDraft() else null
+        val currentDraft = serverDraft()
+        draftTracker.value = currentDraft.takeIf {
+            savedSettings.isLoaded && portsValid && !actionsBusy && !addingServer && !draftDiscarded && it != savedSettings
+        }
     }
     DisposableEffect(savedSettings.profile) {
         onDispose {
@@ -573,9 +576,8 @@ internal fun V2DeployScreen(
         }
     }
     LaunchedEffect(savedSettings.profile, serverName, host, sshLogin, sshPassword, sshPort, peerPort, webPort, manualPorts, dockerInstall, sshKeysMode, mainPassDraft, panelLoginDraft, panelPasswordDraft) {
-        if (!savedSettings.isLoaded || actionsBusy || addingServer) return@LaunchedEffect
         delay(500)
-        if (portsValid) persistServerDraft()
+        draftTracker.value?.let { settingsStore.saveDeployProfileDraft(it) }
     }
 
     fun launchDeploy(chosen: PlanAction) {

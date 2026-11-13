@@ -119,16 +119,18 @@ fun V2RoutingScreen(
 
     var appsList by remember { mutableStateOf(V2AppCache.cachedList.orEmpty()) }
     var isAppsLoading by remember { mutableStateOf(false) }
-    var isMigrationReady by remember { mutableStateOf(false) }
+    var isMigrationReady by rememberSaveable { mutableStateOf(false) }
 
     var showAppsDialog by rememberSaveable { mutableStateOf(false) }
     var showDomainsDialog by rememberSaveable { mutableStateOf(false) }
     var showIpsDialog by rememberSaveable { mutableStateOf(false) }
     var showRulesTransferDialog by rememberSaveable { mutableStateOf(false) }
 
-    LaunchedEffect(Unit) {
-        withContext(Dispatchers.IO) { settingsStore.migrateLegacyWhitelistMode() }
-        isMigrationReady = true
+    LaunchedEffect(isMigrationReady) {
+        if (!isMigrationReady) {
+            withContext(Dispatchers.IO) { settingsStore.migrateLegacyWhitelistMode() }
+            isMigrationReady = true
+        }
     }
 
     // The app list with icons is only needed when the apps dialog is opened. Loading it lazily

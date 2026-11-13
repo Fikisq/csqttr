@@ -144,12 +144,19 @@ private fun V2LogsTerminal(levelFilter: String, sourceFilter: String) {
     val listState = rememberLazyListState()
     val isDeploying by DeployManager.isDeploying.collectAsStateWithLifecycle()
 
-    LaunchedEffect(currentLogs.size, isDeploying, levelFilter, sourceFilter) {
-        if (isDeploying) {
-            val latestDeployIndex = currentLogs.indexOfLast { it.key.startsWith("deploy_") }
-            if (latestDeployIndex >= 0) listState.animateScrollToItem(latestDeployIndex)
-        } else if (currentLogs.isNotEmpty()) {
-            listState.animateScrollToItem(currentLogs.lastIndex)
+    val latestIndex = if (isDeploying) currentLogs.indexOfLast { it.key.startsWith("deploy_") } else currentLogs.lastIndex
+    val latestKey = currentLogs.getOrNull(latestIndex)?.key
+    var lastFollowedKey by rememberSaveable { mutableStateOf<String?>(null) }
+    var lastLevel by rememberSaveable { mutableStateOf<String?>(null) }
+    var lastSource by rememberSaveable { mutableStateOf<String?>(null) }
+    LaunchedEffect(latestKey, levelFilter, sourceFilter) {
+        if (latestKey == null) return@LaunchedEffect
+        val filtersChanged = lastLevel != levelFilter || lastSource != sourceFilter
+        if (filtersChanged || lastFollowedKey != latestKey) {
+            listState.scrollToItem(latestIndex)
+            lastFollowedKey = latestKey
+            lastLevel = levelFilter
+            lastSource = sourceFilter
         }
     }
 
