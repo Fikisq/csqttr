@@ -65,7 +65,7 @@ import com.csqtt.client.ui.v2.components.LocalV2AdaptiveMetrics
 import com.csqtt.client.ui.v2.design.V2TextSizes
 import com.csqtt.client.ui.v2.components.V2TransparentIconButton
 import com.csqtt.client.ui.v2.design.LocalV2Colors
-import com.csqtt.client.ui.v2.design.V2ClassicLightColors
+import com.csqtt.client.ui.v2.design.V2CsqttrLightColors
 import com.csqtt.client.ui.v2.design.V2MonoFamily
 import com.csqtt.client.ui.v2.design.V2Palette
 import com.csqtt.client.ui.v2.design.TagColors
@@ -85,7 +85,7 @@ fun V2LogsScreen(
 ) {
     val colors = V2Theme.colors
     val terminalColors = if (colors.background.luminance() > 0.5f) {
-        val surface = if (colors == V2ClassicLightColors) Color(0xFF171B21) else colors.terminal
+        val surface = if (colors == V2CsqttrLightColors) Color(0xFF171B21) else colors.terminal
         colors.copy(
             background = surface,
             surface = surface,

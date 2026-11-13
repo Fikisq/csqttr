@@ -25,6 +25,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.csqtt.client.ui.v2.design.V2CsqttrLightColors
 import com.csqtt.client.ui.v2.design.V2TextSizes
 import com.csqtt.client.ui.v2.design.V2Theme
 
@@ -44,8 +45,11 @@ internal fun HappProfileHeader(
     actions: @Composable RowScope.() -> Unit = {},
 ) {
     val colors = V2Theme.colors
+    val useLightProfileSurface = colors == V2CsqttrLightColors
     V2Card(
         modifier = modifier,
+        color = if (useLightProfileSurface) colors.surfaceElevated else colors.surface,
+        borderColor = if (useLightProfileSurface) colors.outline else null,
         shape = RoundedCornerShape(22.dp),
         contentPadding = PaddingValues(horizontal = 12.dp),
     ) {

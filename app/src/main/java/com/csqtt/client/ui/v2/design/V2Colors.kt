@@ -275,6 +275,14 @@ internal val V2ClassicLightColors = V2LightColors.copy(
     version = BrandLightColorScheme.onSurfaceVariant,
 )
 
+internal val V2CsqttrLightColors = V2ClassicLightColors.copy(
+    background = Color(0xFFF5F6F8),
+    surfaceElevated = Color(0xFFEBEEF3),
+    field = Color(0xFFF0F2F6),
+    outline = Color(0xFFC5CCD7),
+    navSelected = Color(0xFFE9EDF3),
+)
+
 internal val LocalV2Colors = staticCompositionLocalOf { V2DarkColors }
 
 object V2Theme {

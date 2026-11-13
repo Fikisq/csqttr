@@ -28,7 +28,24 @@ private fun Context.findActivity(): Activity? = when (this) {
 }
 
 private fun v2ColorScheme(colors: V2Colors, dark: Boolean) =
-    if (colors == V2ClassicOriginalColors || colors == V2ClassicLightColors) {
+    if (colors == V2CsqttrLightColors) {
+        BrandLightColorScheme.copy(
+            background = colors.background,
+            surface = colors.surface,
+            surfaceVariant = colors.surfaceElevated,
+            surfaceBright = colors.surface,
+            surfaceDim = colors.surfaceElevated,
+            surfaceContainerLowest = colors.surface,
+            surfaceContainerLow = colors.background,
+            surfaceContainer = colors.field,
+            surfaceContainerHigh = colors.surfaceElevated,
+            surfaceContainerHighest = colors.surfaceElevated,
+            outlineVariant = colors.outline,
+            error = colors.error,
+            onError = colors.onDanger,
+            surfaceTint = Color.Transparent,
+        )
+    } else if (colors == V2ClassicOriginalColors || colors == V2ClassicLightColors) {
         (if (dark) BrandDarkColorScheme else BrandLightColorScheme).copy(
             error = colors.error,
             onError = colors.onDanger,
@@ -99,7 +116,7 @@ fun CsqttV2Theme(
 ) {
     val colors = when {
         darkTheme -> v2DarkColorsForPalette(themePalette)
-        themePalette == V2DarkPalette.ORIGINAL -> V2ClassicLightColors
+        themePalette == V2DarkPalette.ORIGINAL -> V2CsqttrLightColors
         themePalette == V2DarkPalette.HISTORICAL -> V2HistoricalLightColors
         else -> V2LightColors
     }
