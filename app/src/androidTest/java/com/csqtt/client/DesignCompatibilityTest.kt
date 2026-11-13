@@ -1,7 +1,9 @@
 package com.csqtt.client
 
+import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import com.csqtt.client.ui.legacy.SettingsTab
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
@@ -56,6 +58,45 @@ class DesignCompatibilityTest {
             }
         } finally {
             runBlocking { store.saveUiDesign("v2"); store.saveUiOwnerMode(oldOwner); store.saveParticipantShowLogs(oldShowLogs); store.saveBatterySaverMode(oldMode); store.saveBatterySaverPercent(oldPercent) }
+        }
+    }
+}
+
+/** Exercises the classic Tunnel composable retained in this baseline. */
+class ClassicTunnelAuthorizationTest {
+    @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
+
+    @Test fun classicTunnelAuthorizationIsVisibleWithoutScrolling() {
+        val store = SettingsStore(compose.activity)
+        val oldProfile = runBlocking { store.activeProfile.first() }
+        val slot = runBlocking { checkNotNull(store.findFirstFreeProfile()) }
+        try {
+            val auth = runBlocking {
+                store.saveProfileConnectionSettings(slot, "203.0.113.44", 46000, "TunnelFixture44", 20)
+                store.saveProfileParticipantMode(slot, false)
+                store.saveActiveProfile(slot)
+                store.tunnelAuthSnapshot.first { it.profile == slot && !it.csqttLinkMode }
+            }
+            compose.setContent { CSQTTTheme { SettingsTab(store, auth) } }
+            val authorization = compose.onNodeWithText("Авторизация")
+            authorization.assertIsDisplayed().performClick()
+            val dialog = compose.onNodeWithTag("classic-tunnel-authorization")
+            val scroll = dialog.fetchSemanticsNode().config[
+                androidx.compose.ui.semantics.SemanticsProperties.VerticalScrollAxisRange
+            ]
+            assertEquals("Authorization must fit with the keyboard closed", 0f, scroll.maxValue(), 0f)
+            compose.onNodeWithText("Пароль туннеля").assertIsDisplayed()
+            compose.onNodeWithText("Показать").assertIsDisplayed().performClick()
+            compose.onNodeWithText("Скрыть").assertIsDisplayed().performClick()
+            compose.onNodeWithText("Сохранить").assertIsDisplayed().assertIsEnabled().performClick()
+            compose.waitUntil(5000) {
+                compose.onAllNodesWithTag("classic-tunnel-authorization").fetchSemanticsNodes().isEmpty()
+            }
+        } finally {
+            runBlocking {
+                store.saveActiveProfile(oldProfile)
+                store.clearProfile(slot)
+            }
         }
     }
 }
