@@ -62,7 +62,7 @@ class DesignCompatibilityTest {
                     assertEquals("com.example.before", store.excludedApps.first())
                     check(store.extraWorkers.first())
                     assertEquals(slot, store.activeProfile.first())
-                    check(untouched == store.readProfileConnectionSettings(previous))
+                    check(untouched == store.readProfileConnectionSettings(previous).copy(extraWorkers = previousExtra))
                 }
                 val close = compose.onAllNodesWithContentDescription("Закрыть")
                 compose.waitUntil(5000) { close.fetchSemanticsNodes().isNotEmpty() }
@@ -102,7 +102,8 @@ class DesignCompatibilityTest {
                     store.saveIpIsWhitelist(true)
                 }
                 compose.onAllNodesWithText("Маршрут").onLast().performClick()
-                compose.onNodeWithText("Импорт и экспорт правил").performScrollTo().performClick()
+                val transferButton = if (design == "classic") "Импорт и экспорт правил" else "Импорт / экспорт"
+                compose.onNode(hasText(transferButton) and hasClickAction()).performScrollTo().performClick()
                 compose.runOnIdle { clipboard.clearPrimaryClip() }
                 compose.onNodeWithText("Экспорт").performClick()
                 compose.waitUntil(5000) {
