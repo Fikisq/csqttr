@@ -79,9 +79,7 @@ fun FloatingToolbar(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val selectedRole = if (csqttLinkMode) UsageRole.Participant else UsageRole.Owner
-    val vkAuthMode by settingsStore.vkAuthMode.collectAsStateWithLifecycle(
-        initialValue = CsqttConstants.VkAuth.MODE_CALLS,
-    )
+
     val tunnelRunning by TunnelManager.running.collectAsStateWithLifecycle()
     val tunnelStarting by TunnelManager.starting.collectAsStateWithLifecycle()
     val tunnelStopping by TunnelManager.stopping.collectAsStateWithLifecycle()
@@ -345,7 +343,7 @@ fun FloatingToolbar(
                         title = "Экстра потоки",
                         description = "До ${CsqttConstants.Tunnel.MAX_WORKERS} потоков вместо ${CsqttConstants.Tunnel.DEFAULT_MAX_WORKERS}",
                         checked = extraWorkers,
-                        enabled = !tunnelRunning && vkAuthMode != CsqttConstants.VkAuth.MODE_AUTO_JS,
+                        enabled = !tunnelBusy,
                         onCheckedChange = { enabled ->
                             scope.launch { settingsStore.saveExtraWorkers(enabled) }
                         },

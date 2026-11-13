@@ -191,7 +191,7 @@ fun V2ExtraWorkersInfoDialog(onDismiss: () -> Unit) {
             text = """
                 • Функция повышает максимальное количество потоков с ${CsqttConstants.Tunnel.DEFAULT_MAX_WORKERS} до ${CsqttConstants.Tunnel.MAX_WORKERS}.
                 • Значения выбираются кратно ${CsqttConstants.Tunnel.WORKERS_PER_GROUP} потокам.
-                • В режиме «Авто ВК» функция недоступна и отключается автоматически.
+                • В режиме «Авто ВК» доступно до ${CsqttConstants.Tunnel.DEFAULT_MAX_WORKERS} потоков. При смене режима настройка сохраняется.
             """.trimIndent(),
             style = MaterialTheme.typography.bodySmall.copy(
                 fontFamily = V2BodyFamily,
