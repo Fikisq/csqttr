@@ -176,7 +176,10 @@ fun CsqttV2Root(
             }
         }
 
-        if (storedOwnerMode == null || storedShowLogs == null) return@CsqttV2Theme
+        if (storedOwnerMode == null || storedShowLogs == null) {
+            Box(modifier.fillMaxSize().background(colors.background))
+            return@CsqttV2Theme
+        }
 
         if (showVersionSheet) {
             V2VersionSheet(
