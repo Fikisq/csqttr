@@ -1340,8 +1340,12 @@ class TunnelService : Service() {
         BatterySaver.setActive(save)
         if (save) {
             if (!DeployManager.isDeploying.value) releaseWakeLock()
-        } else if ((TunnelManager.running.value && !autoPausedForWifi) || DeployManager.isDeploying.value) {
-            acquireWakeLock()
+            releaseWifiLock()
+        } else {
+            if ((TunnelManager.running.value && !autoPausedForWifi) || DeployManager.isDeploying.value) {
+                acquireWakeLock()
+            }
+            if (TunnelManager.running.value) acquireWifiLock()
         }
         TunVpnService.instance?.onBatterySaverChanged(save)
         if (changed) TunnelManager.updateLog("battery_saver", if (save) "[BAT] ${BatterySaver.BADGE}" else "[BAT] Экономия батареи выключена", 2)
@@ -1369,7 +1373,9 @@ class TunnelService : Service() {
     }
 
     @Suppress("DEPRECATION")
+    @Synchronized
     private fun acquireWifiLock() {
+        if (BatterySaver.active.value || !autoPauseRequested || autoPausedForWifi || isStopping) return
         if (wifiLock?.isHeld == true) return
         val wm = applicationContext.getSystemService(WIFI_SERVICE) as WifiManager
 
@@ -1388,6 +1394,7 @@ class TunnelService : Service() {
         wakeLockExpiresAtElapsedMs = 0L
     }
 
+    @Synchronized
     private fun releaseWifiLock() {
         if (wifiLock?.isHeld == true) {
             wifiLock?.release()
