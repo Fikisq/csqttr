@@ -121,9 +121,10 @@ internal fun HappTunnelScreen(
             }
         }
     }
-    LaunchedEffect(profile, revision, host, port, password, effectiveWorkers, busy) {
+    val pendingDraft = draftTracker.value
+    LaunchedEffect(profile, pendingDraft) {
+        val draft = pendingDraft ?: return@LaunchedEffect
         delay(350)
-        val draft = draftTracker.value ?: return@LaunchedEffect
         settingsStore.saveProfileConnectionSettings(profile, draft.peer, draft.serverPeerPort, draft.connectionPassword,
             draft.workersPerHash, expectedRevision = draft.revision)
     }

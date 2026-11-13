@@ -397,7 +397,6 @@ private val DEPLOY_LAST_INSPECTION_PANEL = booleanPreferencesKey("deploy_last_in
         internal var cachedCsqttLinkMode: Boolean? = null
 
         @Volatile
-        internal var cachedWorkersPerHash: Int? = null
 
         @Volatile
         internal var cachedManualPortsEnabled: Boolean? = null
@@ -1576,7 +1575,6 @@ private val DEPLOY_LAST_INSPECTION_PANEL = booleanPreferencesKey("deploy_last_in
                 launch { turnTransport.collect { cachedTurnTransport = it } }
                 launch { srtpMode.collect { cachedSrtpMode = it } }
                 launch { csqttLinkMode.collect { cachedCsqttLinkMode = it } }
-                launch { workersPerHash.collect { cachedWorkersPerHash = it } }
                 launch { manualPortsEnabled.collect { cachedManualPortsEnabled = it } }
                 launch { serverPeerPort.collect { cachedServerPeerPort = it } }
                 launch { extraWorkers.collect { cachedExtraWorkers = it } }
