@@ -728,11 +728,12 @@ internal fun SettingsTabContent(
                 )
 
                 key(activeProfile, turnTransport) {
+                    val goobyAvailable = GoobyMode.isAvailable(turnTransport)
                     CompactDropdownSetting(
                         title = "Gooby",
-                        selectedKey = goobyMode.storedValue,
+                        selectedKey = (if (goobyAvailable) goobyMode else GoobyMode.OFF).storedValue,
                         options = GoobyMode.entries.map { it.storedValue to it.label },
-                        enabled = GoobyMode.isAvailable(turnTransport) && !tunnelRunning && !tunnelStarting && !tunnelStopping,
+                        enabled = goobyAvailable && !tunnelRunning && !tunnelStarting && !tunnelStopping,
                         indicatorProvider = { goobyIndicator(GoobyMode.fromStored(it), Color(0xFF43A047)) },
                         onTitleInfo = { showGoobyHelp = true },
                         onInfo = { goobyHelpMode = GoobyMode.fromStored(it) },

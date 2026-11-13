@@ -225,7 +225,7 @@ internal fun HappTunnelScreen(
                 key(editingProfile, goobyAvailable, busy) {
                     HappChoice(
                         label = "Gooby",
-                        value = goobyMode.label,
+                        value = (if (goobyAvailable) goobyMode else GoobyMode.OFF).label,
                         options = GoobyMode.entries.map { it.label },
                         onSelect = { label ->
                             val mode = GoobyMode.entries.first { it.label == label }

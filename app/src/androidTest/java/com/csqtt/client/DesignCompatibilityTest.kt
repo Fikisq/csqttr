@@ -246,6 +246,52 @@ class DesignCompatibilityTest {
         }
     }
 
+    @Test fun udpShowsGoobyOffAndTcpRestoresThePresetInEveryDesign() {
+        val store = SettingsStore(compose.activity)
+        val oldDesign = runBlocking { store.uiDesign.first() }
+        val profile = runBlocking { store.activeProfile.first() }
+        val oldTransport = runBlocking { store.turnTransport.first() }
+        val oldPreset = runBlocking { store.goobyMode.first() }
+        val oldAcknowledgment = runBlocking { store.tcpTransportRiskAcknowledged.first() }
+        try {
+            runBlocking {
+                store.saveTurnTransport(CsqttConstants.Tunnel.TURN_TRANSPORT_TCP_TLS)
+                store.saveTcpTransportRiskAcknowledged(true)
+                store.saveGoobyMode(GoobyMode.GENTLE, profile)
+            }
+            for (design in listOf("classic", "v2", "old")) {
+                runBlocking { store.saveUiDesign(design) }
+                val tunnel = compose.onAllNodesWithText("Туннель")
+                compose.waitUntil(10_000) { tunnel.fetchSemanticsNodes().isNotEmpty() }
+                tunnel.onFirst().performClick()
+                val tcp = compose.onNodeWithText("TCP")
+                val udp = compose.onNodeWithText("UDP")
+                val preset = compose.onNodeWithText("Лёгкая")
+                preset.performScrollTo().assertIsEnabled()
+                tcp.performScrollTo().performClick()
+                (compose.onNode(hasText("UDP") and hasAnyAncestor(isPopup()))).performClick()
+                compose.waitUntil(5000) {
+                    runBlocking { store.turnTransport.first() == CsqttConstants.Tunnel.DEFAULT_TURN_TRANSPORT }
+                }
+                compose.onNode(hasText("Выкл") and hasClickAction()).performScrollTo().assertIsNotEnabled()
+                assertEquals(GoobyMode.GENTLE, runBlocking { store.goobyMode.first() })
+                udp.performScrollTo().performClick()
+                (compose.onNode(hasText("TCP") and hasAnyAncestor(isPopup()))).performClick()
+                compose.waitUntil(5000) {
+                    runBlocking { store.turnTransport.first() == CsqttConstants.Tunnel.TURN_TRANSPORT_TCP_TLS }
+                }
+                preset.performScrollTo().assertIsEnabled()
+            }
+        } finally {
+            runBlocking {
+                store.saveTurnTransport(oldTransport)
+                store.saveTcpTransportRiskAcknowledged(oldAcknowledgment)
+                store.saveGoobyMode(oldPreset, profile)
+                store.saveUiDesign(oldDesign)
+            }
+        }
+    }
+
     @Test fun threeDesignsShareSettingsAndPreserveSelectedConnection() {
         val store = SettingsStore(compose.activity)
         val oldDesign = runBlocking { store.uiDesign.first() }
