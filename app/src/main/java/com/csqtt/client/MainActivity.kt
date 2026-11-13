@@ -155,22 +155,22 @@ class MainActivity : ComponentActivity() {
             val authScope = rememberCoroutineScope()
             val uiStateHolder = rememberSaveableStateHolder()
             val design by appSettingsStore.uiDesign.collectAsStateWithLifecycle<String?>(initialValue = null)
-            val chosenTheme by appSettingsStore.themeMode.collectAsStateWithLifecycle("system")
+            val storedTheme by appSettingsStore.themeMode.collectAsStateWithLifecycle<String?>(initialValue = null)
+            val chosenTheme = storedTheme ?: return@setContent
+            val chosenDesign = design ?: return@setContent
             val uiScalePercent by appSettingsStore.uiScalePercent.collectAsStateWithLifecycle(100)
             val dark = when (chosenTheme) { "dark" -> true; "light" -> false; else -> androidx.compose.foundation.isSystemInDarkTheme() }
-            val historicalPalette = design == CsqttConstants.Theme.DESIGN_OLD
+            val historicalPalette = chosenDesign == CsqttConstants.Theme.DESIGN_OLD
             val v2Palette = if (historicalPalette) V2DarkPalette.HISTORICAL else V2DarkPalette.ORIGINAL
-            val uiFamily = when (design) {
-                null -> "loading"
-                CsqttConstants.Theme.DESIGN_CLASSIC -> CsqttConstants.Theme.DESIGN_CLASSIC
-                else -> CsqttConstants.Theme.DESIGN_V2
+            val uiFamily = if (chosenDesign == CsqttConstants.Theme.DESIGN_CLASSIC) {
+                CsqttConstants.Theme.DESIGN_CLASSIC
+            } else {
+                CsqttConstants.Theme.DESIGN_V2
             }
             if (renderUi) {
                 uiStateHolder.SaveableStateProvider("main_ui_$uiFamily") {
             val settingsStore = remember { appSettingsStore }
-            if (design == null) {
-                // Wait for the stored choice instead of briefly drawing the other design.
-            } else if (design != CsqttConstants.Theme.DESIGN_CLASSIC) {
+            if (uiFamily == CsqttConstants.Theme.DESIGN_V2) {
                 val baseDensity = LocalDensity.current
                 val scaledDensity = remember(baseDensity, uiScalePercent) {
                     Density(baseDensity.density * uiScalePercent / 100f, baseDensity.fontScale)
@@ -180,10 +180,10 @@ class MainActivity : ComponentActivity() {
                         settingsStore = settingsStore,
                         onVkAuthRequested = { showVkAccountsDialog = true },
                         historicalPalette = historicalPalette,
+                        themeMode = chosenTheme,
                     )
                 }
             } else {
-            val themeMode by settingsStore.themeMode.collectAsStateWithLifecycle(initialValue = CsqttConstants.Theme.MODE_SYSTEM)
             val activeFingerprint by settingsStore.selectedFingerprint.collectAsStateWithLifecycle(initialValue = CsqttConstants.Tunnel.DEFAULT_FINGERPRINT)
             val scope = rememberCoroutineScope()
 
@@ -193,14 +193,14 @@ class MainActivity : ComponentActivity() {
             }
 
             CompositionLocalProvider(LocalDensity provides fixedDensity) {
-            CSQTTTheme(themeMode = themeMode) {
+            CSQTTTheme(themeMode = chosenTheme) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background,
                 ) {
                     MainScreen(
                         settingsStore = settingsStore,
-                        themeMode = themeMode,
+                        themeMode = chosenTheme,
                         onThemeChange = { mode ->
                             scope.launch {
                                 settingsStore.saveThemeMode(mode)
@@ -273,7 +273,7 @@ class MainActivity : ComponentActivity() {
                         }
                     }
                 }
-                if (design == CsqttConstants.Theme.DESIGN_CLASSIC) CSQTTTheme(themeMode = chosenTheme) {
+                if (chosenDesign == CsqttConstants.Theme.DESIGN_CLASSIC) CSQTTTheme(themeMode = chosenTheme) {
                     com.csqtt.client.ui.legacy.dialogs.VkAuthDialog(onToken, onDismiss = { showVkAuthDialog = false })
                 } else com.csqtt.client.ui.v2.design.CsqttV2Theme(darkTheme = dark, themePalette = v2Palette) {
                     VkAuthDialog(onToken, onDismiss = { showVkAuthDialog = false })

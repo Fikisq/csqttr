@@ -28,7 +28,7 @@ import kotlinx.coroutines.launch
 
 @Composable
 fun HappSettingsScreen(
-    settingsStore: SettingsStore, version: String, onBack: () -> Unit, onAbout: () -> Unit,
+    settingsStore: SettingsStore, version: String, theme: String, onBack: () -> Unit, onAbout: () -> Unit,
     onOpenResourceMonitor: () -> Unit = {}, onVersionClick: () -> Unit = {},
 ) {
     val scope = rememberCoroutineScope()
@@ -41,7 +41,6 @@ fun HappSettingsScreen(
     val profile by settingsStore.activeProfile.collectAsStateWithLifecycle(0)
     val authMode by settingsStore.vkAuthMode.collectAsStateWithLifecycle("vkcalls")
     val running by com.csqtt.client.TunnelManager.running.collectAsStateWithLifecycle()
-    val theme by settingsStore.themeMode.collectAsStateWithLifecycle("system")
     val uiScalePercent by settingsStore.uiScalePercent.collectAsStateWithLifecycle(100)
     val fingerprint by settingsStore.selectedFingerprint.collectAsStateWithLifecycle("chrome")
     val design by settingsStore.uiDesign.collectAsStateWithLifecycle("v2")

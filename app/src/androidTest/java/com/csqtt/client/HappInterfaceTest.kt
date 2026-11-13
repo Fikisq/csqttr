@@ -1,6 +1,8 @@
 package com.csqtt.client
 
 import androidx.activity.ComponentActivity
+import androidx.compose.runtime.getValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -42,7 +44,10 @@ class HappInterfaceTest {
             store.saveLoggingEnabled(true)
             store.saveProfileConnectionSettings(0, "203.0.113.10", 46000, "DemoPassword1234", 20)
         }
-        compose.setContent { CsqttV2Root(store, onVkAuthRequested = { vkAccountRequests++ }) }
+        compose.setContent {
+            val theme by store.themeMode.collectAsStateWithLifecycle("dark")
+            CsqttV2Root(store, onVkAuthRequested = { vkAccountRequests++ }, themeMode = theme)
+        }
         compose.waitForIdle()
     }
 

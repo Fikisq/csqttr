@@ -79,8 +79,8 @@ fun CsqttV2Root(
     onVkAuthRequested: () -> Unit = {},
     modifier: Modifier = Modifier,
     historicalPalette: Boolean = false,
+    themeMode: String,
 ) {
-    val themeMode by settingsStore.themeMode.collectAsStateWithLifecycle(initialValue = CsqttConstants.Theme.MODE_SYSTEM)
     val isSystemDark = isSystemInDarkTheme()
     val isDark = when (themeMode) {
         CsqttConstants.Theme.MODE_LIGHT -> false
@@ -260,6 +260,7 @@ fun CsqttV2Root(
                     OVERLAY_SETTINGS -> HappSettingsScreen(
                         settingsStore = settingsStore,
                         version = version,
+                        theme = themeMode,
                         onBack = { overlay = null },
                         onAbout = { overlay = OVERLAY_ABOUT },
                         onOpenResourceMonitor = { showResourceSheet = true },
