@@ -382,8 +382,13 @@ class DesignCompatibilityTest {
                 for (label in listOf("Экстра потоки", "Автопауза Wi-Fi", "Дизайн", "Импорт / экспорт", "О приложении")) {
                     compose.onNodeWithText(label).performScrollTo().assertIsDisplayed()
                 }
-                compose.activityRule.scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
-                compose.onAllNodesWithText("Туннель").onFirst().performClick()
+                if (design == "classic") {
+                    androidx.test.platform.app.InstrumentationRegistry.getInstrumentation()
+                        .uiAutomation.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_BACK)
+                } else {
+                    compose.onNodeWithContentDescription("Закрыть").performClick()
+                }
+                compose.onAllNodesWithText("Туннель").onLast().performClick()
                 val goobyInitiallyVisible = compose.onNodeWithText("Gooby").isDisplayed()
                 for (label in listOf("Режим кредов", "Режим SRTP", "Транспорт", "Gooby")) {
                     val title = compose.onNodeWithText(label)
