@@ -397,8 +397,6 @@ private val DEPLOY_LAST_INSPECTION_PANEL = booleanPreferencesKey("deploy_last_in
         internal var cachedCsqttLinkMode: Boolean? = null
 
         @Volatile
-
-        @Volatile
         internal var cachedManualPortsEnabled: Boolean? = null
 
         @Volatile
