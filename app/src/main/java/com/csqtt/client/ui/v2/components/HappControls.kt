@@ -113,7 +113,8 @@ internal fun HappHelp(title: String, text: String) {
     IconButton(onClick = { open = true }, modifier = Modifier.size(36.dp)) {
         Icon(Icons.AutoMirrored.Outlined.HelpOutline, "Подсказка: $title", tint = V2Theme.colors.textSecondary, modifier = Modifier.size(17.dp))
     }
-    if (open) AlertDialog(onDismissRequest = { open = false }, title = { Text(title) }, text = {
+    if (open) AlertDialog(onDismissRequest = { open = false }, title = { Text(title) },
+        containerColor = V2Theme.colors.surface, tonalElevation = 0.dp, text = {
         Column(Modifier.heightIn(max = 440.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             helpSections(title, text).forEach { section ->
                 Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
@@ -179,6 +180,8 @@ internal fun HappChoice(label: String, value: String, options: List<String>, onS
         AlertDialog(
             onDismissRequest = { helpOption = null },
             title = { Text(option) },
+            containerColor = c.surface,
+            tonalElevation = 0.dp,
             text = {
                 Column(Modifier.heightIn(max = 440.dp).verticalScroll(rememberScrollState())) {
                     Text(optionHelp.getValue(option))
