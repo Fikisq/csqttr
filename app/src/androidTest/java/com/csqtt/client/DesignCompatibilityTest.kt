@@ -19,6 +19,7 @@ class DesignCompatibilityTest {
         val previous = runBlocking { store.activeProfile.first() }
         val previousDesign = runBlocking { store.uiDesign.first() }
         val untouched = runBlocking { store.readProfileConnectionSettings(previous) }
+        val previousExtra = runBlocking { store.extraWorkers.first() }
         val slot = runBlocking { checkNotNull(store.findFirstFreeProfile()) }
         val clipboard = compose.activity.getSystemService(android.content.ClipboardManager::class.java)
         try {
@@ -27,6 +28,7 @@ class DesignCompatibilityTest {
                 store.saveProfileName(slot, "Clipboard transfer fixture")
                 store.saveActiveProfile(slot)
                 store.saveAppRoutingLists("com.example.before", "", false)
+                store.saveExtraWorkers(true)
             }
             for (design in listOf("v2", "old", "classic")) {
                 runBlocking { store.saveUiDesign(design) }
@@ -45,6 +47,7 @@ class DesignCompatibilityTest {
                 runBlocking {
                     store.saveProfileConnectionSettings(slot, "203.0.113.62", 46124, "TransferFixture62", 20)
                     store.saveAppRoutingLists("com.example.after", "", false)
+                    store.saveExtraWorkers(false)
                 }
                 compose.onNodeWithText("Импорт").performClick()
                 compose.onNodeWithText("Из буфера").performScrollTo().performClick()
@@ -57,6 +60,7 @@ class DesignCompatibilityTest {
                     check(restored.connectionPassword == "TransferFixture61")
                     assertEquals(40, restored.workersPerHash)
                     assertEquals("com.example.before", store.excludedApps.first())
+                    check(store.extraWorkers.first())
                     assertEquals(slot, store.activeProfile.first())
                     check(untouched == store.readProfileConnectionSettings(previous))
                 }
@@ -67,6 +71,79 @@ class DesignCompatibilityTest {
         } finally {
             compose.runOnIdle { clipboard.clearPrimaryClip() }
             runBlocking {
+                store.saveActiveProfile(previous)
+                store.clearProfile(slot)
+                store.saveUiDesign(previousDesign)
+                store.saveExtraWorkers(previousExtra)
+            }
+        }
+    }
+
+    @Test fun routingClipboardRoundTripRestoresBothListsInEveryDesign() {
+        val store = SettingsStore(compose.activity)
+        val previous = runBlocking { store.activeProfile.first() }
+        val previousDesign = runBlocking { store.uiDesign.first() }
+        val slot = runBlocking { checkNotNull(store.findFirstFreeProfile()) }
+        val clipboard = compose.activity.getSystemService(android.content.ClipboardManager::class.java)
+        try {
+            runBlocking {
+                store.saveProfileConnectionSettings(slot, "203.0.113.61", 46123, "RoutingFixture61", 40)
+                store.saveActiveProfile(slot)
+            }
+            for (design in listOf("v2", "old", "classic")) {
+                runBlocking {
+                    store.saveUiDesign(design)
+                    store.saveAppRoutingLists("com.example.direct", "com.example.vpn", true)
+                    store.saveDirectDomainsBlack("direct.example")
+                    store.saveDirectDomainsWhite("vpn.example")
+                    store.saveDomainIsWhitelist(true)
+                    store.saveDirectIpsBlack("192.0.2.10")
+                    store.saveDirectIpsWhite("198.51.100.20")
+                    store.saveIpIsWhitelist(true)
+                }
+                compose.onAllNodesWithText("Маршрут").onLast().performClick()
+                compose.onNodeWithText("Импорт и экспорт правил").performScrollTo().performClick()
+                compose.runOnIdle { clipboard.clearPrimaryClip() }
+                compose.onNodeWithText("Экспорт").performClick()
+                compose.waitUntil(5000) {
+                    compose.runOnIdle {
+                        clipboard.primaryClip?.getItemAt(0)?.text?.contains("com.example.direct") == true
+                    }
+                }
+                runBlocking {
+                    store.saveAppRoutingLists("", "", false)
+                    store.saveDirectDomainsBlack("")
+                    store.saveDirectDomainsWhite("")
+                    store.saveDomainIsWhitelist(false)
+                    store.saveDirectIpsBlack("")
+                    store.saveDirectIpsWhite("")
+                    store.saveIpIsWhitelist(false)
+                }
+                compose.onNodeWithText("Импорт").performClick()
+                compose.waitUntil(5000) {
+                    runBlocking {
+                        store.excludedApps.first() == "com.example.direct" &&
+                            store.whitelistApps.first() == "com.example.vpn" &&
+                            store.isWhitelist.first() &&
+                            store.directDomainsBlack.first() == "direct.example" &&
+                            store.directDomainsWhite.first() == "vpn.example" &&
+                            store.domainIsWhitelist.first() &&
+                            store.directIpsBlack.first() == "192.0.2.10" &&
+                            store.directIpsWhite.first() == "198.51.100.20" &&
+                            store.ipIsWhitelist.first()
+                    }
+                }
+            }
+        } finally {
+            compose.runOnIdle { clipboard.clearPrimaryClip() }
+            runBlocking {
+                store.saveAppRoutingLists("", "", false)
+                store.saveDirectDomainsBlack("")
+                store.saveDirectDomainsWhite("")
+                store.saveDomainIsWhitelist(false)
+                store.saveDirectIpsBlack("")
+                store.saveDirectIpsWhite("")
+                store.saveIpIsWhitelist(false)
                 store.saveActiveProfile(previous)
                 store.clearProfile(slot)
                 store.saveUiDesign(previousDesign)
