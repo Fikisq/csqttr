@@ -94,7 +94,7 @@ fun CsqttV2Root(
         val colors = V2Theme.colors
         val context = LocalContext.current.applicationContext
         val scope = rememberCoroutineScope()
-        val ownerMode by settingsStore.uiOwnerMode.collectAsStateWithLifecycle(initialValue = false)
+        val storedOwnerMode by settingsStore.uiOwnerMode.collectAsStateWithLifecycle<Boolean?>(initialValue = null)
         val deployStore = remember(context) { SettingsStore(context, deployScope = true) }
         // Keep this store's own snapshot ready, without reviving a saved form from another VPS.
         val deploySettings by deployStore.deploySettingsSnapshot.collectAsStateWithLifecycle(DeploySettingsSnapshot())
@@ -104,14 +104,12 @@ fun CsqttV2Root(
         val profileNames by settingsStore.profileNames.collectAsStateWithLifecycle(emptyMap())
         val deployServers by settingsStore.deployServers.collectAsStateWithLifecycle(emptyList())
         val routingSettings by settingsStore.routingScreenSnapshot.collectAsStateWithLifecycle(initialValue = null)
-        val participantShowLogs by settingsStore.participantShowLogs.collectAsStateWithLifecycle(
-            initialValue = SettingsStore.DEFAULT_PARTICIPANT_SHOW_LOGS,
-        )
-        val tabs = remember(ownerMode, participantShowLogs) {
+        val storedShowLogs by settingsStore.participantShowLogs.collectAsStateWithLifecycle<Boolean?>(initialValue = null)
+        val tabs = remember(storedOwnerMode, storedShowLogs) {
             V2Tab.entries.filter { tab ->
                 when (tab) {
-                    V2Tab.Deploy -> ownerMode
-                    V2Tab.Logs -> participantShowLogs
+                    V2Tab.Deploy -> storedOwnerMode == true
+                    V2Tab.Logs -> storedShowLogs ?: SettingsStore.DEFAULT_PARTICIPANT_SHOW_LOGS
                     else -> true
                 }
             }
@@ -130,8 +128,11 @@ fun CsqttV2Root(
             tabs.firstOrNull { it.name == selectedTabName } ?: tabs.first()
         }
 
-        LaunchedEffect(tabs) {
-            if (tabs.none { it.name == selectedTabName }) selectedTabName = tabs.first().name
+        LaunchedEffect(storedOwnerMode, storedShowLogs, tabs) {
+            // Wait for the stored role and log visibility before invalidating a restored tab.
+            if (storedOwnerMode != null && storedShowLogs != null && tabs.none { it.name == selectedTabName }) {
+                selectedTabName = tabs.first().name
+            }
         }
         LaunchedEffect(selectedTab) {
             if (selectedTab == V2Tab.Logs) TunnelManager.clearUnreadErrors()
@@ -174,6 +175,8 @@ fun CsqttV2Root(
                 if (isActive) runUpdateCheck("periodic")
             }
         }
+
+        if (storedOwnerMode == null || storedShowLogs == null) return@CsqttV2Theme
 
         if (showVersionSheet) {
             V2VersionSheet(

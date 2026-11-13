@@ -414,11 +414,10 @@ fun MainScreen(
     val tunnelAuthSettings by settingsStore.tunnelAuthSnapshot.collectAsStateWithLifecycle(
         initialValue = TunnelAuthSnapshot()
     )
-    val ownerMode by settingsStore.uiOwnerMode.collectAsStateWithLifecycle(false)
-    val csqttLinkMode = !ownerMode // Navigation role is independent of a profile's link authentication.
-    val participantShowLogs by settingsStore.participantShowLogs.collectAsStateWithLifecycle(
-        initialValue = SettingsStore.DEFAULT_PARTICIPANT_SHOW_LOGS,
-    )
+    val storedOwnerMode by settingsStore.uiOwnerMode.collectAsStateWithLifecycle<Boolean?>(initialValue = null)
+    val storedShowLogs by settingsStore.participantShowLogs.collectAsStateWithLifecycle<Boolean?>(initialValue = null)
+    val csqttLinkMode = storedOwnerMode != true // Navigation role is independent of a profile's link authentication.
+    val participantShowLogs = storedShowLogs ?: SettingsStore.DEFAULT_PARTICIPANT_SHOW_LOGS
     var resourceMonitorOpen by rememberSaveable { mutableStateOf(false) }
     var floatingHudEnabled by rememberSaveable { mutableStateOf(false) }
     val excludedApps by settingsStore.excludedApps.collectAsStateWithLifecycle(
@@ -457,15 +456,9 @@ fun MainScreen(
         navItems.filter { it.id in allowedIds }
     }
     val tabStateHolder = rememberSaveableStateHolder()
-    LaunchedEffect(csqttLinkMode, participantShowLogs) {
-        if (csqttLinkMode) {
-            if (selectedTab == 2 || (selectedTab == 3 && !participantShowLogs)) {
-                selectedTab = 0
-            }
-        }
-    }
-    LaunchedEffect(activeNavItems) {
-        if (activeNavItems.none { it.id == selectedTab }) {
+    LaunchedEffect(storedOwnerMode, storedShowLogs, activeNavItems) {
+        // Wait for the stored role and log visibility before invalidating a restored tab.
+        if (storedOwnerMode != null && storedShowLogs != null && activeNavItems.none { it.id == selectedTab }) {
             selectedTab = 0
         }
     }
@@ -530,6 +523,8 @@ fun MainScreen(
             }
         }
     }
+
+    if (storedOwnerMode == null || storedShowLogs == null) return
 
     Box(modifier = Modifier.fillMaxSize()) {
         AppBackdrop(modifier = Modifier.matchParentSize())
