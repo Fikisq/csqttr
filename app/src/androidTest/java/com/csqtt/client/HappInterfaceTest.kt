@@ -364,6 +364,28 @@ class HappInterfaceTest {
         compose.onNodeWithText("────────────").assertDoesNotExist()
     }
 
+    @Test fun appRoutingClipboardMergesWithTheSelectedList() {
+        runBlocking { store.saveAppRoutingLists("com.example.direct", "com.example.original", true) }
+        val clipboard = compose.activity.getSystemService(android.content.ClipboardManager::class.java)
+        compose.onNodeWithText("Маршрут").performClick()
+        compose.onNodeWithText("Список приложений").performScrollTo().performClick()
+        compose.onNodeWithText("Копировать список").performClick()
+        compose.runOnIdle { check(clipboard.primaryClip?.getItemAt(0)?.text == "com.example.original") }
+        compose.runOnIdle {
+            clipboard.setPrimaryClip(android.content.ClipData.newPlainText("fixture",
+                "com.example.original\ncom.example.added\ninvalid"))
+        }
+        compose.onNodeWithText("Вставить список").performClick()
+        compose.onNodeWithContentDescription("Закрыть").performClick()
+        compose.waitUntil(5000) {
+            runBlocking { store.whitelistApps.first().split(',').toSet() == setOf("com.example.original", "com.example.added") }
+        }
+        runBlocking {
+            check(store.excludedApps.first() == "com.example.direct")
+            check(store.isWhitelist.first())
+        }
+    }
+
     @Test fun vpsEditorShowsPortsAndFormatHintsWithoutConnectionWorkers() {
         compose.onNodeWithContentDescription("Настройки").performClick()
         compose.onNodeWithText("Участник").performClick()
