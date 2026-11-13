@@ -20,6 +20,7 @@ import com.csqtt.client.*
 import com.csqtt.client.ui.legacy.GOOBY_HELP
 import com.csqtt.client.ui.legacy.ModeIndicator
 import com.csqtt.client.ui.legacy.SRTP_HELP
+import com.csqtt.client.ui.legacy.goobyIndicator
 import com.csqtt.client.ui.legacy.srtpModeHelp
 import com.csqtt.client.ui.v2.components.*
 import com.csqtt.client.ui.v2.design.V2Theme
@@ -226,6 +227,9 @@ internal fun HappTunnelScreen(
                             scope.launch { settingsStore.saveGoobyMode(mode, editingProfile) }
                         },
                         modifier = Modifier.alpha(if (goobyAvailable) 1f else 0.5f),
+                        indicators = GoobyMode.entries.mapNotNull { mode ->
+                            goobyIndicator(mode, c.success)?.let { mode.label to it }
+                        }.toMap(),
                         help = GOOBY_HELP,
                         optionHelp = mapOf(
                             GoobyMode.OFF.label to "Соединение TCP/TLS без Gooby.",
