@@ -119,6 +119,7 @@ internal fun CompactDropdownSetting(
     indicatorProvider: ((String) -> ModeIndicator?)? = null,
     unselectedLabel: String = "",
     menuAction: Pair<String, () -> Unit>? = null,
+    triggerModifier: Modifier = Modifier,
 ) {
     var expanded by rememberSaveable { mutableStateOf(false) }
     val selectedLabel = options.firstOrNull { it.first == selectedKey }?.second ?: unselectedLabel
@@ -161,7 +162,7 @@ internal fun CompactDropdownSetting(
             OutlinedButton(
                 onClick = { expanded = true },
                 enabled = enabled,
-                modifier = Modifier.fillMaxWidth().height(44.dp),
+                modifier = triggerModifier.fillMaxWidth().height(44.dp),
                 shape = CsqttShapes.Pill,
                 contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
                 colors = ButtonDefaults.outlinedButtonColors(

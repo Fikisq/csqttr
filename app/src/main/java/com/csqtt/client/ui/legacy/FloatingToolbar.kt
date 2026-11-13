@@ -12,6 +12,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.platform.testTag
 import com.csqtt.client.SettingsStore
 import com.csqtt.client.defaultProfileName
 import com.csqtt.client.BatterySaver
@@ -285,6 +286,7 @@ fun FloatingToolbar(
                         },
                         enabled = true,
                         unselectedLabel = "Не выбран",
+                        triggerModifier = Modifier.testTag("classic-profile-picker"),
                         menuAction = "Добавить профиль" to {
                             scope.launch {
                                 val slot = settingsStore.findFirstFreeProfile()

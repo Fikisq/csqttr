@@ -170,14 +170,7 @@ class DesignCompatibilityTest {
             compose.waitUntil(5_000) { slot !in runBlocking { store.occupiedProfiles.first() } }
             check(slot != runBlocking { store.activeProfile.first() } || slot == previous)
             check(other == runBlocking { store.readProfileConnectionSettings(previous) })
-            val active = runBlocking { store.activeProfile.first() }
-            val activeIsSaved = active in runBlocking { store.occupiedProfiles.first() }
-            val selectedLabel = if (activeIsSaved) {
-                runBlocking { store.profileNames.first().getValue(active) }
-            } else {
-                "Не выбран"
-            }
-            compose.onNodeWithText(selectedLabel).performScrollTo().performClick()
+            compose.onNodeWithTag("classic-profile-picker").performScrollTo().performClick()
             val popup = hasAnyAncestor(isPopup())
             compose.onNode(hasText(name) and popup).assertDoesNotExist()
             compose.onNode(hasText(defaultProfileName(slot)) and popup).assertDoesNotExist()
