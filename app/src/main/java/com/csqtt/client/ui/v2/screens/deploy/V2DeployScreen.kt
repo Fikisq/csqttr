@@ -270,7 +270,6 @@ internal fun V2DeployScreen(
     var sshKeysMode by remember(savedSettings.profile) { mutableStateOf(savedSshKeysMode) }
 
     var showSecretsDialog by remember(savedSettings.profile) { mutableStateOf(false) }
-    var showDeployOptions by remember(savedSettings.profile) { mutableStateOf(false) }
     var showDeleteAppServerDialog by rememberSaveable(savedSettings.profile) { mutableStateOf(false) }
     var showSshKeysDialog by rememberSaveable(savedSettings.profile) { mutableStateOf(false) }
     var showDockerInfoDialog by rememberSaveable(savedSettings.profile) { mutableStateOf(false) }
@@ -765,7 +764,7 @@ internal fun V2DeployScreen(
                 return
             }
         }
-        showDeployOptions = true
+        checkThenDeploy()
     }
 
     /** «Удалить CSQTT с сервера»: the check lists the servers this app installed, the user picks one. */
@@ -1109,13 +1108,6 @@ internal fun V2DeployScreen(
             },
             connectionOnly = addingServer,
         )
-    }
-
-    if (showDeployOptions) {
-        androidx.compose.material3.AlertDialog(onDismissRequest = { showDeployOptions = false }, title = { Text("Установка CSQTT") },
-            text = { Text("VPS: $host\nSSH: $sshPort · PEER: $peerPort · WEB: $webPort\n" + if(dockerInstall) "Установка в Docker" else "") },
-            confirmButton = { androidx.compose.material3.TextButton(onClick = { showDeployOptions = false; checkThenDeploy() }) { Text("Установить") } },
-            dismissButton = { androidx.compose.material3.TextButton(onClick = { showDeployOptions = false }) { Text("Отмена") } })
     }
 
     // Диалог подтверждения удаления сервера из приложения
