@@ -643,6 +643,7 @@ internal fun V2DeployScreen(
                     certificate = deployCertificate,
                     installInDocker = deploymentDraft.dockerInstall,
                     secretPath = savedSecretPathUuid,
+                    mode = chosen.actionMode,
                     instance = chosen.instance,
                 )
                 if (success) {

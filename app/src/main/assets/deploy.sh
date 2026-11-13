@@ -937,6 +937,10 @@ ensure_csqtt_directory() {
 }
 
 clear_runtime_config_preserving_database() {
+    if [ "$PRESERVE_CONFIG" = "1" ]; then
+        secure_persistent_state
+        return 0
+    fi
     local entry base
     ensure_csqtt_directory "$CSQTT_CONFIG_DIR" 700
     shopt -s nullglob dotglob
@@ -989,8 +993,8 @@ validate_candidate_environment() {
 
 prepare_uploaded_release() {
     DEPLOY_PHASE="preflight"
-    if [ "$PRESERVE_CONFIG" = "1" ]; then
-        # An update uploads neither file (the app keeps the server's own), so one already in /tmp is a leftover — maybe
+    if [ "$PRESERVE_CONFIG" = "1" ] && [ ! -s "$UPLOAD_ENV_FILE" ] && [ ! -s "$UPLOAD_OVERRIDES_FILE" ]; then
+        # A legacy update uploads neither file (the app keeps the server's own), so one already in /tmp is a leftover — maybe
         # the other instance's, from a deploy cut off after its upload: this instance's own config always wins.
         rm -f -- "$UPLOAD_ENV_FILE" "$UPLOAD_OVERRIDES_FILE"
         [ -s "$CSQTT_ENV_FILE" ] || \
@@ -3102,7 +3106,7 @@ main() {
             run_timed "NAT/firewall" setup_nat_and_firewall
             install_network_helper
             if [ "$PRESERVE_CONFIG" = "1" ]; then
-                log_info "Режим обновления: логин, пароли и путь панели сохраняются без изменений"
+                log_info "Повторная установка: данные клиентов и правила сохраняются"
             fi
             setup_csqtt_environment
             run_timed "Let’s Encrypt" setup_letsencrypt_ip_tls

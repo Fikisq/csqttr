@@ -727,9 +727,7 @@ internal suspend fun performDeploy(
 
         val scriptFile = File(workingDir, "deploy.sh").also { writeDeployScript(context, it) }
         val serverFile = extractAsset(serverArchitecture.assetName)
-        // Update must keep the existing credentials/config: deploy.sh "update" reuses
-        // /etc/csqtt/csqtt.env and deploy-overrides.json on the server.
-        val environmentFile = if (mode == DeployActionMode.Update) null else {
+        val environmentFile = run {
             File(workingDir, "csqtt.env").apply {
                 writeText(
                     buildString {
@@ -743,7 +741,7 @@ internal suspend fun performDeploy(
                 )
             }
         }
-        val overridesFile = if (mode == DeployActionMode.Update) null else {
+        val overridesFile = run {
             File(workingDir, "csqtt-deploy.json").apply {
                 writeText(
                     JSONObject()
@@ -791,8 +789,8 @@ internal suspend fun performDeploy(
                 onProgress(0.10f + 0.20f * percent / 100, "Передача сервера по SSH: $percent%")
             }
         }
-        environmentFile?.let { sshClient.upload(it, "/tmp/.csqtt-upload-web.env") }
-        overridesFile?.let { sshClient.upload(it, "/tmp/.csqtt-upload-overrides.json") }
+        sshClient.upload(environmentFile, "/tmp/.csqtt-upload-web.env")
+        sshClient.upload(overridesFile, "/tmp/.csqtt-upload-overrides.json")
 
         onProgress(0.32f, if (mode == DeployActionMode.Update) "Установка обновления..." else "Установка нового сервера...")
         TunnelManager.addDeployInfoLog(

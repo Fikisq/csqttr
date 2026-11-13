@@ -85,6 +85,8 @@ internal data class PlanAction(
     val detail: String,
 ) {
     val destructive: Boolean get() = kind == PlanKind.REPLACE
+    val actionMode: DeployActionMode get() =
+        if (kind == PlanKind.UPDATE) DeployActionMode.Update else DeployActionMode.Install
 }
 
 internal data class DeployPlan(
@@ -201,7 +203,7 @@ internal fun planDeploy(
 
     val updates = listOfNotNull(liveStandard?.takeIf { isLine25(it.version) && others.isEmpty() }, side)
         .sortedByDescending { it.peerPort == profilePeerPort }
-    for (server in updates) update(server, if (updates.size > 1) "Обновить: порт ${server.peerPort}" else "Обновить")
+    for (server in updates) update(server, if (updates.size > 1) "Установить: порт ${server.peerPort}" else "Установить")
 
     when {
         liveStandard != null && !isLine25(liveStandard.version) && side == null -> {

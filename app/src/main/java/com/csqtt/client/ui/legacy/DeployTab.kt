@@ -416,7 +416,8 @@ internal fun DeployTab(
                     keyPassphrase = deployKeyPassphrase,
                     certificate = deployCertificate,
                     installInDocker = dockerInstall,
-                    secretPath = savedSecretPathUuid.ifBlank { "" },
+                    secretPath = savedSecretPathUuid,
+                    mode = chosen.actionMode,
                     instance = instance,
                 )
                 if (success) {
