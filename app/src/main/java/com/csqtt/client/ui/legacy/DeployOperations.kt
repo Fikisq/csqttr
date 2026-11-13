@@ -7,6 +7,8 @@ import com.csqtt.client.SshHostKeyStore
 import com.csqtt.client.TunnelManager
 import net.schmizz.sshj.SSHClient as SshjClient
 import net.schmizz.sshj.xfer.FileSystemFile
+import net.schmizz.sshj.xfer.TransferListener
+import net.schmizz.sshj.common.StreamCopier
 import net.schmizz.sshj.userauth.UserAuthException
 import net.schmizz.sshj.userauth.method.AuthKeyboardInteractive
 import net.schmizz.sshj.userauth.method.PasswordResponseProvider
@@ -248,7 +250,11 @@ private class DeploySSHClient(
     fun exec(command: String, timeout: Long = CMD_TIMEOUT): String =
         execResult(command, timeout).output
 
-    fun execResult(command: String, timeout: Long = CMD_TIMEOUT): SSHExecResult {
+    fun execResult(
+        command: String,
+        timeout: Long = CMD_TIMEOUT,
+        onProgress: ((Float, String) -> Unit)? = null,
+    ): SSHExecResult {
         if (!ensureConnected("команда")) {
             DeployManager.writeError("SSH exec: клиент отключён перед командой: ${command.take(80)}")
             return SSHExecResult("error: session is down", -1)
@@ -283,7 +289,7 @@ private class DeploySSHClient(
                             match != null -> {
                                 val p = match.groupValues[1].toFloatOrNull() ?: 0f
                                 val step = match.groupValues[2].trim()
-                                DeployManager.updateProgress(p, step)
+                                onProgress?.invoke(p, step)
                                 TunnelManager.addDeployInfoLog("Этап: $step")
                             }
                             !clean.contains("CSQTT_PROGRESS") -> {
@@ -340,11 +346,22 @@ private class DeploySSHClient(
         }
     }
 
-    fun upload(localFile: File, remotePath: String) {
-        uploadInternal(localFile, remotePath, UPLOAD_RECONNECT_ATTEMPTS)
+    fun upload(localFile: File, remotePath: String, onProgress: ((Long) -> Unit)? = null) {
+        uploadInternal(localFile, remotePath, UPLOAD_RECONNECT_ATTEMPTS, onProgress)
     }
 
-    private fun uploadInternal(localFile: File, remotePath: String, reconnectsLeft: Int) {
+    private fun uploadInternal(
+        localFile: File,
+        remotePath: String,
+        reconnectsLeft: Int,
+        onProgress: ((Long) -> Unit)?,
+    ) {
+        val listener = onProgress?.let { report ->
+            object : TransferListener {
+                override fun directory(name: String): TransferListener = this
+                override fun file(name: String, size: Long): StreamCopier.Listener = StreamCopier.Listener(report)
+            }
+        }
         if (!localFile.isFile || !localFile.canRead()) {
             throw IOException("Local deploy file is unavailable: ${localFile.name}")
         }
@@ -359,6 +376,7 @@ private class DeploySSHClient(
         repeat(SFTP_UPLOAD_ATTEMPTS) { attempt ->
             try {
                 ssh.newSFTPClient().use { sftp ->
+                    if (listener != null) sftp.fileTransfer.transferListener = listener
                     sftp.put(FileSystemFile(localFile), remotePath)
                     val remoteSize = sftp.lstat(remotePath).size
                     if (remoteSize == localFile.length()) {
@@ -382,7 +400,9 @@ private class DeploySSHClient(
         if (!sftpSuccess && ssh.isConnected) {
             try {
                 DeployManager.writeError("Falling back to SCP for ${localFile.name}...")
-                ssh.newSCPFileTransfer().upload(FileSystemFile(localFile), remotePath)
+                val scp = ssh.newSCPFileTransfer()
+                if (listener != null) scp.transferListener = listener
+                scp.upload(FileSystemFile(localFile), remotePath)
                 TunnelManager.addDeploySuccessLog("Загружено (SCP): $label")
                 return
             } catch (e: Exception) {
@@ -400,7 +420,6 @@ private class DeploySSHClient(
                     val buffer = ByteArray(64 * 1024)
                     var bytesRead: Int
                     var totalUploaded = 0L
-                    val totalLength = localFile.length()
                     while (inputStream.read(buffer).also { bytesRead = it } != -1) {
                         val chunk = if (bytesRead == buffer.size) buffer else buffer.copyOf(bytesRead)
                         val base64 = android.util.Base64.encodeToString(chunk, android.util.Base64.NO_WRAP)
@@ -410,8 +429,7 @@ private class DeploySSHClient(
                             throw IOException("Chunk upload failed at offset $totalUploaded")
                         }
                         totalUploaded += bytesRead
-                        val percent = (totalUploaded.toFloat() / totalLength.toFloat().coerceAtLeast(1f)).coerceIn(0f, 1f)
-                        DeployManager.updateProgress(percent * 0.5f, "Загрузка: $label (${(percent * 100).toInt()}%)")
+                        onProgress?.invoke(totalUploaded)
                     }
                 }
                 val moveRes = execResult(rootCommand("mv -f '$tempRemote' '$remotePath' && chmod 0755 '$remotePath'", sudoPass), 30000L)
@@ -426,7 +444,7 @@ private class DeploySSHClient(
         }
 
         if (reconnectsLeft > 0 && reconnectFor("повторная загрузка $label")) {
-            uploadInternal(localFile, remotePath, reconnectsLeft - 1)
+            uploadInternal(localFile, remotePath, reconnectsLeft - 1, onProgress)
             return
         }
 
@@ -764,11 +782,19 @@ internal suspend fun performDeploy(
             "env ${secretEnv}CSQTT_PEER_PORT=$peerPort CSQTT_SSH_PORT=$port CSQTT_WEB_PORT=$webPort CSQTT_PUBLIC_IP=${host.trim()} " +
                 "CSQTT_DEPLOY_MODE=${deployMode(installInDocker)} CSQTT_INSTANCE=${instance.wire}"
         onProgress(0.10f, "Загрузка нового сервера...")
-        sshClient.upload(serverFile, "/tmp/.csqtt-upload-server")
+        val uploadSize = serverFile.length()
+        var lastUploadPercent = -1
+        sshClient.upload(serverFile, "/tmp/.csqtt-upload-server") { bytes ->
+            val percent = (bytes * 100 / uploadSize).toInt().coerceIn(0, 100)
+            if (percent != lastUploadPercent) {
+                lastUploadPercent = percent
+                onProgress(0.10f + 0.20f * percent / 100, "Передача сервера по SSH: $percent%")
+            }
+        }
         environmentFile?.let { sshClient.upload(it, "/tmp/.csqtt-upload-web.env") }
         overridesFile?.let { sshClient.upload(it, "/tmp/.csqtt-upload-overrides.json") }
 
-        onProgress(0.18f, if (mode == DeployActionMode.Update) "Установка обновления..." else "Установка нового сервера...")
+        onProgress(0.32f, if (mode == DeployActionMode.Update) "Установка обновления..." else "Установка нового сервера...")
         TunnelManager.addDeployInfoLog(
             when (mode) {
                 DeployActionMode.Update -> "Запуск обновления CSQTT на VPS (конфигурация сохраняется)"
@@ -776,9 +802,14 @@ internal suspend fun performDeploy(
                 DeployActionMode.Install -> "Запуск установщика на VPS"
             },
         )
+        var remoteProgress = 0f
         val deployResult = sshClient.execResult(
             rootCommand("$deployEnvironment bash /tmp/deploy.sh ${mode.scriptAction}", pass),
-            timeout = CMD_TIMEOUT
+            timeout = CMD_TIMEOUT,
+            onProgress = { fraction, step ->
+                remoteProgress = maxOf(remoteProgress, fraction.coerceIn(0f, 1f))
+                onProgress(0.32f + 0.67f * remoteProgress, step)
+            },
         )
         val output = deployResult.output
 
@@ -795,6 +826,7 @@ internal suspend fun performDeploy(
                     "$actionLabel завершена · служба CSQTT активна"
                 }
             )
+            onProgress(1f, "Готово!")
             DeployManager.stopDeploy("success")
             return@withContext true
         } else {
@@ -865,6 +897,7 @@ internal suspend fun performUninstall(
         val uninstallResult = sshClient.execResult(
             rootCommand("env CSQTT_PEER_PORT=$peerPort CSQTT_SSH_PORT=$port CSQTT_INSTANCE=${instance.wire} bash /tmp/deploy.sh uninstall", pass),
             timeout = UNINSTALL_TIMEOUT,
+            onProgress = { fraction, step -> onProgress(0.30f + 0.69f * fraction.coerceIn(0f, 1f), step) },
         )
         if (!isSuccessfulUninstallResult(uninstallResult.exitStatus, uninstallResult.output)) {
             DeployManager.writeError(
