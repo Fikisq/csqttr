@@ -1,5 +1,7 @@
 package com.csqtt.client
 
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import kotlinx.coroutines.flow.first
@@ -137,6 +139,33 @@ class DesignCompatibilityTest {
                 store.saveActiveProfile(previousProfile)
                 store.saveUiDesign(previousDesign)
                 store.saveUiOwnerMode(previousOwner)
+            }
+        }
+    }
+
+    @Test fun oldDesignUsesPaleBlueForTheConnectedButtonInBothThemes() {
+        val store = SettingsStore(compose.activity)
+        val oldDesign = runBlocking { store.uiDesign.first() }
+        val oldTheme = runBlocking { store.themeMode.first() }
+        val oldRunning = TunnelManager.running.value
+        try {
+            runBlocking { store.saveUiDesign("old") }
+            compose.onAllNodesWithText("Подкл.").onFirst().performClick()
+            compose.runOnIdle { TunnelManager.running.value = true }
+            for (theme in listOf("light", "dark")) {
+                runBlocking { store.saveThemeMode(theme) }
+                val pixels = compose.onNodeWithContentDescription("Отключить", useUnmergedTree = true)
+                    .captureToImage().toPixelMap()
+                val paleBlue = 0xFFD2E8FF.toInt()
+                check((0 until pixels.height).any { y ->
+                    (0 until pixels.width).any { x -> pixels[x, y].toArgb() == paleBlue }
+                }) { "Connected button is missing the pale blue icon in theme $theme" }
+            }
+        } finally {
+            compose.runOnIdle { TunnelManager.running.value = oldRunning }
+            runBlocking {
+                store.saveThemeMode(oldTheme)
+                store.saveUiDesign(oldDesign)
             }
         }
     }
