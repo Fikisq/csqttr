@@ -540,6 +540,12 @@ fun MainScreen(
                     onActiveProfileChange = { profile ->
                         scope.launch { settingsStore.saveActiveProfile(profile) }
                     },
+                    onAddProfile = { profile ->
+                        scope.launch {
+                            settingsStore.saveActiveProfile(profile)
+                            selectedTab = 1
+                        }
+                    },
                     currentTheme = themeMode,
                     onThemeChange = onThemeChange,
                     activeFingerprint = activeFingerprint,

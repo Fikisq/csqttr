@@ -117,9 +117,11 @@ internal fun CompactDropdownSetting(
     onItemEdit: ((String) -> Unit)? = null,
     leadingContent: (@Composable RowScope.() -> Unit)? = null,
     indicatorProvider: ((String) -> ModeIndicator?)? = null,
+    unselectedLabel: String = "",
+    menuAction: Pair<String, () -> Unit>? = null,
 ) {
     var expanded by rememberSaveable { mutableStateOf(false) }
-    val selectedLabel = options.firstOrNull { it.first == selectedKey }?.second.orEmpty()
+    val selectedLabel = options.firstOrNull { it.first == selectedKey }?.second ?: unselectedLabel
     val currentIndicator = indicatorProvider?.invoke(selectedKey)
 
     Row(
@@ -201,6 +203,7 @@ internal fun CompactDropdownSetting(
                 onInfo = onInfo,
                 onItemEdit = onItemEdit,
                 indicatorProvider = indicatorProvider,
+                menuAction = menuAction,
             )
         }
     }
@@ -216,6 +219,7 @@ internal fun TunnelDropdownMenu(
     onItemEdit: ((String) -> Unit)? = null,
     indicatorProvider: ((String) -> ModeIndicator?)? = null,
     hasInfo: (String) -> Boolean = { true },
+    menuAction: Pair<String, () -> Unit>? = null,
 ) {
     DropdownMenu(
         expanded = expanded,
@@ -292,6 +296,15 @@ internal fun TunnelDropdownMenu(
                 onClick = {
                     onDismiss()
                     onSelected(key)
+                },
+            )
+        }
+        menuAction?.let { (label, action) ->
+            DropdownMenuItem(
+                text = { Text(label) },
+                onClick = {
+                    onDismiss()
+                    action()
                 },
             )
         }

@@ -26,7 +26,7 @@ import com.csqtt.client.R
 
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Delete
+
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.foundation.verticalScroll
@@ -64,6 +64,7 @@ fun FloatingToolbar(
     csqttLinkMode: Boolean,
     activeProfile: Int,
     onActiveProfileChange: (Int) -> Unit,
+    onAddProfile: (Int) -> Unit,
     currentTheme: String,
     onThemeChange: (String) -> Unit,
     activeFingerprint: String,
@@ -279,9 +280,22 @@ fun FloatingToolbar(
                     CompactDropdownSetting(
                         title = "Профиль конфигурации",
                         selectedKey = activeProfile.toString(),
-                        options = (CsqttConstants.Profiles.MIN_INDEX..CsqttConstants.Profiles.MAX_INDEX)
-                            .map { profile -> profile.toString() to (profileNames[profile] ?: defaultProfileName(profile)) },
+                        options = occupiedProfiles.sorted().map { profile ->
+                            profile.toString() to (profileNames[profile] ?: defaultProfileName(profile))
+                        },
                         enabled = true,
+                        unselectedLabel = "Не выбран",
+                        menuAction = "Добавить профиль" to {
+                            scope.launch {
+                                val slot = settingsStore.findFirstFreeProfile()
+                                if (slot != null) {
+                                    isExpanded = false
+                                    onAddProfile(slot)
+                                } else {
+                                    Toast.makeText(context, "Нет свободных слотов для профиля", Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        },
                         onSelected = { profile ->
                             profile.toIntOrNull()?.let(onActiveProfileChange)
                         },
@@ -552,9 +566,9 @@ fun FloatingToolbar(
                                 modifier = Modifier.size(32.dp),
                             ) {
                                 Icon(
-                                    imageVector = Icons.Default.Delete,
-                                    contentDescription = "Очистить",
-                                    tint = MaterialTheme.colorScheme.error,
+                                    imageVector = Icons.Default.Close,
+                                    contentDescription = "Очистить название",
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                     modifier = Modifier.size(20.dp),
                                 )
                             }
