@@ -10,9 +10,11 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -59,6 +61,7 @@ import com.csqtt.client.ui.v2.components.V2Card
 import com.csqtt.client.ui.v2.components.V2TopBar
 import com.csqtt.client.ui.v2.components.V2SwitchSetting
 import com.csqtt.client.ui.v2.components.V2AdaptiveScreen
+import com.csqtt.client.ui.v2.components.LocalV2AdaptiveMetrics
 import com.csqtt.client.ui.v2.design.V2TextSizes
 import com.csqtt.client.ui.v2.components.V2TransparentIconButton
 import com.csqtt.client.ui.v2.design.LocalV2Colors
@@ -111,6 +114,7 @@ fun V2LogsScreen(
                 scope.launch { settingsStore.saveLoggingEnabled(enabled) }
             })
         }
+        Spacer(Modifier.height(LocalV2AdaptiveMetrics.current.gap))
         V2Card(
             modifier = Modifier
                 .weight(1f)
