@@ -296,6 +296,7 @@ fun CsqttV2Root(
                                         }
 
                                         V2Tab.Logs -> V2LogsScreen(
+                                            settingsStore = settingsStore,
                                             version = version,
                                             onSettings = { overlay = OVERLAY_SETTINGS },
                                             onVersionClick = { showVersionSheet = true },

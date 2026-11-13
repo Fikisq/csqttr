@@ -35,9 +35,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.TextButton
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -52,12 +51,14 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.csqtt.client.DeployManager
 import com.csqtt.client.LogEntry
 import com.csqtt.client.LogLevel
+import com.csqtt.client.R
+import com.csqtt.client.SettingsStore
 import com.csqtt.client.TunnelManager
 import com.csqtt.client.showRaisedToast
 import com.csqtt.client.ui.v2.components.V2Card
 import com.csqtt.client.ui.v2.components.V2TopBar
+import com.csqtt.client.ui.v2.components.V2SwitchSetting
 import com.csqtt.client.ui.v2.components.V2AdaptiveScreen
-import com.csqtt.client.ui.v2.components.LocalV2AdaptiveMetrics
 import com.csqtt.client.ui.v2.design.V2TextSizes
 import com.csqtt.client.ui.v2.components.V2TransparentIconButton
 import com.csqtt.client.ui.v2.design.LocalV2Colors
@@ -69,9 +70,11 @@ import com.csqtt.client.ui.v2.design.V2Shapes
 import com.csqtt.client.ui.v2.design.V2Sizes
 import com.csqtt.client.ui.v2.design.V2Spacing
 import com.csqtt.client.ui.v2.design.V2Theme
+import kotlinx.coroutines.launch
 
 @Composable
 fun V2LogsScreen(
+    settingsStore: SettingsStore,
     version: String,
     onSettings: () -> Unit,
     modifier: Modifier = Modifier,
@@ -88,8 +91,8 @@ fun V2LogsScreen(
             textSecondary = Color(0xFFBAC1CE),
         )
     } else colors
-    var level by rememberSaveable { mutableStateOf("Все уровни") }
-    var source by rememberSaveable { mutableStateOf("Все события") }
+    val loggingEnabled by settingsStore.loggingEnabled.collectAsStateWithLifecycle(initialValue = true)
+    val scope = rememberCoroutineScope()
 
     V2AdaptiveScreen(
         modifier = modifier
@@ -102,10 +105,11 @@ fun V2LogsScreen(
             onSettings = onSettings,
             onVersionClick = onVersionClick,
         )
-        Row(Modifier.fillMaxWidth().padding(vertical = LocalV2AdaptiveMetrics.current.gap / 2),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            LogFilterMenu(level, logLevels, { level = it }, Modifier.weight(1f))
-            LogFilterMenu(source, logSources, { source = it }, Modifier.weight(1f))
+        V2Card {
+            V2SwitchSetting(stringResource(R.string.logs_enabled), loggingEnabled, { enabled ->
+                TunnelManager.isLoggingEnabled = enabled
+                scope.launch { settingsStore.saveLoggingEnabled(enabled) }
+            })
         }
         V2Card(
             modifier = Modifier
@@ -120,43 +124,26 @@ fun V2LogsScreen(
             contentModifier = Modifier.fillMaxSize(),
         ) {
             CompositionLocalProvider(LocalV2Colors provides terminalColors) {
-                V2LogsTerminal(level, source)
+                V2LogsTerminal()
             }
         }
     }
 }
 
 @Composable
-private fun LogFilterMenu(selected: String, options: List<String>, onSelect: (String) -> Unit, modifier: Modifier) {
-    var expanded by remember { mutableStateOf(false) }
-    Box(modifier) {
-        TextButton(onClick = { expanded = true }, modifier = Modifier.fillMaxWidth()) { Text("$selected ▾", fontSize = V2TextSizes.Action) }
-        DropdownMenu(expanded, { expanded = false }) {
-            options.forEach { item -> DropdownMenuItem(text = { Text(item) }, onClick = { onSelect(item); expanded = false }) }
-        }
-    }
-}
-
-@Composable
-private fun V2LogsTerminal(levelFilter: String, sourceFilter: String) {
+private fun V2LogsTerminal() {
     val context = LocalContext.current
-    val currentLogs = TunnelManager.logs.mapNotNull { filterLogEntry(it, levelFilter, sourceFilter) }
+    val currentLogs = TunnelManager.logs
     val listState = rememberLazyListState()
     val isDeploying by DeployManager.isDeploying.collectAsStateWithLifecycle()
 
-    val latestIndex = if (isDeploying) currentLogs.indexOfLast { it.key.startsWith("deploy_") } else currentLogs.lastIndex
+    val latestIndex = if (isDeploying) currentLogs.indexOfLast { it.key.startsWith("deploy_") } else -1
     val latestKey = currentLogs.getOrNull(latestIndex)?.key
     var lastFollowedKey by rememberSaveable { mutableStateOf<String?>(null) }
-    var lastLevel by rememberSaveable { mutableStateOf<String?>(null) }
-    var lastSource by rememberSaveable { mutableStateOf<String?>(null) }
-    LaunchedEffect(latestKey, levelFilter, sourceFilter) {
-        if (latestKey == null) return@LaunchedEffect
-        val filtersChanged = lastLevel != levelFilter || lastSource != sourceFilter
-        if (filtersChanged || lastFollowedKey != latestKey) {
+    LaunchedEffect(latestKey) {
+        if (latestKey != null && lastFollowedKey != latestKey) {
             listState.scrollToItem(latestIndex)
             lastFollowedKey = latestKey
-            lastLevel = levelFilter
-            lastSource = sourceFilter
         }
     }
 
