@@ -214,13 +214,6 @@ internal fun SettingsTabContent(
     val serverWorkers by TunnelManager.serverAssignedWorkers.collectAsState()
     val effectiveServerWorkers = serverWorkers.takeIf { tunnelRunning && it in 3..100 }
     val linkTokenActive = participantMode && linkVkAccessToken.isNotEmpty()
-    val effectiveVkAuthMode = if (
-        participantMode && linkHashes.isNotEmpty() && vkAuthMode == CsqttConstants.VkAuth.MODE_AUTO_JS
-    ) {
-        CsqttConstants.VkAuth.MODE_CALLS
-    } else {
-        vkAuthMode
-    }
     val effectiveHashMode = if (
         linkTokenActive && savedHashMode == CsqttConstants.VkAutoHash.MODE_MANUAL
     ) {
@@ -228,7 +221,7 @@ internal fun SettingsTabContent(
     } else {
         savedHashMode
     }
-    val accountAutoJsMode = effectiveVkAuthMode == CsqttConstants.VkAuth.MODE_AUTO_JS
+    val accountAutoJsMode = vkAuthMode == CsqttConstants.VkAuth.MODE_AUTO_JS
     val autoHashMode = accountAutoJsMode || (
         effectiveHashMode != null && effectiveHashMode != CsqttConstants.VkAutoHash.MODE_MANUAL
     )
@@ -405,21 +398,15 @@ internal fun SettingsTabContent(
         }
     }
 
-    LaunchedEffect(initialized, participantMode, linkHashes, linkTokenActive, vkAuthMode, savedHashMode) {
-        if (!initialized || !participantMode) return@LaunchedEffect
-        when {
-            linkHashes.isNotEmpty() && vkAuthMode == CsqttConstants.VkAuth.MODE_AUTO_JS -> {
-                applyWorkMode(CsqttConstants.VkAuth.MODE_CALLS)
-            }
-            linkTokenActive && savedHashMode == CsqttConstants.VkAutoHash.MODE_MANUAL -> {
-                applyHashMode(CsqttConstants.VkAutoHash.MODE_AUTO_API)
-            }
+    LaunchedEffect(initialized, linkTokenActive, savedHashMode) {
+        if (initialized && linkTokenActive && savedHashMode == CsqttConstants.VkAutoHash.MODE_MANUAL) {
+            applyHashMode(CsqttConstants.VkAutoHash.MODE_AUTO_API)
         }
     }
 
     // As in V2: the auto-JS mode runs at most 70 workers, so «Экстра потоки» goes off there
-    LaunchedEffect(effectiveVkAuthMode, extraWorkers) {
-        if (effectiveVkAuthMode == CsqttConstants.VkAuth.MODE_AUTO_JS && extraWorkers) {
+    LaunchedEffect(vkAuthMode, extraWorkers) {
+        if (vkAuthMode == CsqttConstants.VkAuth.MODE_AUTO_JS && extraWorkers) {
             settingsStore.saveExtraWorkers(false)
         }
     }
@@ -436,9 +423,9 @@ internal fun SettingsTabContent(
     val isPeerValid = peerInput.isNotBlank() && !peerInput.contains(":")
     val isPeerPortValid = peerPortInput.toIntOrNull() in 1..65535
     val hashesReadyForTunnel = when {
-        participantMode && linkHashes.isNotEmpty() -> manualHashGroup == ManualHashGroup.Owner || filledHashCount > 0
-        participantMode && linkTokenActive -> true
+        linkTokenActive -> true
         autoHashMode -> effectiveVkTokenActive
+        participantMode && linkHashes.isNotEmpty() && manualHashGroup == ManualHashGroup.Owner -> true
         else -> filledHashCount > 0
     }
     val peerRequiredError = showRequiredFieldErrors && !participantMode && !isPeerValid
@@ -549,51 +536,33 @@ internal fun SettingsTabContent(
                         )
                     }
 
-                    if (linkHashes.isNotEmpty()) {
-                        val selectedCount = if (manualHashGroup == ManualHashGroup.Owner) linkHashes.size else filledHashCount
+                    if (linkTokenActive) {
                         Text(
-                            text = "${manualHashGroup.label}: $selectedCount",
+                            text = "VK токен из ссылки",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.primary,
                             fontWeight = FontWeight.SemiBold,
-                            modifier = Modifier.padding(bottom = 8.dp),
-                        )
-                        OutlinedButton(
-                            onClick = { showHashesDialog = true },
-                            modifier = Modifier.fillMaxWidth().height(48.dp),
-                            shape = CsqttShapes.Pill,
-                        ) {
-                            Text("Ссылки VK звонков", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
-                        }
-                    } else {
-                        if (linkTokenActive) {
-                            Text(
-                                text = "VK токен из ссылки",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.primary,
-                                fontWeight = FontWeight.SemiBold,
-                                modifier = Modifier.padding(bottom = 12.dp),
-                            )
-                        }
-                        VkHashModeControls(
-                            hashSettingsLoaded = hashSettingsLoaded,
-                            autoHashMode = autoHashMode,
-                            savedHashMode = effectiveHashMode,
-                            vkTokenActive = effectiveVkTokenActive,
-                            tunnelRunning = tunnelRunning,
-                            filledHashCount = filledHashCount,
-                            hasInputHashErrors = hasInputHashErrors || hashesRequiredError,
-                            hashErrorTexts = hashErrors.filter { !it.contains("короткий") },
-                            onOpenHashes = { showHashesDialog = true },
-                            onTitleInfo = { showHashModeGeneralDialog = true },
-                            onInfo = { mode -> showHashModeDetailDialog = mode },
-                            onSelected = ::requestHashMode,
-                            onLogin = onVkAuthRequested,
-                            authorizationRequiredError = hashesRequiredError && autoHashMode,
-                            manualAllowed = !linkTokenActive,
-                            tokenFromLink = linkTokenActive,
+                            modifier = Modifier.padding(bottom = 12.dp),
                         )
                     }
+                    VkHashModeControls(
+                        hashSettingsLoaded = hashSettingsLoaded,
+                        autoHashMode = autoHashMode,
+                        savedHashMode = effectiveHashMode,
+                        vkTokenActive = effectiveVkTokenActive,
+                        tunnelRunning = tunnelRunning,
+                        filledHashCount = filledHashCount,
+                        hasInputHashErrors = hasInputHashErrors || hashesRequiredError,
+                        hashErrorTexts = hashErrors.filter { !it.contains("короткий") },
+                        onOpenHashes = { showHashesDialog = true },
+                        onTitleInfo = { showHashModeGeneralDialog = true },
+                        onInfo = { mode -> showHashModeDetailDialog = mode },
+                        onSelected = ::requestHashMode,
+                        onLogin = onVkAuthRequested,
+                        authorizationRequiredError = hashesRequiredError && autoHashMode,
+                        manualAllowed = !linkTokenActive,
+                        tokenFromLink = linkTokenActive,
+                    )
                 } else {
                     Text(
                         "Сервер и Хеши",
@@ -722,14 +691,12 @@ internal fun SettingsTabContent(
 
                 CompactDropdownSetting(
                     title = "Режим кредов",
-                    selectedKey = effectiveVkAuthMode,
+                    selectedKey = vkAuthMode,
                     options = listOf(
                         CsqttConstants.VkAuth.MODE_CAPTCHA to "Капча",
                         CsqttConstants.VkAuth.MODE_CALLS to "Авто",
                         CsqttConstants.VkAuth.MODE_AUTO_JS to "Авто ВК",
-                    ).filterNot { (mode, _) ->
-                        participantMode && linkHashes.isNotEmpty() && mode == CsqttConstants.VkAuth.MODE_AUTO_JS
-                    },
+                    ),
                     enabled = true,
                     indicatorProvider = { mode ->
                         when (mode) {

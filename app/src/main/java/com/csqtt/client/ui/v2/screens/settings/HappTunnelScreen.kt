@@ -12,7 +12,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.platform.LocalContext
@@ -133,8 +132,7 @@ internal fun HappTunnelScreen(
             scope.launch { settingsStore.saveVkHashMode(mode, forProfile = editingProfile) }
         }
     }
-    LaunchedEffect(profile, authMode, extraWorkers, ownerHashes) {
-        if (authMode == "auto_js" && ownerHashes.isNotEmpty()) settingsStore.saveVkAuthMode("vkcalls", forProfile = profile)
+    LaunchedEffect(profile, authMode, extraWorkers) {
         if (authMode == "auto_js" && extraWorkers) settingsStore.saveExtraWorkers(false, forProfile = profile)
     }
     val parts = hashes.split(Regex("[,\\s]+" )).filter(String::isNotBlank)
@@ -172,18 +170,14 @@ internal fun HappTunnelScreen(
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Bottom) {
                 HappField("Пароль туннеля", password, { password = it }, Modifier.weight(1f), password = true, visibilityKey = profile to revision, enabled = !busy, compact = true, shape = pill, floatingLabel = true, maxFieldHeight = 44.dp)
                 Box(Modifier.weight(1f)) {
-                if (!linkTokenActive && ownerHashes.isEmpty() && authMode != "auto_js" && hashMode == "manual" || ownerHashes.isNotEmpty()) {
+                if (!linkTokenActive && authMode != "auto_js" && hashMode == "manual") {
                     V2PillButton("Настроить хеши", { showHashes = true }, modifier = Modifier.fillMaxWidth(), height = layout.fieldHeight.coerceAtMost(44.dp), horizontalPadding = 4.dp, enabled = !busy, style = V2PillStyle.Outline, shape = pill)
                 } else {
                     V2PillButton(if (linkTokenActive) "Токен VK из ссылки" else if (token.isNotBlank()) "Аккаунт VK подключён" else "Войти в VK", onVkAuthRequested, modifier = Modifier.fillMaxWidth(), height = layout.fieldHeight.coerceAtMost(44.dp), horizontalPadding = 4.dp, enabled = !busy && !linkTokenActive, style = V2PillStyle.Accent, shape = pill, maxLines = 2)
                 }
                 }
                 }
-                if (ownerHashes.isNotEmpty()) {
-                    val selectedCount = if (manualHashGroup == ManualHashGroup.Owner) ownerHashes.size else parts.size
-                    Text("${manualHashGroup.label}: $selectedCount", color = c.accent, fontSize = 12.sp)
-                }
-                if (ownerHashes.isEmpty() && !linkTokenActive) HappChoice("Режим хешей", when(hashMode) { "auto_api" -> "Авто API"; "auto_js" -> "Авто ВК"; else -> "Ручные хеши" }, listOf("Ручные хеши", "Авто API", "Авто ВК"), ::changeHash,
+                if (!linkTokenActive) HappChoice("Режим хешей", when(hashMode) { "auto_api" -> "Авто API"; "auto_js" -> "Авто ВК"; else -> "Ручные хеши" }, listOf("Ручные хеши", "Авто API", "Авто ВК"), ::changeHash,
                     compact = true, shape = pill, indicators = mapOf("Ручные хеши" to green, "Авто API" to green, "Авто ВК" to yellow), enabled = !busy,
                     help = "Выберите источник хешей VK-звонков.",
                     optionHelp = mapOf(
@@ -191,7 +185,7 @@ internal fun HappTunnelScreen(
                         "Авто API" to "Хеши получаются через API VK.",
                         "Авто ВК" to "Хеши получаются через авторизованный аккаунт VK.",
                     ))
-                HappChoice("Режим кредов", when(authMode) { "auto_js" -> "Авто ВК"; "legacy" -> "Капча"; else -> "Авто" }, if (ownerHashes.isNotEmpty()) listOf("Авто", "Капча") else listOf("Авто", "Капча", "Авто ВК"), { label ->
+                HappChoice("Режим кредов", when(authMode) { "auto_js" -> "Авто ВК"; "legacy" -> "Капча"; else -> "Авто" }, listOf("Авто", "Капча", "Авто ВК"), { label ->
                     val mode = when(label) { "Авто ВК" -> "auto_js"; "Капча" -> "legacy"; else -> "vkcalls" }
                     requestAutoJs(mode) { scope.launch { settingsStore.saveVkAuthMode(mode, forProfile = editingProfile) } }
                 },

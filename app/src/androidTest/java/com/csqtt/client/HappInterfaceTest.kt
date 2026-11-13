@@ -278,7 +278,19 @@ class HappInterfaceTest {
             check(source.peer == "203.0.113.128:46128")
             check(source.password == "ChangedPassword")
             check(source.hashes == own)
+
+            for (mode in listOf("auto_api", "auto_js")) {
+                store.saveVkHashMode(mode)
+                val automaticSource = checkNotNull(resolveConnectionSource(store))
+                check(automaticSource.hashes.isEmpty())
+                check(!automaticSource.hashesFromLink)
+                check(store.vkHashMode.first() == mode)
+            }
+            store.saveVkHashMode("manual")
+            check(store.manualHashGroup.first() == ManualHashGroup.Own)
+            check(resolveConnectionSource(store)?.hashes == own)
         }
+        compose.onNodeWithText("Свои: 1").assertDoesNotExist()
         runBlocking { store.clearProfile(27); store.saveActiveProfile(0) }
     }
 

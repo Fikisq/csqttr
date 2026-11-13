@@ -44,12 +44,14 @@ suspend fun resolveConnectionSource(store: SettingsStore, updateLogMask: Boolean
         val link = parseCsqttLink(store.csqttLink.first()) ?: return null
         if (updateLogMask) TunnelManager.ownerHashes = link.hashes
         val tokenFromLink = link.vkAccessToken.isNotEmpty()
+        val useManualHashes = !tokenFromLink &&
+            store.vkHashMode.first() == CsqttConstants.VkAutoHash.MODE_MANUAL &&
+            store.vkAuthMode.first() != CsqttConstants.VkAuth.MODE_AUTO_JS
         return ConnectionSource(
             peer = link.peerAddress(),
             password = link.password,
-            hashes = if (tokenFromLink) "" else activeHashes(store.readParticipantHashes(link.hashes)),
-            // A link with hashes locks the profile to manual credentials, including when Own is selected.
-            hashesFromLink = link.hashes.isNotEmpty(),
+            hashes = if (useManualHashes) activeHashes(store.readParticipantHashes(link.hashes)) else "",
+            hashesFromLink = useManualHashes && link.hashes.isNotEmpty(),
             vkAccessToken = link.vkAccessToken,
             tokenFromLink = tokenFromLink,
         )
