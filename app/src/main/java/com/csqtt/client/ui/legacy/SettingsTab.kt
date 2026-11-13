@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material.icons.filled.Tag
 import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material.icons.filled.Key
@@ -127,6 +128,7 @@ internal fun SettingsTabContent(
     val tunnelStopping by TunnelManager.stopping.collectAsStateWithLifecycle()
     var showHashModeGeneralDialog by rememberSaveable { mutableStateOf(false) }
     var showHashModeDetailDialog by rememberSaveable { mutableStateOf<String?>(null) }
+    var showSrtpHelp by rememberSaveable { mutableStateOf<String?>(null) }
     var showWorkModeGeneralDialog by rememberSaveable { mutableStateOf(false) }
     var showWorkModeDetailDialog by rememberSaveable { mutableStateOf<String?>(null) }
     var vkAuthMode by rememberSaveable { mutableStateOf(CsqttConstants.VkAuth.MODE_CALLS) }
@@ -759,8 +761,9 @@ internal fun SettingsTabContent(
                             else -> null
                         }
                     },
-                    onTitleInfo = null,
-                    onInfo = null,
+                    onTitleInfo = { showSrtpHelp = "" },
+                    titleInfoIcon = Icons.Outlined.ErrorOutline,
+                    onInfo = { showSrtpHelp = it },
                     onSelected = ::applySrtpMode,
                 )
 
@@ -989,6 +992,14 @@ internal fun SettingsTabContent(
                 HashModeInfoDialog(mode = mode, onDismiss = { showHashModeDetailDialog = null })
             }
 
+            showSrtpHelp?.let { mode ->
+                AlertDialog(
+                    onDismissRequest = { showSrtpHelp = null },
+                    title = { Text(if (mode.isBlank()) "Режим SRTP" else mode.uppercase()) },
+                    text = { Text(if (mode.isBlank()) SRTP_HELP else srtpModeHelp(mode)) },
+                    confirmButton = { TextButton(onClick = { showSrtpHelp = null }) { Text("Понятно") } },
+                )
+            }
             if (showWorkModeGeneralDialog) {
                 WorkModeInfoDialog(mode = null, onDismiss = { showWorkModeGeneralDialog = false })
             }

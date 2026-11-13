@@ -1,6 +1,7 @@
 package com.csqtt.client.ui.legacy
 
 import com.csqtt.client.GoobyMode
+import com.csqtt.client.CsqttConstants
 
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
@@ -23,6 +24,8 @@ import androidx.compose.material.icons.automirrored.filled.HelpOutline
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.outlined.ErrorOutline
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ButtonDefaults
@@ -52,6 +55,14 @@ data class ModeIndicator(
 
 internal const val GOOBY_HELP =
     "Gooby работает при TCP/TLS. При UDP выбранный режим сохраняется, а Gooby отключён."
+
+internal const val SRTP_HELP = "SRTP определяет, как пакеты туннеля выглядят для сети."
+
+internal fun srtpModeHelp(mode: String): String = when (mode) {
+    CsqttConstants.SrtpMode.DTLS -> "Полное DTLS-рукопожатие и защищённый SRTP."
+    CsqttConstants.SrtpMode.WRAP -> "SRTP-обёртка без DTLS-рукопожатия."
+    else -> "Сначала DTLS-SRTP. При неудаче — WRAP-SRTP."
+}
 
 internal fun goobyIndicator(mode: GoobyMode, color: Color): ModeIndicator? =
     when (mode) {
@@ -95,6 +106,7 @@ internal fun CompactDropdownSetting(
     onSelected: (String) -> Unit,
     modifier: Modifier = Modifier,
     onTitleInfo: (() -> Unit)? = null,
+    titleInfoIcon: ImageVector = Icons.AutoMirrored.Filled.HelpOutline,
     onInfo: ((String) -> Unit)? = null,
     onItemEdit: ((String) -> Unit)? = null,
     leadingContent: (@Composable RowScope.() -> Unit)? = null,
@@ -128,7 +140,7 @@ internal fun CompactDropdownSetting(
                     modifier = Modifier.size(24.dp),
                 ) {
                     Icon(
-                        imageVector = Icons.AutoMirrored.Filled.HelpOutline,
+                        imageVector = titleInfoIcon,
                         contentDescription = "Информация: $title",
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.size(16.dp),

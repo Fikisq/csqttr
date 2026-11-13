@@ -20,6 +20,8 @@ import androidx.compose.ui.platform.testTag
 import com.csqtt.client.*
 import com.csqtt.client.ui.legacy.GOOBY_HELP
 import com.csqtt.client.ui.legacy.ModeIndicator
+import com.csqtt.client.ui.legacy.SRTP_HELP
+import com.csqtt.client.ui.legacy.srtpModeHelp
 import com.csqtt.client.ui.v2.components.*
 import com.csqtt.client.ui.v2.design.V2Theme
 import com.csqtt.client.ui.v2.design.V2Sizes
@@ -182,26 +184,43 @@ internal fun HappTunnelScreen(
                 }
                 if (ownerHashes.isEmpty() && !linkTokenActive) HappChoice("Режим хешей", when(hashMode) { "auto_api" -> "Авто API"; "auto_js" -> "Авто ВК"; else -> "Ручные хеши" }, listOf("Ручные хеши", "Авто API", "Авто ВК"), ::changeHash,
                     compact = true, shape = pill, indicators = mapOf("Ручные хеши" to green, "Авто API" to green, "Авто ВК" to yellow), enabled = !busy,
-                    help = "Ручные хеши — шесть хешей звонков без входа в VK. Авто API — получение через API VK. Авто ВК — получение через авторизованный аккаунт VK.")
+                    help = "Выберите источник хешей VK-звонков.",
+                    optionHelp = mapOf(
+                        "Ручные хеши" to "До шести ссылок VK или готовых хешей. Вход в VK не требуется.",
+                        "Авто API" to "Хеши получаются через API VK.",
+                        "Авто ВК" to "Хеши получаются через авторизованный аккаунт VK.",
+                    ))
                 HappChoice("Режим кредов", when(authMode) { "auto_js" -> "Авто ВК"; "legacy" -> "Капча"; else -> "Авто" }, if (ownerHashes.isNotEmpty()) listOf("Авто", "Капча") else listOf("Авто", "Капча", "Авто ВК"), { label ->
                     val mode = when(label) { "Авто ВК" -> "auto_js"; "Капча" -> "legacy"; else -> "vkcalls" }
                     requestAutoJs(mode) { scope.launch { settingsStore.saveVkAuthMode(mode, forProfile = editingProfile) } }
                 },
-                    compact = true, shape = pill, indicators = mapOf("Авто" to green, "Капча" to red, "Авто ВК" to yellow), enabled = !busy, help = "Авто — гостевые TURN-креды VK Calls. Капча — браузерный способ с возможной капчей. Авто ВК — креды авторизованного аккаунта.")
+                    compact = true, shape = pill, indicators = mapOf("Авто" to green, "Капча" to red, "Авто ВК" to yellow), enabled = !busy, help = "Выберите способ получения TURN-кредов.",
+                    optionHelp = mapOf(
+                        "Авто" to "Гостевые TURN-креды VK Calls.",
+                        "Капча" to "Браузерный способ. Может потребоваться капча.",
+                        "Авто ВК" to "TURN-креды авторизованного аккаунта VK.",
+                    ))
                 if (authMode == "legacy") OutlinedButton(
                     onClick = { showCaptcha = true },
                     modifier = Modifier.fillMaxWidth().height(36.dp),
                     border = BorderStroke(1.dp, c.outline),
                 ) { Text("Настройки капчи", color = c.accent) }
                 HappChoice("Режим SRTP", when(srtp) { "dtls-srtp" -> "DTLS-SRTP"; "wrap-srtp" -> "WRAP-SRTP"; else -> "Авто" }, listOf("Авто", "DTLS-SRTP", "WRAP-SRTP"), { label -> scope.launch { settingsStore.saveSrtpMode(when(label) { "DTLS-SRTP" -> "dtls-srtp"; "WRAP-SRTP" -> "wrap-srtp"; else -> "auto" }, forProfile = editingProfile) } },
-                    compact = true, shape = pill, indicators = mapOf("Авто" to green, "DTLS-SRTP" to green, "WRAP-SRTP" to green.copy(progress = 0.5f)), enabled = !busy, help = "Авто — DTLS-SRTP с переходом к WRAP-SRTP. DTLS-SRTP — настоящее рукопожатие. WRAP-SRTP — SRTP-обёртка без DTLS-рукопожатия.")
+                    compact = true, shape = pill, indicators = mapOf("Авто" to green, "DTLS-SRTP" to green, "WRAP-SRTP" to green.copy(progress = 0.5f)), enabled = !busy, help = SRTP_HELP, optionHelp = mapOf(
+                        "Авто" to srtpModeHelp(CsqttConstants.SrtpMode.AUTO),
+                        "DTLS-SRTP" to srtpModeHelp(CsqttConstants.SrtpMode.DTLS),
+                        "WRAP-SRTP" to srtpModeHelp(CsqttConstants.SrtpMode.WRAP),
+                    ))
                 HappChoice("Транспорт", if(transport == "udp") "UDP" else "TCP", listOf("UDP", "TCP"), { label ->
                     val mode = if(label == "UDP") "udp" else CsqttConstants.Tunnel.TURN_TRANSPORT_TCP_TLS
                     val apply = { scope.launch { settingsStore.saveTurnTransport(mode, forProfile = editingProfile) }; Unit }
                     if (shouldConfirmTcpTransport(transport, mode, tcpAcknowledged)) pendingTcp = apply else apply()
                 },
                     compact = true, shape = pill, indicators = mapOf("UDP" to green, "TCP" to yellow), enabled = !busy,
-                    help = "UDP — основной транспорт TURN. TCP/TLS — альтернатива, если UDP недоступен.")
+                    help = "Выберите транспорт TURN.", optionHelp = mapOf(
+                        "UDP" to "Основной транспорт TURN.",
+                        "TCP" to "TURN через TCP/TLS. Подходит, если UDP недоступен.",
+                    ))
                 key(editingProfile, goobyAvailable, busy) {
                     HappChoice(
                         label = "Gooby",
@@ -213,6 +232,12 @@ internal fun HappTunnelScreen(
                         },
                         modifier = Modifier.alpha(if (goobyAvailable) 1f else 0.5f),
                         help = GOOBY_HELP,
+                        optionHelp = mapOf(
+                            GoobyMode.OFF.label to "Соединение TCP/TLS без Gooby.",
+                            GoobyMode.GENTLE.label to "Лёгкая стратегия Gooby.",
+                            GoobyMode.CURRENT.label to "Средняя стратегия Gooby.",
+                            GoobyMode.EXTENDED.label to "Тяжёлая стратегия Gooby.",
+                        ),
                         enabled = goobyAvailable && !busy,
                         compact = true,
                         shape = pill,

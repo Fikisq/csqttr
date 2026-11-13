@@ -130,9 +130,10 @@ internal fun HappHelp(title: String, text: String) {
 internal fun HappChoice(label: String, value: String, options: List<String>, onSelect: (String) -> Unit,
     modifier: Modifier = Modifier, indicators: Map<String, ModeIndicator> = emptyMap(), help: String? = null, enabled: Boolean = true, compact: Boolean = false,
     valueMaxLines: Int = 1, labelContent: (@Composable () -> Unit)? = null,
-    shape: androidx.compose.ui.graphics.Shape = RoundedCornerShape(14.dp)) {
+    shape: androidx.compose.ui.graphics.Shape = RoundedCornerShape(14.dp), optionHelp: Map<String, String> = emptyMap()) {
     val c = V2Theme.colors
     var expanded by remember { mutableStateOf(false) }
+    var helpOption by remember { mutableStateOf<String?>(null) }
     Row(modifier.fillMaxWidth().heightIn(min = LocalV2AdaptiveMetrics.current.rowHeight + if (compact) 0.dp else 8.dp), verticalAlignment = Alignment.CenterVertically) {
         if (labelContent == null) Text(label, modifier = Modifier.weight(1f), color = c.textPrimary, fontSize = V2TextSizes.Body)
         else Box(Modifier.weight(1f)) { labelContent() }
@@ -161,10 +162,26 @@ internal fun HappChoice(label: String, value: String, options: List<String>, onS
                             expanded = false
                             onSelect(option)
                         },
+                        trailingIcon = optionHelp[option]?.let {
+                            {
+                                IconButton(onClick = { expanded = false; helpOption = option }, modifier = Modifier.size(32.dp)) {
+                                    Icon(Icons.AutoMirrored.Outlined.HelpOutline, "Информация: $option",
+                                        tint = c.textSecondary, modifier = Modifier.size(18.dp))
+                                }
+                            }
+                        },
                     )
                 }
             }
         }
+    }
+    helpOption?.let { option ->
+        AlertDialog(
+            onDismissRequest = { helpOption = null },
+            title = { Text(option) },
+            text = { Text(optionHelp.getValue(option)) },
+            confirmButton = { TextButton(onClick = { helpOption = null }) { Text("Понятно") } },
+        )
     }
 }
 
