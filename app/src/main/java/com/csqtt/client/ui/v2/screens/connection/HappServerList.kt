@@ -36,7 +36,7 @@ import kotlinx.coroutines.launch
 
 @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
-internal fun HappServerList(store: SettingsStore, active: Int, busy: Boolean, onEdit: (Int) -> Unit, modifier: Modifier = Modifier) {
+internal fun HappServerList(store: SettingsStore, active: Int, busy: Boolean, onEdit: (Int) -> Unit, modifier: Modifier = Modifier, historicalPalette: Boolean = false) {
     val c = V2Theme.colors
     val layout = LocalV2AdaptiveMetrics.current
     val scope = rememberCoroutineScope()
@@ -90,7 +90,7 @@ internal fun HappServerList(store: SettingsStore, active: Int, busy: Boolean, on
                     onEdit = { revealedProfile = null; onEdit(id) },
                     onDelete = { revealedProfile = null; deletingProfile = id },
                 ) { swipeModifier ->
-                Surface(color = if(active == id) c.accentSoft else c.background, shape = RoundedCornerShape(18.dp), border = BorderStroke(1.dp, if(active == id) c.accent else c.outline),
+                Surface(color = if (active == id) c.accentSoft else if (historicalPalette) c.field else c.background, shape = RoundedCornerShape(18.dp), border = BorderStroke(1.dp, if(active == id) c.accent else c.outline),
                     modifier = swipeModifier.fillMaxWidth().combinedClickable(onClick = { if(revealedProfile == id) revealedProfile = null else if(!busy && checkJob?.isActive != true) scope.launch { store.saveActiveProfile(id) } }, onLongClick = { if(!busy && checkJob?.isActive != true) onEdit(id) })) {
                     Row(Modifier.heightIn(min = 60.dp).padding(start = 12.dp, top = 4.dp, bottom = 4.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {

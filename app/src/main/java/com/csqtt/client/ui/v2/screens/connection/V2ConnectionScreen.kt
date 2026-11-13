@@ -417,7 +417,7 @@ fun V2ConnectionScreen(
         }
         val batterySaving by com.csqtt.client.BatterySaver.active.collectAsStateWithLifecycle()
         if (batterySaving && tunnelRunning) Text(com.csqtt.client.BatterySaver.BADGE, color = colors.warning, fontSize = 12.sp, modifier = Modifier.padding(bottom = 8.dp))
-        HappServerList(settingsStore, activeProfile, tunnelBusy, { creatingProfile = false; editingProfile = it }, Modifier.weight(1f).padding(bottom = 8.dp))
+        HappServerList(settingsStore, activeProfile, tunnelBusy, { creatingProfile = false; editingProfile = it }, Modifier.weight(1f).padding(bottom = 8.dp), historicalPalette = historicalPalette)
     }
     if(showProfileDialog) androidx.compose.ui.window.Dialog(onDismissRequest = { showProfileDialog = false }) {
         V2ProfilePickerMenu(settingsStore, activeProfile, profileNames, occupiedProfiles, profileSubscriptions, tunnelBusy, { showProfileDialog = false }, { creatingProfile = false; editingProfile = it })
