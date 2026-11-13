@@ -12,6 +12,64 @@ import org.junit.Test
 class DesignCompatibilityTest {
     @get:Rule val compose = createAndroidComposeRule<MainActivity>()
 
+    @Test fun settingsClipboardRoundTripRestoresTheActiveProfileInEveryDesign() {
+        val store = SettingsStore(compose.activity)
+        val previous = runBlocking { store.activeProfile.first() }
+        val previousDesign = runBlocking { store.uiDesign.first() }
+        val untouched = runBlocking { store.readProfileConnectionSettings(previous) }
+        val slot = runBlocking { checkNotNull(store.findFirstFreeProfile()) }
+        val clipboard = compose.activity.getSystemService(android.content.ClipboardManager::class.java)
+        try {
+            runBlocking {
+                store.saveProfileConnectionSettings(slot, "203.0.113.61", 46123, "TransferFixture61", 40)
+                store.saveProfileName(slot, "Clipboard transfer fixture")
+                store.saveActiveProfile(slot)
+            }
+            for (design in listOf("v2", "old", "classic")) {
+                runBlocking { store.saveUiDesign(design) }
+                val settings = if (design == "classic") "Быстрые настройки" else "Настройки"
+                val settingsButton = compose.onAllNodesWithContentDescription(settings)
+                compose.waitUntil(10_000) { settingsButton.fetchSemanticsNodes().isNotEmpty() }
+                settingsButton.onFirst().performClick()
+                compose.onNodeWithText("Импорт / экспорт").performScrollTo().performClick()
+                compose.onNodeWithText("Копировать в буфер").performScrollTo().performClick()
+                compose.waitUntil(5000) {
+                    compose.runOnIdle {
+                        clipboard.primaryClip?.getItemAt(0)?.text?.contains("203.0.113.61") == true
+                    }
+                }
+                runBlocking {
+                    store.saveProfileConnectionSettings(slot, "203.0.113.62", 46124, "TransferFixture62", 20)
+                    store.saveAppRoutingLists("com.example.after", "", false)
+                }
+                compose.onNodeWithText("Импорт").performClick()
+                compose.onNodeWithText("Из буфера").performScrollTo().performClick()
+                compose.waitUntil(5000) {
+                    runBlocking { store.readProfileConnectionSettings(slot).peer == "203.0.113.61" }
+                }
+                runBlocking {
+                    val restored = store.readProfileConnectionSettings(slot)
+                    assertEquals(46123, restored.serverPeerPort)
+                    check(restored.connectionPassword == "TransferFixture61")
+                    assertEquals(40, restored.workersPerHash)
+                    assertEquals("", store.excludedApps.first())
+                    assertEquals(slot, store.activeProfile.first())
+                    check(untouched == store.readProfileConnectionSettings(previous))
+                }
+                val close = compose.onAllNodesWithContentDescription("Закрыть")
+                compose.waitUntil(5000) { close.fetchSemanticsNodes().isNotEmpty() }
+                close.onFirst().performClick()
+            }
+        } finally {
+            compose.runOnIdle { clipboard.clearPrimaryClip() }
+            runBlocking {
+                store.saveActiveProfile(previous)
+                store.clearProfile(slot)
+                store.saveUiDesign(previousDesign)
+            }
+        }
+    }
+
     @Test fun deployProgressIsVisibleAfterReturningToTheTabInAllDesigns() {
         val store = SettingsStore(compose.activity)
         val oldDesign = runBlocking { store.uiDesign.first() }
