@@ -1429,7 +1429,9 @@ class TunnelService : Service() {
                 // The traffic numbers in the notification are read only with the screen on: redrawing it with the
                 // screen off costs a notification post every few seconds for nothing. The next tick after the screen
                 // comes on brings it up to date.
-                if (screenInteractive()) updateNotification(currentNotificationText())
+                val notificationUpdateDue = lastNotificationText == null ||
+                    SystemClock.elapsedRealtime() - lastNotificationPostElapsedMs >= NOTIFICATION_MIN_REBUILD_INTERVAL_MS
+                if (notificationUpdateDue && screenInteractive()) updateNotification(currentNotificationText())
                 delay(2000)
             }
         }
