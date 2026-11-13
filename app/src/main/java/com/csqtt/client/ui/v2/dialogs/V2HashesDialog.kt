@@ -49,6 +49,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.csqtt.client.ManualHashGroup
@@ -182,49 +183,84 @@ internal fun V2HashesDialog(
                         null -> if (short) colors.error else colors.outline
                     }
                     Column {
-                        Surface(shape = RoundedCornerShape(14.dp), color = colors.field) {
-                            Column(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp)) {
+                        Surface(
+                            shape = RoundedCornerShape(14.dp),
+                            color = colors.field,
+                            border = BorderStroke(1.dp, outline),
+                        ) {
+                            Row(
+                                Modifier.fillMaxWidth().height(50.dp).padding(start = 10.dp, end = 2.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
                                 Text(
-                                    "Хеш ${index + 1}",
-                                    color = colors.textSecondary,
-                                    fontSize = 12.sp,
-                                    modifier = Modifier.padding(bottom = 4.dp),
+                                    text = "${index + 1}",
+                                    color = colors.accent,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    modifier = Modifier.padding(end = 10.dp),
                                 )
-                                Surface(
-                                    shape = RoundedCornerShape(11.dp),
-                                    color = colors.surface,
-                                    border = BorderStroke(if (status == null) 1.dp else 2.dp, outline),
-                                ) {
-                                    Row(
-                                        Modifier.fillMaxWidth().height(38.dp).padding(start = 10.dp, end = 2.dp),
-                                        verticalAlignment = Alignment.CenterVertically,
-                                    ) {
-                                        BasicTextField(
-                                            value = value, onValueChange = { updateHash(index, it) },
-                                            enabled = !isChecking,
-                                            readOnly = showOwnerHashes,
-                                            singleLine = true,
-                                            modifier = Modifier.weight(1f).semantics {
-                                                when (status) {
-                                                    VkHashValidationStatus.Valid -> stateDescription = "Хеш активен"
-                                                    VkHashValidationStatus.Invalid -> stateDescription = "Хеш недействителен"
-                                                    null -> Unit
-                                                }
-                                            },
-                                            textStyle = MaterialTheme.typography.bodyMedium.copy(color = colors.textPrimary, fontSize = 13.sp, fontFamily = FontFamily.Monospace),
-                                            decorationBox = { input -> Box(contentAlignment = Alignment.CenterStart) {
-                                                if (value.isEmpty()) Text("Ссылка VK или хеш · от 16 знаков", color = colors.textMuted, fontSize = 12.sp, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
-                                                input()
-                                            } },
-                                        )
-                                        if (!showOwnerHashes) IconButton(onClick = {
-                                            context.getSystemService(ClipboardManager::class.java)?.primaryClip?.takeIf { it.itemCount > 0 }
-                                                ?.getItemAt(0)?.coerceToText(context)?.toString()?.takeIf { it.isNotBlank() }?.let { updateHash(index, it) }
-                                        }, enabled = !isChecking, modifier = Modifier.size(40.dp)) {
-                                            Icon(Icons.Outlined.ContentPaste, "Вставить хеш ${index + 1}", tint = colors.textSecondary, modifier = Modifier.size(18.dp))
+                                BasicTextField(
+                                    value = value,
+                                    onValueChange = { updateHash(index, it) },
+                                    enabled = !isChecking,
+                                    readOnly = showOwnerHashes,
+                                    singleLine = true,
+                                    modifier = Modifier.weight(1f).semantics {
+                                        when (status) {
+                                            VkHashValidationStatus.Valid -> stateDescription = "Хеш активен"
+                                            VkHashValidationStatus.Invalid -> stateDescription = "Хеш недействителен"
+                                            null -> Unit
                                         }
-                                        if (!showOwnerHashes && value.isNotEmpty()) IconButton(onClick = { updateHash(index, "") }, enabled = !isChecking, modifier = Modifier.size(36.dp)) {
-                                            Icon(Icons.Default.Close, "Очистить хеш ${index + 1}", tint = colors.textMuted, modifier = Modifier.size(17.dp))
+                                    },
+                                    textStyle = MaterialTheme.typography.bodyMedium.copy(
+                                        color = colors.textPrimary,
+                                        fontSize = 13.sp,
+                                        fontFamily = FontFamily.Monospace,
+                                    ),
+                                    decorationBox = { input ->
+                                        Box(contentAlignment = Alignment.CenterStart) {
+                                            if (value.isEmpty()) {
+                                                Text(
+                                                    "Ссылка VK или хеш · от 16 знаков",
+                                                    color = colors.textMuted,
+                                                    fontSize = 12.sp,
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis,
+                                                )
+                                            }
+                                            input()
+                                        }
+                                    },
+                                )
+                                if (!showOwnerHashes) {
+                                    IconButton(
+                                        onClick = {
+                                            context.getSystemService(ClipboardManager::class.java)?.primaryClip
+                                                ?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.coerceToText(context)
+                                                ?.toString()?.takeIf { it.isNotBlank() }?.let { updateHash(index, it) }
+                                        },
+                                        enabled = !isChecking,
+                                        modifier = Modifier.size(40.dp),
+                                    ) {
+                                        Icon(
+                                            Icons.Outlined.ContentPaste,
+                                            "Вставить хеш ${index + 1}",
+                                            tint = colors.textSecondary,
+                                            modifier = Modifier.size(18.dp),
+                                        )
+                                    }
+                                    if (value.isNotEmpty()) {
+                                        IconButton(
+                                            onClick = { updateHash(index, "") },
+                                            enabled = !isChecking,
+                                            modifier = Modifier.size(36.dp),
+                                        ) {
+                                            Icon(
+                                                Icons.Default.Close,
+                                                "Очистить хеш ${index + 1}",
+                                                tint = colors.textMuted,
+                                                modifier = Modifier.size(17.dp),
+                                            )
                                         }
                                     }
                                 }
