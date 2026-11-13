@@ -21,6 +21,7 @@ import com.csqtt.client.ui.legacy.GOOBY_HELP
 import com.csqtt.client.ui.legacy.ModeIndicator
 import com.csqtt.client.ui.legacy.SRTP_HELP
 import com.csqtt.client.ui.legacy.goobyIndicator
+import com.csqtt.client.ui.legacy.goobyModeHelp
 import com.csqtt.client.ui.legacy.hashModeHelp
 import com.csqtt.client.ui.legacy.turnTransportHelp
 import com.csqtt.client.ui.legacy.workModeHelp
@@ -235,12 +236,7 @@ internal fun HappTunnelScreen(
                             goobyIndicator(mode, c.success)?.let { mode.label to it }
                         }.toMap(),
                         help = GOOBY_HELP,
-                        optionHelp = mapOf(
-                            GoobyMode.OFF.label to "Соединение TCP/TLS без Gooby.",
-                            GoobyMode.GENTLE.label to "Лёгкая стратегия Gooby.",
-                            GoobyMode.CURRENT.label to "Средняя стратегия Gooby.",
-                            GoobyMode.EXTENDED.label to "Тяжёлая стратегия Gooby.",
-                        ),
+                        optionHelp = GoobyMode.entries.associate { it.label to goobyModeHelp(it) },
                         enabled = goobyAvailable && !busy,
                         compact = true,
                         shape = pill,

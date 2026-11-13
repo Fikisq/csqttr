@@ -129,6 +129,7 @@ internal fun SettingsTabContent(
     )
     val goobyMode by settingsStore.goobyMode.collectAsStateWithLifecycle(GoobyMode.OFF)
     var showGoobyHelp by rememberSaveable { mutableStateOf(false) }
+    var goobyHelpMode by rememberSaveable { mutableStateOf<GoobyMode?>(null) }
     val tcpTransportRiskAcknowledged by settingsStore.tcpTransportRiskAcknowledged.collectAsStateWithLifecycle(
         initialValue = false,
     )
@@ -734,6 +735,7 @@ internal fun SettingsTabContent(
                         enabled = GoobyMode.isAvailable(turnTransport) && !tunnelRunning && !tunnelStarting && !tunnelStopping,
                         indicatorProvider = { goobyIndicator(GoobyMode.fromStored(it), Color(0xFF43A047)) },
                         onTitleInfo = { showGoobyHelp = true },
+                        onInfo = { goobyHelpMode = GoobyMode.fromStored(it) },
                         onSelected = { value ->
                             scope.launch { settingsStore.saveGoobyMode(GoobyMode.fromStored(value), activeProfile) }
                         },
@@ -964,6 +966,14 @@ internal fun SettingsTabContent(
                     title = { Text("Gooby") },
                     text = { Text(GOOBY_HELP) },
                     confirmButton = { TextButton(onClick = { showGoobyHelp = false }) { Text("Понятно") } },
+                )
+            }
+            goobyHelpMode?.let { mode ->
+                AlertDialog(
+                    onDismissRequest = { goobyHelpMode = null },
+                    title = { Text(mode.label) },
+                    text = { Text(goobyModeHelp(mode)) },
+                    confirmButton = { TextButton(onClick = { goobyHelpMode = null }) { Text("Понятно") } },
                 )
             }
             if (showTurnTransportGeneralDialog) {

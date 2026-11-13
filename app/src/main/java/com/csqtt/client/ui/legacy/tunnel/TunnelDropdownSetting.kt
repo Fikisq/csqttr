@@ -54,7 +54,14 @@ data class ModeIndicator(
 )
 
 internal const val GOOBY_HELP =
-    "Gooby работает при TCP/TLS. При UDP выбранный режим сохраняется, а Gooby отключён."
+    "Gooby меняет отправку первых данных при подключении по TCP/TLS. После установления соединения трафик передаётся без этих задержек. При UDP выбранный режим сохраняется, а Gooby отключён."
+
+internal fun goobyModeHelp(mode: GoobyMode): String = when (mode) {
+    GoobyMode.OFF -> "Первые данные TCP/TLS отправляются без обработки Gooby."
+    GoobyMode.GENTLE -> "Заголовок TURN Allocate делится на 2 части с паузой 1 мс. Имя сервера в TLS ClientHello разбивается на фрагменты до 8 байт с паузой 1 мс. TTL не уменьшается."
+    GoobyMode.CURRENT -> "Заголовок TURN Allocate делится на 4 части с паузами 5 мс. Имя сервера в TLS ClientHello разбивается на фрагменты до 2 байт с паузами 10 мс. При первой отправке TLS используется пониженный TTL."
+    GoobyMode.EXTENDED -> "Заголовок TURN Allocate делится на 6 частей с паузами 10 мс. Имя сервера в TLS ClientHello разбивается по одному байту с паузами 15 мс. При первой отправке TLS используется пониженный TTL."
+}
 
 internal const val SRTP_HELP = "SRTP определяет, как пакеты туннеля выглядят для сети."
 
