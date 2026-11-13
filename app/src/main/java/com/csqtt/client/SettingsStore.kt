@@ -74,6 +74,9 @@ internal data class TunnelAuthSnapshot(
     val connectionPasswordState: StoredSecretState = StoredSecretState.Missing,
     val csqttLink: String = "",
     val csqttLinkMode: Boolean = false,
+    val peer: String = "",
+    val serverPeerPort: Int = CsqttConstants.Network.DEFAULT_SERVER_PEER_PORT,
+    val manualPortsEnabled: Boolean = false,
     val workers: Int = CsqttConstants.Tunnel.WORKERS_PER_GROUP,
     val workersMaximum: Int = CsqttConstants.Tunnel.DEFAULT_MAX_WORKERS,
 ) {
@@ -647,6 +650,9 @@ private val DEPLOY_LAST_INSPECTION_PANEL = booleanPreferencesKey("deploy_last_in
             connectionPasswordState = connectionPassword.state,
             csqttLink = prefs[getProfileKey(CSQTT_LINK, profile)] ?: "",
             csqttLinkMode = prefs[getProfileKey(CSQTT_LINK_MODE, profile)] ?: false,
+            peer = prefs[getProfileKey(PEER, profile)].orEmpty(),
+            serverPeerPort = prefs[getProfileKey(SERVER_PEER_PORT, profile)] ?: CsqttConstants.Network.DEFAULT_SERVER_PEER_PORT,
+            manualPortsEnabled = prefs[getProfileKey(MANUAL_PORTS_ENABLED, profile)] ?: false,
             workers = readWorkersPerHash(prefs, maximum),
             workersMaximum = maximum,
         )

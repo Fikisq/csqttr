@@ -95,12 +95,8 @@ internal fun SettingsTabContent(
     val activeProfile = tunnelAuthSettings.profile
     val csqttLinkMode = tunnelAuthSettings.csqttLinkMode
     val csqttLink = tunnelAuthSettings.csqttLink
-    val manualPortsEnabled by settingsStore.manualPortsEnabled.collectAsStateWithLifecycle(
-        initialValue = SettingsStore.cachedManualPortsEnabled ?: false,
-    )
-    val savedServerPeerPort by settingsStore.serverPeerPort.collectAsStateWithLifecycle(
-        initialValue = SettingsStore.cachedServerPeerPort ?: CsqttConstants.Network.DEFAULT_SERVER_PEER_PORT,
-    )
+    val manualPortsEnabled = tunnelAuthSettings.manualPortsEnabled
+    val savedServerPeerPort = tunnelAuthSettings.serverPeerPort
 
     val activeFingerprint by settingsStore.selectedFingerprint.collectAsStateWithLifecycle(initialValue = CsqttConstants.Tunnel.DEFAULT_FINGERPRINT)
     val activeClientIds by settingsStore.activeClientIds.collectAsStateWithLifecycle(initialValue = CsqttConstants.Tunnel.DEFAULT_CLIENT_IDS)
@@ -110,7 +106,7 @@ internal fun SettingsTabContent(
     }
     val savedHashMode by settingsStore.vkHashMode.collectAsStateWithLifecycle(initialValue = SettingsStore.cachedVkHashMode)
     val savedVkAccessToken by settingsStore.vkAccessToken.collectAsStateWithLifecycle(initialValue = SettingsStore.cachedVkAccessToken)
-    val connectionPassword by settingsStore.connectionPassword.collectAsStateWithLifecycle(initialValue = "")
+    val connectionPassword = tunnelAuthSettings.connectionPassword
     var showSecretsDialog by rememberSaveable { mutableStateOf(false) }
 
     val tunnelRunning by TunnelManager.running.collectAsStateWithLifecycle()
@@ -163,14 +159,9 @@ internal fun SettingsTabContent(
     }
 
     val hashSettingsLoaded = savedHashMode != null && savedVkAccessToken != null
-    var peerInput by rememberSaveable { mutableStateOf("") }
+    var peerInput by rememberSaveable(activeProfile) { mutableStateOf(tunnelAuthSettings.peer) }
     var peerPortInput by rememberSaveable(activeProfile) {
-        val initialPort = if (SettingsStore.cachedManualPortsEnabled == true) {
-            (SettingsStore.cachedServerPeerPort ?: CsqttConstants.Network.DEFAULT_SERVER_PEER_PORT).toString()
-        } else {
-            CsqttConstants.Network.DEFAULT_SERVER_PEER_PORT.toString()
-        }
-        mutableStateOf(initialPort)
+        mutableStateOf(savedServerPeerPort.toString())
     }
     var vkHash1 by rememberSaveable { mutableStateOf("") }
     var vkHash2 by rememberSaveable { mutableStateOf("") }
@@ -269,21 +260,12 @@ internal fun SettingsTabContent(
         saveJob?.cancel()
         linkSaveJob?.cancel()
         peerPortSaveJob?.cancel()
-        val peer = settingsStore.peer.first()
         val hashes = settingsStore.vkHashes.first()
         val loadedVkAuthMode = settingsStore.vkAuthMode.first()
         val captchaMode = settingsStore.captchaMode.first()
         val captchaMethod = settingsStore.captchaSolveMethod.first()
         val wbvCaptchaMethod = settingsStore.captchaWbvSolveMethod.first()
         
-        peerInput = peer
-        val port = settingsStore.serverPeerPort.first()
-        if (!peerPortEdited) {
-            val targetPort = port.toString()
-            if (peerPortInput != targetPort) {
-                peerPortInput = targetPort
-            }
-        }
         parseHashes(hashes)
         vkAuthMode = loadedVkAuthMode
         sniInput = settingsStore.sni.first()
@@ -293,6 +275,10 @@ internal fun SettingsTabContent(
         isManualMode = if (captchaMode == "wv") wbvManualMode else captchaMethod != "auto"
         
         initialized = true
+    }
+
+    LaunchedEffect(activeProfile, tunnelAuthSettings.peer) {
+        peerInput = tunnelAuthSettings.peer
     }
 
     // The field shows the port the tunnel dials: the profile's stored one, whatever «Ручные порты» says (a profile from a
