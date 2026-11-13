@@ -28,9 +28,7 @@ case "$CSQTT_ROLE" in
         _bin=/usr/local/lib/csqtt25/csqtt25; _lib=/usr/local/lib/csqtt25; _conf=/etc/csqtt25
         _img_bin=/opt/csqtt25/csqtt25; _img_lib=/opt/csqtt25; _img_conf=/srv/csqtt25
         _peer=46100; _web=46102
-        # Let's Encrypt: one lineage per IP, shared with the stock server. 2.1.9 renews at < 24 h on a 6 h timer and 2.5 at
-        # < 3 days, so while one of them runs it always renews first and this one only copies live/ (renew helper); alone on
-        # the box it renews itself at < 12 h — 6 h below 2.1.9's 24 h, one of its 6 h timer periods. Own certbot venv: 2.1.9's uninstall deletes /opt/csqtt-certbot.
+        # Prefer the standard instance's certificate for the same IP, with a separate client if it is needed here.
         _le_helper=/usr/local/lib/csqtt25/letsencrypt-renew.sh; _le_venv=/opt/csqtt25-certbot; _le_before=43200; _le_every=6h
         ;;
     *)
@@ -58,7 +56,7 @@ readonly LE_RENEW_EVERY="$_le_every"
 readonly DEPLOY_MODE="${CSQTT_DEPLOY_MODE:-systemd}"
 readonly CSQTT_IFACE="$_iface"
 readonly CSQTT_CONFIG_DIR="$_conf"
-readonly CSQTT_LE_CERTBOT="${_le_venv}/bin/certbot"
+
 readonly CSQTT_LE_VENV="$_le_venv"
 readonly CSQTT_LE_STATE_FILE="${CSQTT_CONFIG_DIR}/letsencrypt-ip.env"
 readonly CSQTT_LE_RENEW_HELPER="$_le_helper"
@@ -687,12 +685,6 @@ pkg_install() {
     esac
 }
 
-pkg_install_with_refresh() {
-    pkg_install "$@" && return 0
-    pkg_update
-    pkg_install "$@"
-}
-
 install_prerequisites() {
     log_step "Проверка базовых зависимостей..."
 
@@ -952,7 +944,7 @@ clear_runtime_config_preserving_database() {
     for entry in "$CSQTT_CONFIG_DIR"/*; do
         base="${entry##*/}"
         case "$base" in
-            "$CSQTT_DATABASE_FILE"|"$CSQTT_DATABASE_WAL_FILE"|"$CSQTT_DATABASE_SHM_FILE"|"$CSQTT_LEGACY_MIGRATION_JSON"|"$CSQTT_LEGACY_MIGRATION_IMPORTED_JSON"|web_cert.pem|web_key.pem|letsencrypt-ip.env|runtime-archive) continue ;;
+            "$CSQTT_DATABASE_FILE"|"$CSQTT_DATABASE_WAL_FILE"|"$CSQTT_DATABASE_SHM_FILE"|"$CSQTT_LEGACY_MIGRATION_JSON"|"$CSQTT_LEGACY_MIGRATION_IMPORTED_JSON"|web_cert.pem|web_key.pem|letsencrypt-ip.env|letsencrypt|runtime-archive) continue ;;
         esac
         rm -rf -- "$entry"
     done
@@ -1441,8 +1433,6 @@ setup_csqtt_environment() {
     echo "✓ Конфигурация запуска установлена безопасным EnvironmentFile"
 }
 
-LE_CERTBOT_COMMAND=""
-
 is_public_ipv4() {
     local ip="$1" first second third fourth value
     case "$ip" in
@@ -1486,62 +1476,6 @@ detect_public_ipv4() {
         fi
     done
     return 1
-}
-
-certbot_supports_ip_certificates() {
-    "$1" certonly --help all 2>&1 | grep -Fq -- "--ip-address"
-}
-
-ensure_letsencrypt_client() {
-    local system_certbot=""
-    local -a python_packages=()
-    if command -v certbot >/dev/null 2>&1; then
-        system_certbot="$(command -v certbot)"
-        if certbot_supports_ip_certificates "$system_certbot"; then
-            LE_CERTBOT_COMMAND="$system_certbot"
-            return 0
-        fi
-    fi
-    if [ -x "$CSQTT_LE_CERTBOT" ] && certbot_supports_ip_certificates "$CSQTT_LE_CERTBOT"; then
-        LE_CERTBOT_COMMAND="$CSQTT_LE_CERTBOT"
-        return 0
-    fi
-
-    log_step "Подготовка Let’s Encrypt клиента..."
-    if ! command -v python3 >/dev/null 2>&1 || ! python3 -c 'import ensurepip' >/dev/null 2>&1; then
-        case "$PKG_MGR" in
-            apt) python_packages=(python3 python3-venv) ;;
-            dnf|yum) python_packages=(python3 python3-pip) ;;
-            pacman) python_packages=(python) ;;
-        esac
-        if ! pkg_install_with_refresh "${python_packages[@]}"; then
-            log_warn "Python/venv недоступны; WEB-панель временно останется на self-signed TLS"
-            return 1
-        fi
-    fi
-    if ! command -v openssl >/dev/null 2>&1; then
-        if ! pkg_install_with_refresh openssl; then
-            log_warn "OpenSSL недоступен; проверка и обновление Let’s Encrypt сертификата отложены"
-            return 1
-        fi
-    fi
-    if [ ! -x "$CSQTT_LE_CERTBOT" ] || ! "$CSQTT_LE_CERTBOT" --version >/dev/null 2>&1; then
-        rm -rf "$CSQTT_LE_VENV"
-        if ! python3 -m venv "$CSQTT_LE_VENV" >>"$LOG_FILE" 2>&1; then
-            log_warn "Не удалось создать изолированный Let’s Encrypt client; WEB-панель временно останется на self-signed TLS"
-            return 1
-        fi
-    fi
-    if ! timeout 180 "$CSQTT_LE_VENV/bin/pip" install --disable-pip-version-check --no-cache-dir --upgrade 'certbot>=5.4,<6' >>"$LOG_FILE" 2>&1; then
-        log_warn "Не удалось установить актуальный Certbot с поддержкой IP-сертификатов; WEB-панель временно останется на self-signed TLS"
-        return 1
-    fi
-    if ! certbot_supports_ip_certificates "$CSQTT_LE_CERTBOT"; then
-        log_warn "Установленный Certbot не поддерживает Let’s Encrypt IP-сертификаты"
-        return 1
-    fi
-    LE_CERTBOT_COMMAND="$CSQTT_LE_CERTBOT"
-    return 0
 }
 
 letsencrypt_cert_name() {
@@ -1591,15 +1525,6 @@ web_certificate_is_csqtt_managed() {
 web_certificate_is_user_managed() {
     [ -s "$CSQTT_CONFIG_DIR/web_cert.pem" ] || return 1
     ! web_certificate_is_csqtt_managed
-}
-
-letsencrypt_certificate_is_current() {
-    local public_ip="$1" saved_ip
-    certificate_is_csqtt_letsencrypt || return 1
-    saved_ip="$(state_value IP 2>/dev/null || true)"
-    [ "$saved_ip" = "$public_ip" ] || return 1
-    [ -s "$CSQTT_CONFIG_DIR/web_cert.pem" ] || return 1
-    openssl x509 -noout -checkend "$LE_RENEW_BEFORE_SECONDS" -in "$CSQTT_CONFIG_DIR/web_cert.pem" >/dev/null 2>&1
 }
 
 disable_letsencrypt_renewal_timer() {
@@ -1662,31 +1587,6 @@ adopt_letsencrypt_certificate() {
     install_letsencrypt_certificate "$public_ip" "$cert_name"
 }
 
-issue_letsencrypt_ip_certificate() {
-    local certbot="$1" public_ip="$2" cert_name="$3"
-    if ss -ltnH "sport = :${LE_HTTP_PORT}" 2>/dev/null | grep -q .; then
-        log_warn "TCP/${LE_HTTP_PORT} уже занят другим сервисом; Let’s Encrypt IP-сертификат отложен, сохранён self-signed fallback"
-        return 1
-    fi
-    if ! timeout 90 "$certbot" certonly --standalone --http-01-port "$LE_HTTP_PORT" \
-        --non-interactive --agree-tos --register-unsafely-without-email \
-        --preferred-profile shortlived --ip-address "$public_ip" \
-        --cert-name "$cert_name" --keep-until-expiring >>"$LOG_FILE" 2>&1; then
-        if ! timeout 90 "$certbot" certonly --standalone --http-01-port "$LE_HTTP_PORT" \
-            --non-interactive --agree-tos --register-unsafely-without-email \
-            --ip-address "$public_ip" \
-            --cert-name "$cert_name" --keep-until-expiring >>"$LOG_FILE" 2>&1; then
-            log_warn "Let’s Encrypt не подтвердил IP ${public_ip}; сохранён self-signed fallback, следующая проверка выполнится автоматически"
-            return 1
-        fi
-    fi
-    if ! install_letsencrypt_certificate "$public_ip" "$cert_name"; then
-        log_warn "Let’s Encrypt выдал сертификат, но CSQTT не смог безопасно активировать его"
-        return 1
-    fi
-    log_info "Let’s Encrypt IP-сертификат активирован для ${public_ip}"
-}
-
 generate_rcgen_fallback_certificate() {
     local cert_tmp key_tmp current_ip="${1:-}" san_ext
     command -v openssl >/dev/null 2>&1 || return 1
@@ -1721,15 +1621,9 @@ write_letsencrypt_renewal_helper() {
 set -Eeuo pipefail
 
 LE_VENV="${CSQTT_LE_VENV:-/opt/csqtt-certbot}"
-CERTBOT="${CSQTT_LE_CERTBOT:-}"
-if [ -z "$CERTBOT" ] || ! "$CERTBOT" --version >/dev/null 2>&1; then
-    if [ -x "$LE_VENV/bin/certbot" ] && "$LE_VENV/bin/certbot" --version >/dev/null 2>&1; then
-        CERTBOT="$LE_VENV/bin/certbot"
-    elif command -v certbot >/dev/null 2>&1 && certbot --version >/dev/null 2>&1; then
-        CERTBOT="$(command -v certbot)"
-    fi
-fi
 CONFIG_DIR="${CSQTT_CONFIG_DIR:-/etc/csqtt}"
+LE_CONFIG_DIR="$CONFIG_DIR/letsencrypt"
+CERTBOT=""
 STATE_FILE="${CONFIG_DIR}/letsencrypt-ip.env"
 CERT_PATH="${CONFIG_DIR}/web_cert.pem"
 KEY_PATH="${CONFIG_DIR}/web_key.pem"
@@ -1742,6 +1636,40 @@ COPY_FIRST="${CSQTT_LE_COPY_FIRST:-0}"         # side: take the lineage the neig
 log() {
     logger -t csqtt-letsencrypt -- "$*" 2>/dev/null || true
     printf '%s\n' "$*"
+}
+
+certbot_supports_ip_certificates() {
+    local help
+    help="$(timeout 5 "$1" certonly --help all 2>&1)" || return 1
+    [[ "$help" == *--ip-address* && "$help" == *--no-directory-hooks* ]]
+}
+
+ensure_letsencrypt_client() {
+    local system_certbot
+    system_certbot="$(command -v certbot || true)"
+    if [ -n "$system_certbot" ] && certbot_supports_ip_certificates "$system_certbot"; then
+        CERTBOT="$system_certbot"
+        log "Let’s Encrypt: используется системный Certbot"
+        return 0
+    fi
+    if [ -x "$LE_VENV/bin/certbot" ] && certbot_supports_ip_certificates "$LE_VENV/bin/certbot"; then
+        CERTBOT="$LE_VENV/bin/certbot"
+        return 0
+    fi
+    if [ -n "$system_certbot" ]; then
+        log "Let’s Encrypt: системный Certbot не поддерживает выпуск IP-сертификата"
+        return 1
+    fi
+    if ! command -v python3 >/dev/null 2>&1 || ! timeout -k 5s 30s python3 -m venv "$LE_VENV"; then
+        log "Let’s Encrypt: Python venv недоступен"
+        return 1
+    fi
+    if ! timeout -k 5s 90s "$LE_VENV/bin/pip" install --disable-pip-version-check --no-cache-dir --upgrade 'certbot>=5.4,<6' ||
+       ! certbot_supports_ip_certificates "$LE_VENV/bin/certbot"; then
+        log "Let’s Encrypt: подготовить Certbot для IP-сертификата не удалось"
+        return 1
+    fi
+    CERTBOT="$LE_VENV/bin/certbot"
 }
 
 is_public_ipv4() {
@@ -1890,8 +1818,8 @@ fallback_if_expired() {
 }
 
 install_certificate() {
-    local current_ip="$1" cert_name="$2" source_dir cert_tmp key_tmp state_tmp
-    source_dir="/etc/letsencrypt/live/${cert_name}"
+    local current_ip="$1" cert_name="$2" cert_tmp key_tmp state_tmp
+    local source_dir="${3:-$LE_CONFIG_DIR/live/$cert_name}"
     [ -s "$source_dir/fullchain.pem" ] && [ -s "$source_dir/privkey.pem" ] || return 1
     cert_tmp="$(mktemp "${CONFIG_DIR}/.web_cert.XXXXXX")" || return 1
     key_tmp="$(mktemp "${CONFIG_DIR}/.web_key.XXXXXX")" || { rm -f -- "$cert_tmp"; return 1; }
@@ -1918,36 +1846,29 @@ reload_csqtt_tls() {
 }
 
 main() {
-    local current_ip cert_name
+    local current_ip cert_name shared_config live_cert
     if [ -s "$CERT_PATH" ] && ! certificate_is_csqtt_managed; then
         log "Let’s Encrypt: обнаружен пользовательский TLS-сертификат; CSQTT не изменяет его и отключает собственное продление"
         return 0
     fi
     current_ip="$(public_ipv4 2>/dev/null || true)"
-    if [ -z "$CERTBOT" ] || [ ! -x "$CERTBOT" ]; then
-        log "Let’s Encrypt: Certbot не найден, обновление отложено"
-        fallback_if_expired "$current_ip"
-        return 0
-    fi
     if [ -z "$current_ip" ]; then
         log "Let’s Encrypt: публичный IPv4 не определён, обновление отложено"
         fallback_if_expired ""
         return 0
     fi
     if [ "$COPY_FIRST" = 1 ]; then
-        # One certificate per IP, shared with the server next to this one: while ITS copy in live/ is still good for
-        # longer than our threshold and differs from ours, take it — a second force-renewal of one lineage only spends
-        # Let's Encrypt's weekly duplicate limit.
         cert_name="csqtt-ip-${current_ip//./-}"
-        live_cert="/etc/letsencrypt/live/${cert_name}/fullchain.pem"
-        if [ -s "$live_cert" ] && ! cmp -s "$live_cert" "$CERT_PATH" && \
-           openssl x509 -noout -checkend "$RENEW_BEFORE_SECONDS" -in "$live_cert" >/dev/null 2>&1; then
-            if install_certificate "$current_ip" "$cert_name"; then
+        for shared_config in /etc/csqtt/letsencrypt /etc/letsencrypt; do
+            live_cert="$shared_config/live/$cert_name/fullchain.pem"
+            if [ -s "$live_cert" ] && ! cmp -s "$live_cert" "$CERT_PATH" && \
+               openssl x509 -noout -checkend "$RENEW_BEFORE_SECONDS" -in "$live_cert" >/dev/null 2>&1 && \
+               install_certificate "$current_ip" "$cert_name" "$shared_config/live/$cert_name"; then
                 reload_csqtt_tls
                 log "Let’s Encrypt: взят IP-сертификат, обновлённый соседним сервером"
+                return 0
             fi
-            return 0
-        fi
+        done
     fi
     if ! needs_renewal "$current_ip"; then
         return 0
@@ -1957,13 +1878,18 @@ main() {
         fallback_if_expired "$current_ip"
         return 0
     fi
+    if ! ensure_letsencrypt_client; then
+        fallback_if_expired "$current_ip"
+        return 0
+    fi
     cert_name="csqtt-ip-${current_ip//./-}"
-    if ! timeout 90 "$CERTBOT" certonly --standalone --http-01-port "$HTTP_PORT" --non-interactive --agree-tos --register-unsafely-without-email --preferred-profile shortlived --ip-address "$current_ip" --cert-name "$cert_name" --force-renewal; then
-        if ! timeout 90 "$CERTBOT" certonly --standalone --http-01-port "$HTTP_PORT" --non-interactive --agree-tos --register-unsafely-without-email --ip-address "$current_ip" --cert-name "$cert_name" --force-renewal; then
-            log "Let’s Encrypt: перевыпуск IP-сертификата не удался, текущий сертификат сохранён"
-            fallback_if_expired "$current_ip"
-            return 0
-        fi
+    if ! timeout -k 5s 90s "$CERTBOT" certonly --standalone --http-01-port "$HTTP_PORT" \
+        --config /dev/null --config-dir "$LE_CONFIG_DIR" --work-dir "$LE_CONFIG_DIR/work" --logs-dir "$LE_CONFIG_DIR/logs" \
+        --no-directory-hooks --non-interactive --agree-tos --register-unsafely-without-email \
+        --preferred-profile shortlived --ip-address "$current_ip" --cert-name "$cert_name" --force-renewal; then
+        log "Let’s Encrypt: перевыпуск IP-сертификата не удался, текущий сертификат сохранён"
+        fallback_if_expired "$current_ip"
+        return 0
     fi
     if ! install_certificate "$current_ip" "$cert_name"; then
         log "Let’s Encrypt: не удалось безопасно активировать новый сертификат"
@@ -1994,7 +1920,6 @@ Wants=network-online.target
 [Service]
 Type=oneshot
 Environment=CSQTT_DEPLOY_MODE=${DEPLOY_MODE}
-Environment=CSQTT_LE_CERTBOT=${LE_CERTBOT_COMMAND}
 Environment=CSQTT_LE_RENEW_BEFORE_SECONDS=${LE_RENEW_BEFORE_SECONDS}
 Environment=CSQTT_CONFIG_DIR=${CSQTT_CONFIG_DIR}
 Environment=CSQTT_LE_VENV=${CSQTT_LE_VENV}
@@ -2007,10 +1932,9 @@ LEUNIT
 Description=Check CSQTT Let’s Encrypt IP certificate lifetime
 
 [Timer]
-OnBootSec=5min
+OnActiveSec=1min
 OnUnitInactiveSec=${LE_RENEW_EVERY}
-RandomizedDelaySec=10min
-Persistent=true
+RandomizedDelaySec=30s
 
 [Install]
 WantedBy=timers.target
@@ -2024,7 +1948,7 @@ LETIMER
 }
 
 setup_letsencrypt_ip_tls() {
-    local public_ip cert_name
+    local public_ip="${CSQTT_PUBLIC_IP:-}"
     if ! certificate_is_csqtt_letsencrypt && adopt_letsencrypt_certificate; then
         log_info "Let’s Encrypt IP-сертификат CSQTT принят под автоматическое продление"
     fi
@@ -2034,45 +1958,15 @@ setup_letsencrypt_ip_tls() {
         log_info "Используется заранее установленный TLS-сертификат пользователя; CSQTT сохраняет его и не заменяет Let’s Encrypt"
         return 0
     fi
-    public_ip="$(detect_public_ipv4 2>/dev/null || true)"
-    if [ -z "$public_ip" ]; then
+    if ! is_public_ipv4 "$public_ip"; then
         public_ip="$(state_value IP 2>/dev/null || true)"
     fi
-    if ! ensure_letsencrypt_client; then
-        if [ ! -s "$CSQTT_CONFIG_DIR/web_cert.pem" ] || ! openssl x509 -noout -checkend 0 -in "$CSQTT_CONFIG_DIR/web_cert.pem" >/dev/null 2>&1; then
-            generate_rcgen_fallback_certificate "$public_ip" || true
-        fi
-        return 0
+    if [ ! -s "$CSQTT_CONFIG_DIR/web_cert.pem" ] || ! openssl x509 -noout -checkend 0 -in "$CSQTT_CONFIG_DIR/web_cert.pem" >/dev/null 2>&1; then
+        generate_rcgen_fallback_certificate "$public_ip" || true
     fi
     write_letsencrypt_renewal_helper
-    if [ -z "$public_ip" ]; then
-        log_warn "Публичный IPv4 не определён; WEB-панель временно останется на self-signed TLS"
-        if [ ! -s "$CSQTT_CONFIG_DIR/web_cert.pem" ] || ! openssl x509 -noout -checkend 0 -in "$CSQTT_CONFIG_DIR/web_cert.pem" >/dev/null 2>&1; then
-            generate_rcgen_fallback_certificate "" || true
-        fi
-        install_letsencrypt_renewal_timer
-        return 0
-    fi
-    if [ "$CSQTT_ROLE" = side ] && ! letsencrypt_certificate_is_current "$public_ip"; then
-        # the server next to this one already holds a certificate for this IP: take it instead of issuing another
-        cert_name="$(letsencrypt_cert_name "$public_ip")"
-        if [ -s "/etc/letsencrypt/live/${cert_name}/fullchain.pem" ] && \
-           openssl x509 -noout -checkend "$LE_RENEW_BEFORE_SECONDS" -in "/etc/letsencrypt/live/${cert_name}/fullchain.pem" >/dev/null 2>&1 && \
-           install_letsencrypt_certificate "$public_ip" "$cert_name"; then
-            log_info "Let’s Encrypt IP-сертификат взят у соседнего сервера (тот же IP)"
-        fi
-    fi
-    if letsencrypt_certificate_is_current "$public_ip"; then
-        log_info "Let’s Encrypt IP-сертификат действителен; перевыпуск не требуется"
-    else
-        cert_name="$(letsencrypt_cert_name "$public_ip")"
-        if ! issue_letsencrypt_ip_certificate "$LE_CERTBOT_COMMAND" "$public_ip" "$cert_name"; then
-            if [ ! -s "$CSQTT_CONFIG_DIR/web_cert.pem" ] || ! openssl x509 -noout -checkend 0 -in "$CSQTT_CONFIG_DIR/web_cert.pem" >/dev/null 2>&1; then
-                generate_rcgen_fallback_certificate "$public_ip" || true
-            fi
-        fi
-    fi
     install_letsencrypt_renewal_timer
+    log_info "Выпуск и продление Let’s Encrypt выполняются отдельной службой после запуска"
 }
 
 verify_web_panel() {
