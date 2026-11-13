@@ -179,7 +179,11 @@ internal fun HappChoice(label: String, value: String, options: List<String>, onS
         AlertDialog(
             onDismissRequest = { helpOption = null },
             title = { Text(option) },
-            text = { Text(optionHelp.getValue(option)) },
+            text = {
+                Column(Modifier.heightIn(max = 440.dp).verticalScroll(rememberScrollState())) {
+                    Text(optionHelp.getValue(option))
+                }
+            },
             confirmButton = { TextButton(onClick = { helpOption = null }) { Text("Понятно") } },
         )
     }
