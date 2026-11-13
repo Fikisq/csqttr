@@ -106,6 +106,8 @@ internal fun V2AppsRoutingDialog(
     val colors = routingColors()
     val focusManager = LocalFocusManager.current
     val listState = rememberLazyListState()
+    val context = LocalContext.current
+    val clipboard = LocalClipboardManager.current
 
     var allApps by rememberSaveable { mutableStateOf(!isWhitelist && blacklist.isEmpty()) }
     var modeIsWhitelist by rememberSaveable { mutableStateOf(isWhitelist) }
@@ -277,6 +279,39 @@ internal fun V2AppsRoutingDialog(
                         onClick = {
                             if (modeIsWhitelist) whiteSelection = emptySet() else blackSelection = emptySet()
                             listState.requestScrollToItem(0)
+                        },
+                    )
+                }
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(V2Spacing.Sm)) {
+                    V2PillButton(
+                        text = "Копировать список",
+                        modifier = Modifier.weight(1f),
+                        style = V2PillStyle.Outline,
+                        height = 40.dp,
+                        horizontalPadding = 4.dp,
+                        enabled = activeSelection.isNotEmpty(),
+                        onClick = {
+                            clipboard.setText(AnnotatedString(activeSelection.sorted().joinToString("\n")))
+                            context.showRaisedToast("Список скопирован", Toast.LENGTH_SHORT)
+                        },
+                    )
+                    V2PillButton(
+                        text = "Вставить список",
+                        modifier = Modifier.weight(1f),
+                        style = V2PillStyle.Outline,
+                        height = 40.dp,
+                        horizontalPadding = 4.dp,
+                        onClick = {
+                            val imported = clipboard.getText()?.text.orEmpty()
+                                .split(Regex("[,;\\s]+"))
+                                .filter(::isValidPackage)
+                                .toSet()
+                            if (imported.isEmpty()) {
+                                context.showRaisedToast("В буфере нет имён пакетов", Toast.LENGTH_SHORT)
+                            } else {
+                                if (modeIsWhitelist) whiteSelection += imported else blackSelection += imported
+                                listState.requestScrollToItem(0)
+                            }
                         },
                     )
                 }
