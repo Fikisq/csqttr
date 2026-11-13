@@ -3009,7 +3009,6 @@ main() {
             require_runtime_tools
             if [ "$CSQTT_ROLE" = side ]; then side_preflight; else main_preflight; fi
             if [ "$DEPLOY_MODE" = "docker" ]; then
-                prog 0.12 "Docker..."
                 run_timed "Подготовка Docker Engine" 0.15 ensure_docker
             fi
             run_timed "Проверка маршрутизации VPS" 0.20 setup_sysctl
