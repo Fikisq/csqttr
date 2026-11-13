@@ -141,6 +141,45 @@ class DesignCompatibilityTest {
         }
     }
 
+    @Test fun goobyHelpExplainsEachPresetInAllThreeDesigns() {
+        val store = SettingsStore(compose.activity)
+        val oldDesign = runBlocking { store.uiDesign.first() }
+        val oldTransport = runBlocking { store.turnTransport.first() }
+        val oldPreset = runBlocking { store.goobyMode.first() }
+        val descriptions = mapOf(
+            "Выкл" to "без обработки Gooby",
+            "Лёгкая" to "делится на 2 части",
+            "Средняя" to "делится на 4 части",
+            "Тяжёлая" to "делится на 6 частей",
+        )
+        try {
+            runBlocking {
+                store.saveTurnTransport(CsqttConstants.Tunnel.TURN_TRANSPORT_TCP_TLS)
+                store.saveGoobyMode(GoobyMode.GENTLE)
+            }
+            for (design in listOf("v2", "old", "classic")) {
+                runBlocking { store.saveUiDesign(design) }
+                val tunnel = compose.onAllNodesWithText("Туннель")
+                compose.waitUntil(10_000) { tunnel.fetchSemanticsNodes().isNotEmpty() }
+                tunnel.onFirst().performClick()
+                val selectedPreset = compose.onNodeWithText("Лёгкая")
+                for ((label, description) in descriptions) {
+                    selectedPreset.performScrollTo().performClick()
+                    compose.onNodeWithContentDescription("Информация: $label").performClick()
+                    compose.onNodeWithText(description, substring = true).assertIsDisplayed()
+                    compose.onNodeWithText("Понятно").performClick()
+                }
+                assertEquals(GoobyMode.GENTLE, runBlocking { store.goobyMode.first() })
+            }
+        } finally {
+            runBlocking {
+                store.saveTurnTransport(oldTransport)
+                store.saveGoobyMode(oldPreset)
+                store.saveUiDesign(oldDesign)
+            }
+        }
+    }
+
     @Test fun threeDesignsShareSettingsAndPreserveSelectedConnection() {
         val store = SettingsStore(compose.activity)
         val oldDesign = runBlocking { store.uiDesign.first() }
