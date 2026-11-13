@@ -747,7 +747,7 @@ internal fun SettingsTabContent(
                     onValueChange = { value ->
                         val newWorkers = value.toInt()
                         scope.launch {
-                            settingsStore.saveWorkersPerHash(newWorkers, forProfile = activeProfile)
+                            settingsStore.saveProfileWorkersPerHash(activeProfile, newWorkers)
                         }
                     },
                     onInfo = { showWorkersInfoDialog = true },

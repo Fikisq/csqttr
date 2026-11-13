@@ -1808,13 +1808,6 @@ private val DEPLOY_LAST_INSPECTION_PANEL = booleanPreferencesKey("deploy_last_in
         }
     }
 
-    suspend fun saveWorkersPerHash(workersPerHash: Int, forProfile: Int? = null) {
-        dataStore.edit { prefs ->
-            val profile = forProfile ?: prefs[ACTIVE_PROFILE] ?: 0
-            prefs[getProfileKey(WORKERS_PER_HASH, profile)] = WorkerCountPolicy.normalize(workersPerHash, maximum = CsqttConstants.Tunnel.MAX_WORKERS)
-        }
-    }
-
     suspend fun saveParticipantTunnelSettings(vkHashes: String, workersPerHash: Int) {
         dataStore.edit { prefs ->
             val profile = prefs[ACTIVE_PROFILE] ?: 0
