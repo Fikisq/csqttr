@@ -608,8 +608,9 @@ remove_all_csqtt_systemd_units() {
 prog() { echo "CSQTT_PROGRESS|$1|$2"; }
 
 run_timed() {
-    local label="$1" started=$SECONDS
-    shift
+    local label="$1" progress="$2" started=$SECONDS
+    shift 2
+    prog "$progress" "$label"
     "$@"
     log_info "Время этапа «$label»: $((SECONDS - started))с"
 }
@@ -687,7 +688,6 @@ pkg_install_with_refresh() {
 }
 
 install_prerequisites() {
-    prog 0.10 "Пакеты..."
     log_step "Проверка базовых зависимостей..."
 
     local ip_package procps_package
@@ -1077,7 +1077,6 @@ remove_csqtt_tun_interface() {
 }
 
 csqtt_cleanup() {
-    prog 0.15 "Очистка..."
     echo "🧹 Переключение со старой установки CSQTT..."
 
     local had_old_install=0 managed_systemd_unit=0
@@ -1124,7 +1123,6 @@ csqtt_cleanup() {
 }
 
 setup_sysctl() {
-    prog 0.25 "Sysctl..."
     echo "⚙️  Настройка сетевых параметров..."
 
     modprobe tcp_bbr 2>/dev/null || true
@@ -1192,7 +1190,6 @@ SYSEOF
 # A box that already has the flag keeps it: nothing here edits GRUB.
 
 setup_nat_and_firewall() {
-    prog 0.40 "NAT + Firewall..."
     echo "🛡  Настройка NAT и фаервола..."
 
     local iface
@@ -1470,7 +1467,6 @@ verify_configured_network() {
 }
 
 setup_csqtt_binary() {
-    prog 0.60 "Бинарник..."
     echo "Установка csqtt..."
 
     mkdir -p "$(dirname "$CSQTT_BIN")"     # never re-chmod an existing /usr/local/bin (Debian: 2775 root:staff)
@@ -2273,7 +2269,6 @@ probe_tun_support() {
 }
 
 run_platform_preflight() {
-    prog 0.35 "Совместимость ядра..."
     log_step "Проверка совместимости ядра и VPS..."
     check_kernel_compatibility
     probe_tun_support
@@ -2363,6 +2358,7 @@ docker_build_candidate_image() {
         return 1
     fi
     rm -f -- "$primary_log"
+    prog 0.32 "Docker: повторная загрузка пакетов с резервным DNS"
     log_warn "Docker build не получил DNS через сеть VPS; повтор с резервными DNS Яндекса"
     fallback_log="$(mktemp)" || return 1
     if timeout -k 15s "${DOCKER_BUILD_TIMEOUT_SECONDS}s" docker build --network default \
@@ -2407,7 +2403,6 @@ prepare_docker_candidate() {
 }
 
 setup_csqtt_docker() {
-    prog 0.75 "Docker-образ..."
     [ -n "$CSQTT_DOCKER_CANDIDATE_IMAGE" ] || \
         die "Не найден проверенный Docker-кандидат" "$EXIT_PREFLIGHT_FAILED"
     docker tag "$CSQTT_DOCKER_CANDIDATE_IMAGE" "$CSQTT_DOCKER_IMAGE" || \
@@ -2445,7 +2440,6 @@ done
 }
 
 start_csqtt_docker() {
-    prog 0.90 "Запуск Docker..."
     ensure_tun_device
     remove_all_csqtt_docker_containers
     assert_peer_port_is_available
@@ -2528,7 +2522,6 @@ start_csqtt_docker() {
 }
 
 setup_csqtt_service() {
-    prog 0.75 "Сервис..."
     echo "🔧 Создание systemd-сервиса CSQTT..."
 
     local unit_tmp
@@ -2593,7 +2586,6 @@ start_csqtt() {
         start_csqtt_docker
         return
     fi
-    prog 0.90 "Запуск..."
     echo "🚀 Запуск CSQTT VPN Server..."
 
     [ -x "$CSQTT_BIN" ] || die "Исполняемый файл $CSQTT_BIN не установлен"
@@ -2715,7 +2707,6 @@ do_uninstall() {
         stop_all_running_csqtt_systemd_units
     fi
     force_stop_csqtt_processes || die "Не удалось остановить все процессы удаляемого CSQTT"
-    prog 0.60 "Удаление сетевых правил и файлов CSQTT..."
     remove_all_csqtt_systemd_units
     rm -f "/etc/systemd/system/${CSQTT_DOCKER_PREREQ_SERVICE}"
     rm -f "/etc/systemd/system/docker.service.requires/${CSQTT_DOCKER_PREREQ_SERVICE}"
@@ -3093,39 +3084,39 @@ main() {
 
             local total_started=$SECONDS
             detect_os
-            run_timed "зависимости" install_prerequisites
+            run_timed "Проверка и установка системных пакетов" 0.10 install_prerequisites
             require_runtime_tools
             if [ "$CSQTT_ROLE" = side ]; then side_preflight; else main_preflight; fi
             if [ "$DEPLOY_MODE" = "docker" ]; then
                 prog 0.12 "Docker..."
-                run_timed "Docker" ensure_docker
+                run_timed "Подготовка Docker Engine" 0.15 ensure_docker
             fi
-            run_timed "sysctl" setup_sysctl
+            run_timed "Проверка маршрутизации VPS" 0.20 setup_sysctl
 
-            run_timed "проверка upload" prepare_uploaded_release
+            run_timed "Проверка полученных файлов" 0.25 prepare_uploaded_release
             if [ "$DEPLOY_MODE" = "docker" ]; then
-                run_timed "Docker preflight" prepare_docker_candidate "$UPLOAD_BINARY"
+                run_timed "Сборка образа Docker и загрузка его пакетов" 0.32 prepare_docker_candidate "$UPLOAD_BINARY"
             fi
             DEPLOY_PHASE="cutover"
-            run_timed "переключение runtime" csqtt_cleanup
-            run_timed "preflight" run_platform_preflight
+            run_timed "Остановка прежнего экземпляра CSQTT" 0.46 csqtt_cleanup
+            run_timed "Проверка совместимости TUN" 0.50 run_platform_preflight
             detect_firewall
-            run_timed "NAT/firewall" setup_nat_and_firewall
+            run_timed "Настройка правил CSQTT" 0.54 setup_nat_and_firewall
             install_network_helper
             if [ "$PRESERVE_CONFIG" = "1" ]; then
                 log_info "Повторная установка: данные клиентов и правила сохраняются"
             fi
             setup_csqtt_environment
-            run_timed "Let’s Encrypt" setup_letsencrypt_ip_tls
+            run_timed "Подготовка сертификата веб-панели" 0.62 setup_letsencrypt_ip_tls
             DEPLOY_PHASE="activation"
-            run_timed "бинарник" setup_csqtt_binary
-            run_timed "принудительная остановка" force_stop_csqtt_processes
+            run_timed "Установка бинарника CSQTT" 0.68 setup_csqtt_binary
+            run_timed "Проверка остановки старого процесса CSQTT" 0.72 force_stop_csqtt_processes
             if [ "$DEPLOY_MODE" = "docker" ]; then
-                run_timed "Docker activation" setup_csqtt_docker
+                run_timed "Подготовка контейнера CSQTT" 0.75 setup_csqtt_docker
             else
-                run_timed "systemd unit" setup_csqtt_service
+                run_timed "Подготовка службы CSQTT" 0.75 setup_csqtt_service
             fi
-            run_timed "запуск" start_csqtt
+            run_timed "Запуск и проверка CSQTT" 0.90 start_csqtt
             log_info "Общее время deploy.sh: $((SECONDS - total_started))с"
             ;;
         *) die "Неизвестная команда установщика: $action" ;;
