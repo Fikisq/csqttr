@@ -897,11 +897,15 @@ private val DEPLOY_LAST_INSPECTION_PANEL = booleanPreferencesKey("deploy_last_in
 
     suspend fun saveProfileName(profile: Int, name: String) {
         dataStore.edit { prefs ->
-            val trimmed = name.trim()
-            if (trimmed.isEmpty() || trimmed == defaultProfileName(profile)) {
-                prefs.remove(getProfileKey(PROFILE_NAME, profile))
-            } else {
-                prefs[getProfileKey(PROFILE_NAME, profile)] = trimmed
+            val trimmed = name.trim().takeUnless { it == defaultProfileName(profile) }.orEmpty()
+            val nameKey = getProfileKey(PROFILE_NAME, profile)
+            if (trimmed.isEmpty()) prefs.remove(nameKey) else prefs[nameKey] = trimmed
+            for (deploy in CsqttConstants.Profiles.MIN_INDEX..CsqttConstants.Profiles.MAX_INDEX) {
+                val linked = prefs[getProfileKey(DEPLOY_CONNECTION_PROFILE, deploy)] ?: continue
+                if (linked == profile && !prefs[getProfileKey(DEPLOY_IP, deploy)].isNullOrBlank()) {
+                    val deployName = getProfileKey(DEPLOY_SERVER_NAME, deploy)
+                    if (trimmed.isEmpty()) prefs.remove(deployName) else prefs[deployName] = trimmed
+                }
             }
         }
     }
@@ -2002,14 +2006,15 @@ private val DEPLOY_LAST_INSPECTION_PANEL = booleanPreferencesKey("deploy_last_in
         }
     }
 
-    suspend fun saveDeployServerName(name: String) {
-        val profile = activeProfile.first()
+    suspend fun saveDeployServerName(name: String, profile: Int) {
         dataStore.edit { prefs ->
             val trimmed = name.trim()
-            if (trimmed.isEmpty()) {
-                prefs.remove(getProfileKey(DEPLOY_SERVER_NAME, profile))
-            } else {
-                prefs[getProfileKey(DEPLOY_SERVER_NAME, profile)] = trimmed
+            val deployName = getProfileKey(DEPLOY_SERVER_NAME, profile)
+            if (trimmed.isEmpty()) prefs.remove(deployName) else prefs[deployName] = trimmed
+            val linked = prefs[getProfileKey(DEPLOY_CONNECTION_PROFILE, profile)]
+            if (linked != null && prefs[getProfileKey(PROFILE_REMOVED, linked)] != true) {
+                val connectionName = getProfileKey(PROFILE_NAME, linked)
+                if (trimmed.isEmpty()) prefs.remove(connectionName) else prefs[connectionName] = trimmed
             }
         }
     }

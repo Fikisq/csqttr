@@ -1128,7 +1128,7 @@ internal fun V2DeployScreen(
         var name by remember { mutableStateOf(serverName) }
         androidx.compose.material3.AlertDialog(containerColor = colors.surface, onDismissRequest = { showRenameDialog = false }, title = { Text("Название профиля") },
             text = { HappField("Название", name, { name = it }, placeholder = "Например, Финляндия") },
-            confirmButton = { androidx.compose.material3.TextButton(onClick = { serverName = name.trim(); scope.launch { settingsStore.saveDeployServerName(name) }; showRenameDialog = false }, enabled = name.isNotBlank()) { Text("Сохранить") } },
+            confirmButton = { androidx.compose.material3.TextButton(onClick = { serverName = name.trim(); scope.launch { settingsStore.saveDeployServerName(name, savedSettings.profile) }; showRenameDialog = false }, enabled = name.isNotBlank()) { Text("Сохранить") } },
             dismissButton = { androidx.compose.material3.TextButton(onClick = { showRenameDialog = false }) { Text("Отмена") } })
     }
     if(showServerMenu) androidx.compose.material3.AlertDialog(onDismissRequest = { showServerMenu = false }, title = { Text("Серверы VPS") }, text = {
