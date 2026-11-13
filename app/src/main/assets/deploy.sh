@@ -107,6 +107,7 @@ DEPLOY_PHASE="initial"
 PRESERVE_CONFIG=0
 DOCKER_CONTEXT_DIR=""
 CSQTT_DOCKER_CANDIDATE_IMAGE=""
+CSQTT_DOCKER_BASE_IMAGE=""
 
 validate_port() {
     local name="$1" value="$2"
@@ -981,6 +982,10 @@ cleanup_deploy_uploads() {
     if command -v docker >/dev/null 2>&1 && [ -n "$CSQTT_DOCKER_CANDIDATE_IMAGE" ]; then
         docker image rm "$CSQTT_DOCKER_CANDIDATE_IMAGE" >/dev/null 2>&1 || true
         CSQTT_DOCKER_CANDIDATE_IMAGE=""
+    fi
+    if [ -n "$CSQTT_DOCKER_BASE_IMAGE" ]; then
+        docker image rm "$CSQTT_DOCKER_BASE_IMAGE" >/dev/null 2>&1 || true
+        CSQTT_DOCKER_BASE_IMAGE=""
     fi
     rm -f -- "$UPLOAD_BINARY" "$UPLOAD_ENV_FILE" "$UPLOAD_OVERRIDES_FILE"
 }
@@ -2251,10 +2256,16 @@ write_csqtt_dockerfile() {
     local target="$1"
     # in-image paths: the stock ones in main mode; /opt/csqtt25 in side mode (stock's container matcher looks for
     # /usr/local/bin/csqtt in the entrypoint)
-    cat > "$target" << 'DOCKERFILE'
+    if [ -n "${2:-}" ]; then
+        printf 'FROM %s\n' "$2" > "$target"
+    else
+        cat > "$target" << 'DOCKERFILE'
 FROM alpine:3.21
 ARG CSQTT_ALPINE_MIRROR=https://dl-cdn.alpinelinux.org/alpine
 RUN set -eu; printf '%s/v3.21/main\n%s/v3.21/community\n' "$CSQTT_ALPINE_MIRROR" "$CSQTT_ALPINE_MIRROR" > /etc/apk/repositories; timeout -k 5s 60s apk add --no-cache --no-progress ca-certificates iproute2 iptables
+DOCKERFILE
+    fi
+    cat >> "$target" << 'DOCKERFILE'
 COPY csqtt @IMG_BIN@
 COPY network-up.sh @IMG_LIB@/network-up.sh
 COPY tun-recover.sh @IMG_LIB@/tun-recover.sh
@@ -2295,6 +2306,21 @@ docker_build_candidate_image() {
     return 1
 }
 
+build_from_installed_docker_image() {
+    local candidate="$1" context_dir="$2" image_id base
+    csqtt_docker_container_exists && docker_container_runs_csqtt "$CSQTT_DOCKER_CONTAINER" || return 1
+    [ "$(docker inspect --format '{{index .Config.Labels "com.csqtt.managed"}}' "$CSQTT_DOCKER_CONTAINER")" = true ] || return 1
+    image_id="$(docker inspect --format '{{.Image}}' "$CSQTT_DOCKER_CONTAINER")" || return 1
+    [[ "$image_id" =~ ^sha256:[0-9a-f]{64}$ ]] || return 1
+    docker image inspect "$image_id" >/dev/null 2>&1 || return 1
+    base="${CSQTT_DOCKER_IMAGE}-base-$$"
+    docker tag "$image_id" "$base" || return 1
+    CSQTT_DOCKER_BASE_IMAGE="$base"
+    prog 0.32 "Docker-образ: использование установленных пакетов..."
+    write_csqtt_dockerfile "$context_dir/Dockerfile" "$base" || return 1
+    timeout -k 5s 30s docker build --progress=plain --network none -t "$candidate" "$context_dir" 2>&1 | tee -a "$LOG_FILE"
+}
+
 prepare_docker_candidate() {
     local source_binary="$1" context_dir
     [ -x "$source_binary" ] || \
@@ -2309,12 +2335,13 @@ prepare_docker_candidate() {
         die "Не удалось подготовить Docker network helper" "$EXIT_PREFLIGHT_FAILED"
     write_tun_recovery_helper "$context_dir/tun-recover.sh" || \
         die "Не удалось подготовить Docker TUN recovery helper" "$EXIT_PREFLIGHT_FAILED"
-    write_csqtt_dockerfile "$context_dir/Dockerfile"
-
     CSQTT_DOCKER_CANDIDATE_IMAGE="${CSQTT_DOCKER_IMAGE}-candidate-$$"
-    if ! docker_build_candidate_image "$CSQTT_DOCKER_CANDIDATE_IMAGE" "$context_dir"; then
-        tail -n 80 "$LOG_FILE" | sed 's/^/   >> /' >&2 || true
-        die "Сборка Docker-образа CSQTT завершилась ошибкой" "$EXIT_PREFLIGHT_FAILED"
+    if ! build_from_installed_docker_image "$CSQTT_DOCKER_CANDIDATE_IMAGE" "$context_dir"; then
+        write_csqtt_dockerfile "$context_dir/Dockerfile"
+        if ! docker_build_candidate_image "$CSQTT_DOCKER_CANDIDATE_IMAGE" "$context_dir"; then
+            tail -n 80 "$LOG_FILE" | sed 's/^/   >> /' >&2 || true
+            die "Сборка Docker-образа CSQTT завершилась ошибкой" "$EXIT_PREFLIGHT_FAILED"
+        fi
     fi
     probe_docker_runtime "$CSQTT_DOCKER_CANDIDATE_IMAGE"
     remove_managed_work_dir "$DOCKER_CONTEXT_DIR" || true
