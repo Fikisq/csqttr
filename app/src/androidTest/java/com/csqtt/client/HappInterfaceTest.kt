@@ -36,6 +36,7 @@ class HappInterfaceTest {
             store.saveThemeMode("dark")
             store.saveUpdateCheckIntervalHours(UPDATE_CHECK_NEVER)
             store.saveActiveProfile(0)
+            store.saveProfileName(0, "Основной тестовый профиль")
             store.saveParticipantShowLogs(true)
             store.saveLoggingEnabled(true)
             store.saveProfileConnectionSettings(0, "203.0.113.10", 46000, "DemoPassword1234", 20)
@@ -158,7 +159,7 @@ class HappInterfaceTest {
             deploy.saveActiveProfile(25)
         }
         compose.onNodeWithText("Деплой").performClick()
-        compose.onNodeWithContentDescription("Действия веб-панели").performClick()
+        compose.onNodeWithText("https://203.0.113.125:46002/uuid").performScrollTo().performClick()
         compose.onNodeWithText("Сменить путь панели").performClick()
         compose.onNodeWithText("Смена пути панели").assertExists()
         compose.onNodeWithText("Отмена").performClick()
@@ -185,21 +186,32 @@ class HappInterfaceTest {
         compose.onNodeWithText("Владелец").performClick()
         compose.onNodeWithContentDescription("Закрыть").performClick()
         compose.onNodeWithText("Деплой").performClick()
-        compose.onNodeWithText("IP сервера").assertIsDisplayed()
-        compose.onNodeWithText("Порт SSH").assertIsDisplayed()
-        compose.onNodeWithText("Установка в Docker").assertExists()
+        compose.onNodeWithContentDescription("Адрес сервера").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithContentDescription("Порт SSH").assertIsDisplayed()
         compose.onNodeWithText("Проверить VPS").assertDoesNotExist()
-        compose.onNodeWithText("Логин веб-панели").assertIsDisplayed()
-        compose.onNodeWithText("Пароль веб-панели").assertIsDisplayed()
+        compose.onNodeWithText("Установить").assertIsDisplayed()
+        compose.onNodeWithText("Удалить").assertIsDisplayed()
         val deploy = SettingsStore(compose.activity, deployScope = true)
-        runBlocking { deploy.saveDockerInstall(true) }
-        compose.waitUntil(5000) { compose.onAllNodes(isToggleable() and isOn()).fetchSemanticsNodes().isNotEmpty() }
+        val docker = compose.onNodeWithText("Установить в Docker")
+        docker.performScrollTo().assertIsDisplayed()
+        if (!runBlocking { deploy.deploySettingsSnapshot.first { it.isLoaded }.dockerInstall }) docker.performClick()
+        compose.waitUntil(5000) { runBlocking { deploy.deploySettingsSnapshot.first { it.isLoaded }.dockerInstall } }
         compose.onNodeWithText("Логи").performClick()
-        compose.onNodeWithText("Деплой").performClick()
-        compose.onNode(isToggleable()).assertIsOn()
+        compose.onAllNodesWithText("Деплой").onLast().performClick()
+        docker.performScrollTo().assertIsDisplayed()
+        check(runBlocking { deploy.deploySettingsSnapshot.first { it.isLoaded }.dockerInstall })
+        compose.onNodeWithText("Авторизация").performScrollTo().performClick()
+        compose.onNodeWithContentDescription("Логин веб-панели").assertIsDisplayed()
+        val before = runBlocking { deploy.deploySettingsSnapshot.first { it.isLoaded } }
         compose.onNodeWithContentDescription("Сгенерировать пароль туннеля").performClick()
-        compose.waitUntil(5000) { runBlocking { deploy.deploySettingsSnapshot.first { it.isLoaded }.mainPassword.matches(Regex("[A-Za-z0-9]{16}")) } }
-        compose.onNodeWithText("Удалить с сервера").assertExists()
+        compose.onNodeWithContentDescription("Сгенерировать пароль веб-панели").performClick()
+        compose.onNodeWithText("Сохранить").performClick()
+        compose.waitUntil(5000) {
+            val after = runBlocking { deploy.deploySettingsSnapshot.first { it.isLoaded } }
+            after.mainPassword.matches(Regex("[A-Za-z0-9]{16}")) && after.mainPassword != before.mainPassword &&
+                after.webPassword.matches(Regex("[A-Za-z0-9]{16}")) && after.webPassword != before.webPassword &&
+                after.mainPassword != after.webPassword
+        }
         compose.runOnIdle { runBlocking { check(store.uiOwnerMode.first()) } }
         screenshot("happ-deploy.png")
     }
@@ -243,7 +255,7 @@ class HappInterfaceTest {
             check(store.vkHashMode.first() == "manual")
         }
         compose.onNodeWithText("Подкл.").performClick()
-        compose.onNodeWithText("Профиль 1").performClick()
+        compose.onNodeWithText("Основной тестовый профиль").performClick()
         compose.onNodeWithText("Туннель").performClick()
         compose.waitUntil(5000) { compose.onAllNodesWithText("203.0.113.10").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText("203.0.113.10").assertIsDisplayed()
