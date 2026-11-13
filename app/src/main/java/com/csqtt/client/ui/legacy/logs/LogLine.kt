@@ -142,7 +142,8 @@ internal fun LogLine(
         else -> LogLevel.LOG
     }
 
-    val (rawTag, body) = parseMessageTag(entry.message, level)
+    val (rawTag, rawBody) = parseMessageTag(entry.message, level)
+    val body = if (entry.sessionId == 0L) rawBody else "Подключение #${entry.sessionId} · $rawBody"
     val isError = isErrorLog(rawTag, level, entry.isError)
     val isGreen = isGreenLog(rawTag, level, isError)
 

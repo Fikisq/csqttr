@@ -44,7 +44,11 @@ data class LogEntry(
     val priority: Int = 99, 
     val isError: Boolean = false,
     val level: LogLevel? = null,
-)
+    val sessionId: Long = 0L,
+) {
+    val listKey: String get() = "$sessionId:$key"
+    val exportMessage: String get() = if (sessionId == 0L) message else "[Подключение #$sessionId] $message"
+}
 
 private val LOG_STICKERS = Regex("[\\p{So}\\p{Sk}\\uFE0F\\u200D]")
 private val EMPTY_LOG_TAG = Regex("\\[\\s*]")
@@ -146,7 +150,7 @@ object TunnelManager {
     }
 
     private data class PendingLog(
-        val identity: ProcessIdentity?,
+        val sessionId: Long,
         val key: String,
         var message: String,
         val priority: Int,
@@ -156,12 +160,20 @@ object TunnelManager {
     )
 
     private const val LOG_UI_FLUSH_MS = 120L
+    private const val LOG_BACKGROUND_FLUSH_MS = 1_000L
     private const val MAX_LOG_ENTRIES = 100
     private const val MAX_PENDING_LOGS = 128
     private const val MAX_LOG_MESSAGE_LENGTH = 4_096
     private val pendingLogLock = Any()
     private val pendingLogs = LinkedHashMap<String, PendingLog>()
-    private val pendingLogFlushScheduled = AtomicBoolean(false)
+    private var pendingLogFlushJob: Job? = null
+    private var pendingLogFlushImmediate = false
+    private var uiForeground = false
+
+    fun setUiForeground(foreground: Boolean) = synchronized(pendingLogLock) {
+        uiForeground = foreground
+        if (foreground && pendingLogs.isNotEmpty()) scheduleLogFlushLocked(immediate = true)
+    }
 
     @Volatile
     private var wrapAuthTimeoutCount = 0
@@ -899,44 +911,49 @@ object TunnelManager {
         if (!isLoggingEnabled && !TunnelLogPolicy.isAllowedWhenInactiveLogging(key, isError, level)) return
         val cleanMessage = maskOwnerHashes(withoutLogStickers(message), ownerHashes).take(MAX_LOG_MESSAGE_LENGTH)
         if (cleanMessage.isEmpty()) return
-        val pendingKey = "${identity?.generation ?: 0L}:$key:$priority:$isError:${level?.name.orEmpty()}"
+        val sessionId = identity?.generation ?: 0L
+        val pendingKey = "$sessionId:$key:$priority:$isError:${level?.name.orEmpty()}"
         synchronized(pendingLogLock) {
+            if (identity != null && !isCurrent(identity)) return
             val pending = pendingLogs[pendingKey]
             if (pending == null) {
                 if (pendingLogs.size >= MAX_PENDING_LOGS) {
                     pendingLogs.remove(pendingLogs.entries.first().key)
                 }
-                pendingLogs[pendingKey] = PendingLog(identity, key, cleanMessage, priority, isError, level, 1)
+                pendingLogs[pendingKey] = PendingLog(sessionId, key, cleanMessage, priority, isError, level, 1)
             } else {
                 pending.message = cleanMessage
                 pending.count += 1
             }
-            scheduleLogFlushLocked()
+            scheduleLogFlushLocked(immediate = isError || pendingLogs.size >= MAX_PENDING_LOGS)
         }
     }
 
-    private fun scheduleLogFlushLocked() {
-        if (!pendingLogFlushScheduled.compareAndSet(false, true)) return
-        scope.launch(Dispatchers.Main) {
-            delay(LOG_UI_FLUSH_MS)
-            flushPendingLogs()
+    private fun scheduleLogFlushLocked(immediate: Boolean) {
+        if (pendingLogFlushJob != null) {
+            if (!immediate || pendingLogFlushImmediate) return
+            pendingLogFlushJob?.cancel()
         }
-    }
-
-    private fun flushPendingLogs() {
-        val batch = synchronized(pendingLogLock) {
-            val values = pendingLogs.values.toList()
-            pendingLogs.clear()
-            pendingLogFlushScheduled.set(false)
-            values
+        pendingLogFlushImmediate = immediate
+        val waitMs = when {
+            immediate -> 0L
+            uiForeground -> LOG_UI_FLUSH_MS
+            else -> LOG_BACKGROUND_FLUSH_MS
         }
-        batch.forEach(::applyPendingLog)
+        pendingLogFlushJob = scope.launch(Dispatchers.Main) {
+            if (waitMs > 0L) delay(waitMs)
+            val batch = synchronized(pendingLogLock) {
+                if (pendingLogFlushJob !== coroutineContext[Job]) return@launch
+                pendingLogFlushJob = null
+                pendingLogFlushImmediate = false
+                pendingLogs.values.toList().also { pendingLogs.clear() }
+            }
+            batch.forEach(::applyPendingLog)
+        }
     }
 
     private fun applyPendingLog(pending: PendingLog) {
-        val identity = pending.identity
-        if (identity != null && !isCurrent(identity)) return
-        val index = logs.indexOfFirst { it.key == pending.key }
+        val index = logs.indexOfFirst { it.key == pending.key && it.sessionId == pending.sessionId }
         if (pending.isError && index == -1) {
             unreadErrorCount.value++
         }
@@ -959,6 +976,7 @@ object TunnelManager {
                         pending.priority,
                         pending.isError,
                         pending.level,
+                        pending.sessionId,
                     )
                 )
             }
@@ -971,6 +989,7 @@ object TunnelManager {
                     pending.priority,
                     pending.isError,
                     pending.level,
+                    pending.sessionId,
                 )
             )
         }
@@ -987,7 +1006,7 @@ object TunnelManager {
             lifecycleState.accepts(identity.ticket)
 
     private fun insertSorted(entry: LogEntry) {
-        val comparator = compareBy<LogEntry>({ it.priority }, { if (it.isError) 1 else 0 }, { it.key })
+        val comparator = compareBy<LogEntry>({ it.sessionId }, { it.priority }, { if (it.isError) 1 else 0 }, { it.key })
         var inserted = false
         for (i in logs.indices) {
             if (comparator.compare(entry, logs[i]) < 0) {
@@ -2073,10 +2092,13 @@ object TunnelManager {
     fun clearLogs() {
         synchronized(pendingLogLock) {
             pendingLogs.clear()
-        }
-        unreadErrorCount.value = 0
-        scope.launch(Dispatchers.Main) {
-            logs.clear()
+            pendingLogFlushJob?.cancel()
+            pendingLogFlushJob = null
+            pendingLogFlushImmediate = false
+            scope.launch(Dispatchers.Main) {
+                logs.clear()
+                unreadErrorCount.value = 0
+            }
         }
         if (!running.value) {
             activeWorkers.value = 0

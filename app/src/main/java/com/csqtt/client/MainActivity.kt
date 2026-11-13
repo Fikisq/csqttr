@@ -119,6 +119,7 @@ class MainActivity : ComponentActivity() {
     override fun onStart() {
         super.onStart()
         activeActivities++
+        TunnelManager.setUiForeground(true)
         renderUi = true
         ManlCaptchaWebViewManager.checkAndShowPendingCaptcha(this)
     }
@@ -126,6 +127,7 @@ class MainActivity : ComponentActivity() {
     override fun onStop() {
         renderUi = false
         activeActivities = (activeActivities - 1).coerceAtLeast(0)
+        TunnelManager.setUiForeground(isForeground)
         super.onStop()
     }
 

@@ -167,7 +167,7 @@ private fun V2LogsTerminal() {
             ) {
                 items(
                     items = currentLogs,
-                    key = { it.key },
+                    key = { it.listKey },
                     contentType = { "log_line" },
                 ) { entry ->
                     V2LogLine(entry)
@@ -210,7 +210,7 @@ private fun V2LogsTerminal() {
                                 context.showRaisedToast("Логи пусты", android.widget.Toast.LENGTH_SHORT)
                                 return@clickable
                             }
-                            val text = currentLogs.joinToString("\n") { "${it.message} (x${it.count})" }
+                            val text = currentLogs.joinToString("\n") { "${it.exportMessage} (x${it.count})" }
                             val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                             clipboard.setPrimaryClip(ClipData.newPlainText("CSQTT Logs", text))
                             context.showRaisedToast("Логи скопированы", android.widget.Toast.LENGTH_SHORT)
@@ -316,7 +316,8 @@ private fun V2LogLine(
     val colors = V2Theme.colors
     val level = effectiveLogLevel(entry)
 
-    val (rawTag, body) = parseMessageTag(entry.message, level)
+    val (rawTag, rawBody) = parseMessageTag(entry.message, level)
+    val body = if (entry.sessionId == 0L) rawBody else "Подключение #${entry.sessionId} · $rawBody"
     val isError = isErrorLog(rawTag, level, entry.isError)
     val light = colors.background.luminance() > 0.5f
     val errorColor = if(light) Color(0xFFB32626) else Color(0xFFFF897D)

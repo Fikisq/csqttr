@@ -131,7 +131,7 @@ private fun LogsTerminal() {
             ) {
                 items(
                     items = currentLogs,
-                    key = { it.key },
+                    key = { it.listKey },
                     contentType = { "log_line" },
                 ) { entry ->
                     LogLine(entry)
@@ -148,7 +148,7 @@ private fun LogsTerminal() {
         ) {
             IconButton(
                 onClick = {
-                    val text = currentLogs.joinToString("\n") { "${it.message} (x${it.count})" }
+                    val text = currentLogs.joinToString("\n") { "${it.exportMessage} (x${it.count})" }
                     val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                     clipboard.setPrimaryClip(ClipData.newPlainText("CSQTT Logs", text))
                     context.showRaisedToast(copiedMessage, Toast.LENGTH_SHORT)
