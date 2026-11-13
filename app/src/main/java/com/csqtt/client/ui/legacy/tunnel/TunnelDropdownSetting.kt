@@ -221,6 +221,7 @@ internal fun TunnelDropdownMenu(
         expanded = expanded,
         onDismissRequest = onDismiss,
         modifier = Modifier.widthIn(min = 160.dp, max = 220.dp),
+        shape = CsqttShapes.Small,
         containerColor = MaterialTheme.colorScheme.surface,
         tonalElevation = 0.dp,
     ) {
