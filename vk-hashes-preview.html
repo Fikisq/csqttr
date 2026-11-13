@@ -48,8 +48,6 @@ button, select, input { font: inherit; }
 .nav strong { color: var(--fg); }
 .scrim { position: absolute; inset: 30px 0 0; background: #0007; }
 .sheet { position: absolute; inset: auto 0 0; padding: 9px 15px 18px; background: var(--surface); border-radius: 24px 24px 0 0; border-top: 1px solid var(--line); min-height: 462px; max-height: 620px; display: flex; flex-direction: column; }
-[data-design="classic"][data-panel="hashes"] .sheet { inset: 117px 12px auto; min-height: 0; border: 1px solid var(--line); border-radius: 26px; padding-top: 15px; }
-[data-design="classic"][data-panel="hashes"] .handle { display: none; }
 .handle { width: 34px; height: 4px; border-radius: 4px; background: var(--line); margin: 0 auto 10px; }
 .sheet-title { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
 .sheet-title h3 { margin: 0; font-size: 18px; }
@@ -81,34 +79,73 @@ button { cursor: pointer; }
 .summary label { color: var(--muted); }
 .select-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 12px; }
 .select-row select { padding: 7px; color: var(--fg); border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
-.own-field { display: grid; gap: 3px; padding: 7px 8px; border-radius: 11px; background: var(--field); font-size: 11px; color: var(--muted); }
-.own-field input[type="text"] { min-height: 30px; background: var(--surface); }
-.own-field small { color: var(--muted); font-size: 11px; }
-.phone input[data-check="valid"] { --check-color: #54bc73; }
-.phone input[data-check="invalid"] { --check-color: #ef7777; }
-[data-theme="light"] .phone input[data-check="valid"] { --check-color: #26703d; }
-[data-theme="light"] .phone input[data-check="invalid"] { --check-color: #ad2929; }
-.phone input[data-check] {
-  border-color: var(--check-color);
-  box-shadow: 0 0 0 1px var(--check-color);
-}
 .account button:first-child { flex: 1; }
 .phone button:disabled { opacity: .55; cursor: default; }
 .hash-footer > button { flex: 1; }
 
+
+[data-design="modern"] .phone { --bg:#0b0b0c; --surface:#131315; --field:#131315; --line:#36363b; --fg:#f8f8fa; --muted:#c4c5cb; --accent:#1565d8; }
+[data-design="old"] .phone { --bg:#101216; --surface:#191c22; --field:#191c22; --line:#343942; --fg:#f1f3f7; --muted:#aeb3bd; --accent:#1769e2; }
+[data-theme="light"] [data-design="modern"] .phone { --bg:#fdfdfe; --surface:#fff; --field:#f2f2f4; --line:#d9dce2; --fg:#161a21; --muted:#4f5868; --accent:#125ecb; }
+[data-theme="light"] [data-design="old"] .phone { --bg:#e5e8ee; --surface:#f0f2f6; --field:#e1e5ed; --line:#c0c0cb; --fg:#151519; --muted:#444958; --accent:#1769e2; }
+[data-panel="hashes"] .sheet { inset: 50% 4% auto; transform: translateY(-50%); border: 1px solid var(--line); border-radius: 24px; max-height: calc(100% - 48px); min-height: 0; padding: 12px 16px 16px; }
+[data-design="classic"][data-panel="hashes"] .sheet { border-radius: 34px; }
+[data-panel="hashes"] .handle { display: none; }
+[data-panel="hashes"] .sheet-content { margin-block: 8px 10px; }
+[data-panel="hashes"] .modes button { border-radius: 999px; }
+[data-design="classic"] .hash-footer { display: grid; gap: 8px; }
+[data-design="classic"] .hash-footer button { border-radius: 999px; min-height: 46px; }
+.source-list { gap: 8px; }
+.own-field { display: grid; align-items: center; grid-template-columns: auto minmax(0,1fr); column-gap: 10px; height: 50px; padding: 0 10px; border: 1px solid var(--line); border-radius: 14px; color: var(--accent); background: var(--field); font-size: 13px; }
+.phone .own-field input { height: 100%; min-width: 0; padding: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
+.own-field:focus-within { outline: 1px solid var(--accent); }
+.own-field[data-check="valid"] { border-color: #728879; }
+.own-field[data-check="invalid"] { border-color: #936f74; }
+[data-theme="light"] .own-field[data-check="valid"] { border-color: #507859; }
+[data-theme="light"] .own-field[data-check="invalid"] { border-color: #a05d65; }
+[data-design="classic"] .own-field { border-radius: 999px; height: 55px; padding-inline: 15px; color: var(--muted); background: var(--surface); }
+[data-design="classic"] .own-field:not([data-filled]) > span { display: none; }
+[data-design="classic"] .own-field:not([data-filled]) { grid-template-columns: minmax(0,1fr) auto; }
+[data-design="classic"] .own-field[data-filled] { position: relative; grid-template-columns: minmax(0,1fr) auto; }
+[data-design="classic"] .own-field[data-filled] > span { position: absolute; top: -8px; left: 17px; padding-inline: 3px; background: var(--surface); font-size: 11px; }
+.own-field:has(.hash-icons) { grid-template-columns: auto minmax(0,1fr) auto; }
+.hash-icons { display: flex; gap: 3px; }
+.phone .hash-icons button { display: grid; place-items: center; min-height: 30px; width: 28px; padding: 0; border: 0; border-radius: 9px; background: transparent; color: var(--muted); }
+.phone .hash-icons button svg { width: 17px; height: 17px; }
+[data-design="classic"] .hash-icons button:first-child { color: var(--accent); }
+[data-design="classic"] .hash-icons button:last-child { color: #936f74; }
+[data-preview="lines"] [data-design="classic"] { display: none; }
+[data-preview="lines"] .phone { height: auto; min-height: 690px; }
+[data-preview="lines"] .nav { display: none; }
+.indicator-card { background: var(--surface); border-radius: 24px; padding: 12px; display: grid; gap: 13px; }
+.indicator-group { display: grid; grid-template-columns: 1fr minmax(0,1.15fr); gap: 6px 10px; align-items: start; }
+.indicator-title { font-size: 14px; font-weight: 500; margin: 12px 0 0; }
+.indicator-options { grid-column: 2; border: 1px solid var(--line); border-radius: 9px; overflow: hidden; background: var(--surface); }
+.phone .indicator-value, .phone .indicator-option { display: grid; gap: 5px; width: 100%; text-align: left; font-size: 13px; font-weight: 500; }
+.phone .indicator-value { padding: 8px 11px; border-radius: 999px; background: var(--field); }
+.phone .indicator-option { padding: 7px 11px; border: 0; border-radius: 0; background: var(--surface); }
+.phone .indicator-option:hover, .phone .indicator-option[aria-current="true"] { background: color-mix(in srgb, var(--line) 35%, var(--surface)); }
+.indicator-caption { display: flex; align-items: center; justify-content: space-between; gap: 4px; }
+.indicator-caption b { font-size: 11px; color: var(--muted); font-weight: 500; }
+.indicator-track { display: block; height: 3px; border-radius: 99px; background: var(--line); overflow: hidden; }
+.indicator-fill { display: block; height: 100%; width: var(--fill,100%); background: var(--signal); border-radius: 99px; }
+.indicator-card { --green:#58b96f; --yellow:#d4ad42; --red:#eb6670; }
+[data-theme="light"] .indicator-card { --green:#27874c; --yellow:#957000; --red:#c53f49; }
 </style>
 </head>
 <body>
 <header>
   <div><h1>Ручные хеши и аккаунты VK</h1><p>Интерактивный макет · демонстрационные данные и статусы проверки</p></div>
   <div class="controls">
+
+    <label>Экран<select id="preview"><option value="hashes">Ручные хеши</option><option value="accounts">Аккаунты VK</option><option value="lines">Цветовые полосы</option></select></label>
     <label>Тема<select id="theme"><option value="dark">Тёмная</option><option value="light">Светлая</option></select></label>
     <label>Заполнить шесть полей<select id="fixture"><option value="">Пустые поля</option><option value="links">Шесть ссылок</option><option value="hashes">Шесть хешей</option><option value="mixed">Три ссылки и три хеша</option></select></label>
     <label>Масштаб <output id="zoom-value">76%</output><input type="range" id="zoom" min="45" max="115" value="76"></label>
   </div>
 </header>
 <main class="viewport">
-  <div class="board" id="board" data-theme="dark">
+  <div class="board" id="board" data-theme="dark" data-preview="hashes">
     <article class="example" data-design="classic"><h2>CSQTT 2.5.0</h2></article>
     <article class="example" data-design="modern"><h2>CSQTTR 2.5.3</h2></article>
     <article class="example" data-design="old"><h2>Старый</h2></article>
@@ -130,6 +167,7 @@ button { cursor: pointer; }
         <button type="button" data-action="open">Настроить хеши</button>
         <button type="button" data-action="manage" hidden>Аккаунты VK</button>
       </div>
+      <div class="indicator-card" hidden></div>
     </div>
     <div class="nav" aria-hidden="true"><span>Подкл.</span><strong>Туннель</strong><span>Деплой</span><span>Логи</span><span>Маршрут</span></div>
     <div class="scrim"></div>
@@ -151,6 +189,34 @@ button { cursor: pointer; }
 const board = document.querySelector("#board");
 const modeNames = {manual:"Ручные хеши",api:"Авто API",vk:"Авто ВК"};
 const checks = ["valid", "invalid", null];
+
+const indicators = [
+  {title:"Режим хешей", selected:0, options:[["Ручные хеши","green"],["Авто API","green"],["Авто ВК","yellow"]]},
+  {title:"Режим кредов", selected:0, options:[["Авто","green"],["Капча","red"],["Авто ВК","yellow"]]},
+  {title:"Режим SRTP", selected:2, options:[["Авто","green"],["DTLS-SRTP","green"],["WRAP-SRTP","green",50]]},
+];
+const hashIcons = '<span class="hash-icons"><button type="button" data-action="paste" aria-label="Вставить хеш"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M8 5H5v16h14V5h-3M9 7h6V5a3 3 0 0 0-6 0z"/></svg></button><button type="button" data-action="clear" aria-label="Очистить хеш"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M4 6h16M9 6V4h6v2M6 6l1 14h10l1-14M10 9v8m4-8v8"/></svg></button></span>';
+
+function indicatorStrip([label, tone, fill=100]) {
+  return '<span class="indicator-track" aria-hidden="true"><span class="indicator-fill" style="--signal:var(--' +
+    tone + ');--fill:' + fill + '%"></span></span>';
+}
+
+function indicatorsPanel(view) {
+  return indicators.map(({title, selected, options}, group) => {
+    const index = view.indicatorSelection[group] ?? selected;
+    const expanded = !view.collapsedIndicators.has(group);
+    return '<section class="indicator-group"><h4 class="indicator-title">' + title + '</h4>' +
+      '<button class="indicator-value" type="button" data-action="toggle-indicator" data-group="' + group +
+      '" aria-label="' + title + ': ' + options[index][0] + '" aria-expanded="' + expanded + '">' +
+      '<span class="indicator-caption">' + options[index][0] + '<b aria-hidden="true">⌄</b></span>' +
+      indicatorStrip(options[index]) + '</button>' +
+      (expanded ? '<div class="indicator-options">' + options.map((option, i) =>
+        '<button class="indicator-option" type="button" data-action="pick-indicator" data-group="' + group +
+        '" data-index="' + i + '" aria-current="' + (i === index) + '">' + option[0] + indicatorStrip(option) + '</button>'
+      ).join("") + '</div>' : "") + '</section>';
+  }).join("");
+}
 const sampleHashes = Array.from({length:6}, (_, i) => "DemoVKHash-1234567" + (i + 1));
 const ownerHashes = ["DemoOwnerHash-12345671", "DemoOwnerHash-12345672"];
 let accounts = [1, 2];
@@ -160,7 +226,7 @@ let nextAccount = 3;
 const views = [...board.querySelectorAll(".example")].map(example => {
   example.append(document.querySelector("#screen").content.cloneNode(true));
   return {example, mode:"manual", panel:"hashes", returnPanel:"tunnel", source:"owner", savedSource:"owner",
-    fields:Array(6).fill(""), checked:false, removing:null};
+    fields:Array(6).fill(""), checked:false, removing:null, indicatorSelection:{}, collapsedIndicators:new Set()};
 });
 
 function escape(value) {
@@ -190,10 +256,18 @@ function hashRows(view) {
     const short = hash && hash.length < 16;
     const check = view.checked && hash.length >= 16 ? checks[index % 3] : null;
     const description = check === "valid" ? "Хеш активен" : "Хеш недействителен";
-    const checkAttrs = check ? ' data-check="' + check + '" aria-description="' + description + '"' : '';
-    return '<label class="own-field"><span>Хеш ' + (index + 1) + '</span><input type="text" data-field="' + index +
-      '" value="' + escape(value) + '" placeholder="Ссылка VK или хеш" spellcheck="false"' + (fromOwner ? ' readonly' : '') + checkAttrs + '>' +
-      (short ? '<small>Минимум 16 символов</small>' : "") + '</label>';
+
+    const classic = view.example.dataset.design === "classic";
+    const number = index + 1;
+    const title = classic ? "VK Хеш " + number + (index === 0 && !fromOwner ? " *" : "") : String(number);
+    const placeholder = classic ? title : "Ссылка VK или хеш · от 16 знаков";
+    const checkAttrs = check ? ' data-check="' + check + '"' : '';
+    const checkDescription = check ? ' aria-description="' + description + '"' : '';
+    return '<div class="own-field"' + checkAttrs + (value ? ' data-filled' : '') + '><span aria-hidden="true">' + title + '</span>' +
+      '<input type="text" data-field="' + index + '" aria-label="Хеш ' + number +
+      '" value="' + escape(value) + '" placeholder="' + placeholder + '" spellcheck="false"' +
+      (fromOwner ? ' readonly' : '') + checkDescription + '>' + (fromOwner ? '' : hashIcons) + '</div>' +
+      (short ? '<small class="note">Минимум 16 символов</small>' : '');
   }).join("");
 }
 
@@ -226,7 +300,12 @@ function render(view) {
   root.dataset.panel = view.panel;
   const isClassic = root.dataset.design === "classic";
   const inHashes = view.panel === "hashes";
-  root.querySelector(".scrim").hidden = root.querySelector(".sheet").hidden = view.panel === "tunnel";
+  const showIndicators = view.panel === "lines";
+  root.querySelector(".summary").hidden = showIndicators;
+  const indicatorCard = root.querySelector(".indicator-card");
+  indicatorCard.hidden = !showIndicators;
+  if (showIndicators) indicatorCard.innerHTML = indicatorsPanel(view);
+  root.querySelector(".scrim").hidden = root.querySelector(".sheet").hidden = view.panel === "tunnel" || showIndicators;
   root.querySelector(".hash-footer").hidden = !inHashes;
   root.querySelector(".sheet-title h3").textContent = inHashes ? isClassic ? "VK Хеши" : "Ручные хеши" :
     view.removing === null ? "Аккаунты VK" : "Удалить аккаунт из CSQTT?";
@@ -247,7 +326,7 @@ for (const view of views) {
     if (event.target.dataset.field === undefined) return;
     view.fields[Number(event.target.dataset.field)] = event.target.value;
     view.checked = false;
-    view.example.querySelectorAll("input[data-check]").forEach(input => {
+    view.example.querySelectorAll("[data-check]").forEach(input => {
       input.removeAttribute("data-check");
       input.removeAttribute("aria-description");
     });
@@ -274,6 +353,25 @@ for (const view of views) {
         break;
       case "save": view.fields = view.fields.map(normalize); view.savedSource = view.source; view.panel = "tunnel"; break;
       case "check": if (view.source === "own") view.fields = view.fields.map(normalize); view.checked = true; break;
+      case "toggle-indicator": {
+        const group = Number(button.dataset.group);
+        if (view.collapsedIndicators.has(group)) view.collapsedIndicators.delete(group);
+        else view.collapsedIndicators.add(group);
+        break;
+      }
+      case "pick-indicator": {
+        const group = Number(button.dataset.group);
+        view.indicatorSelection[group] = index;
+        view.collapsedIndicators.add(group);
+        break;
+      }
+      case "paste":
+      case "clear": {
+        const input = button.closest(".own-field").querySelector("input");
+        view.fields[Number(input.dataset.field)] = button.dataset.action === "paste" ? sampleHashes[Number(input.dataset.field)] : "";
+        view.checked = false;
+        break;
+      }
       case "source": view.source = button.dataset.source; view.checked = false; break;
       case "manage": view.returnPanel = view.panel; view.panel = "accounts"; break;
       case "select-account": activeAccount = index; view.panel = view.returnPanel; views.forEach(render); return;
@@ -307,7 +405,22 @@ document.querySelector("#fixture").addEventListener("change", e => {
     render(view);
   }
 });
-views.forEach(render);
+const previewControl = document.querySelector("#preview");
+function showPreview(panel) {
+  previewControl.value = panel;
+  board.dataset.preview = panel;
+  document.querySelector("#fixture").closest("label").hidden = panel !== "hashes";
+  for (const view of views) {
+    view.mode = panel === "accounts" ? "api" : "manual";
+    view.panel = panel;
+    view.returnPanel = "tunnel";
+    view.removing = null;
+    render(view);
+  }
+}
+previewControl.addEventListener("change", event => showPreview(event.target.value));
+const initialPanel = new URLSearchParams(location.search).get("view");
+showPreview(["hashes", "accounts", "lines"].includes(initialPanel) ? initialPanel : "hashes");
 </script>
 </body>
 </html>
