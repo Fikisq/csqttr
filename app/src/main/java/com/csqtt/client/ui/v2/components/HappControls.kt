@@ -33,6 +33,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.csqtt.client.ui.legacy.ModeIndicator
 import com.csqtt.client.ui.v2.design.V2Theme
 
 @Composable
@@ -127,7 +128,7 @@ internal fun HappHelp(title: String, text: String) {
 
 @Composable
 internal fun HappChoice(label: String, value: String, options: List<String>, onSelect: (String) -> Unit,
-    modifier: Modifier = Modifier, tone: Color? = null, help: String? = null, enabled: Boolean = true, compact: Boolean = false,
+    modifier: Modifier = Modifier, indicators: Map<String, ModeIndicator> = emptyMap(), help: String? = null, enabled: Boolean = true, compact: Boolean = false,
     valueMaxLines: Int = 1, labelContent: (@Composable () -> Unit)? = null,
     shape: androidx.compose.ui.graphics.Shape = RoundedCornerShape(14.dp)) {
     val c = V2Theme.colors
@@ -144,13 +145,34 @@ internal fun HappChoice(label: String, value: String, options: List<String>, onS
                         Text(value, modifier = Modifier.weight(1f), fontSize = V2TextSizes.Body, maxLines = valueMaxLines, overflow = TextOverflow.Ellipsis, color = c.textPrimary)
                         Icon(Icons.Default.KeyboardArrowDown, null, tint = c.textSecondary, modifier = Modifier.size(18.dp))
                     }
-                    if (tone != null) Box(Modifier.padding(top = 4.dp).fillMaxWidth().height(3.dp).background(tone, RoundedCornerShape(2.dp)))
+                    indicators[value]?.let { ChoiceIndicator(it, c.outline) }
                 }
             }
             DropdownMenu(expanded, { expanded = false }, containerColor = c.surface) {
-                options.forEach { option -> DropdownMenuItem(text = { Text(option, fontSize = V2TextSizes.Body) }, onClick = { expanded = false; onSelect(option) }) }
+                options.forEach { option ->
+                    DropdownMenuItem(
+                        text = {
+                            Column {
+                                Text(option, fontSize = V2TextSizes.Body)
+                                indicators[option]?.let { ChoiceIndicator(it, c.outline) }
+                            }
+                        },
+                        onClick = {
+                            expanded = false
+                            onSelect(option)
+                        },
+                    )
+                }
             }
         }
+    }
+}
+
+@Composable
+private fun ChoiceIndicator(indicator: ModeIndicator, track: Color) {
+    val shape = RoundedCornerShape(2.dp)
+    Box(Modifier.padding(top = 4.dp).fillMaxWidth().height(3.dp).background(track, shape)) {
+        Box(Modifier.fillMaxWidth(indicator.progress).fillMaxHeight().background(indicator.color, shape))
     }
 }
 
