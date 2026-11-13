@@ -42,6 +42,45 @@ class DesignCompatibilityTest {
         }
     }
 
+    @Test fun tunnelProfilePickerUpdatesTheSelectionOnConnection() {
+        val store = SettingsStore(compose.activity)
+        val previousDesign = runBlocking { store.uiDesign.first() }
+        val previousProfile = runBlocking { store.activeProfile.first() }
+        val previousOwner = runBlocking { store.uiOwnerMode.first() }
+        val first = runBlocking { checkNotNull(store.findFirstFreeProfile()) }
+        var second: Int? = null
+        try {
+            runBlocking {
+                store.saveUiDesign("v2")
+                store.saveUiOwnerMode(false)
+                store.saveProfileConnectionSettings(first, "203.0.113.216", 46000, "FixturePasswordA", 20)
+                store.saveProfileName(first, "Picker fixture A")
+                second = checkNotNull(store.findFirstFreeProfile())
+                val target = checkNotNull(second)
+                store.saveProfileConnectionSettings(target, "203.0.113.217", 46000, "FixturePasswordB", 20)
+                store.saveProfileName(target, "Picker fixture B")
+                store.saveActiveProfile(first)
+            }
+            val target = checkNotNull(second)
+            compose.onNodeWithText("Туннель").performClick()
+            compose.onNodeWithText("Picker fixture A").performClick()
+            compose.onNodeWithText("Picker fixture B").performScrollTo().performClick()
+            compose.waitUntil(5000) { runBlocking { store.activeProfile.first() == target } }
+            compose.onNodeWithText("203.0.113.217").assertIsDisplayed()
+            compose.onNodeWithText("Подкл.").performClick()
+            compose.waitForIdle()
+            assertEquals(target, runBlocking { store.activeProfile.first() })
+        } finally {
+            runBlocking {
+                store.clearProfile(first)
+                second?.let { store.clearProfile(it) }
+                store.saveActiveProfile(previousProfile)
+                store.saveUiDesign(previousDesign)
+                store.saveUiOwnerMode(previousOwner)
+            }
+        }
+    }
+
     @Test fun threeDesignsShareSettingsAndPreserveSelectedConnection() {
         val store = SettingsStore(compose.activity)
         val oldDesign = runBlocking { store.uiDesign.first() }
