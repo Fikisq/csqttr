@@ -24,6 +24,7 @@ class DesignCompatibilityTest {
                 store.saveProfileConnectionSettings(slot, "203.0.113.61", 46123, "TransferFixture61", 40)
                 store.saveProfileName(slot, "Clipboard transfer fixture")
                 store.saveActiveProfile(slot)
+                store.saveAppRoutingLists("com.example.before", "", false)
             }
             for (design in listOf("v2", "old", "classic")) {
                 runBlocking { store.saveUiDesign(design) }
@@ -32,6 +33,7 @@ class DesignCompatibilityTest {
                 compose.waitUntil(10_000) { settingsButton.fetchSemanticsNodes().isNotEmpty() }
                 settingsButton.onFirst().performClick()
                 compose.onNodeWithText("Импорт / экспорт").performScrollTo().performClick()
+                compose.runOnIdle { clipboard.clearPrimaryClip() }
                 compose.onNodeWithText("Копировать в буфер").performScrollTo().performClick()
                 compose.waitUntil(5000) {
                     compose.runOnIdle {
@@ -52,7 +54,7 @@ class DesignCompatibilityTest {
                     assertEquals(46123, restored.serverPeerPort)
                     check(restored.connectionPassword == "TransferFixture61")
                     assertEquals(40, restored.workersPerHash)
-                    assertEquals("", store.excludedApps.first())
+                    assertEquals("com.example.before", store.excludedApps.first())
                     assertEquals(slot, store.activeProfile.first())
                     check(untouched == store.readProfileConnectionSettings(previous))
                 }
