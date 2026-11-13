@@ -450,14 +450,16 @@ internal fun SettingsTabContent(
     }
 
     CsqttScreen {
-        Box(
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             Column(
                 modifier = Modifier
-                    .fillMaxSize()
+                    .fillMaxWidth()
+                    .weight(1f, fill = false)
                     .verticalScroll(scrollState),
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
@@ -888,31 +890,6 @@ internal fun SettingsTabContent(
                 }
 
             }
-
-            if (!participantMode) {
-                OutlinedButton(
-                    onClick = { showSecretsDialog = true },
-                    modifier = Modifier.fillMaxWidth().height(48.dp),
-                    shape = CsqttShapes.Pill,
-                    colors = ButtonDefaults.outlinedButtonColors(
-                        containerColor = Color.Transparent,
-                        contentColor = MaterialTheme.colorScheme.onSurface,
-                    ),
-                    border = BorderStroke(
-                        1.dp,
-                        if (passwordRequiredError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.outline.copy(alpha = 0.4f),
-                    ),
-                    contentPadding = PaddingValues(horizontal = 8.dp),
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Key,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp),
-                        tint = Color.Black,
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    Text("Авторизация", fontWeight = FontWeight.Bold, maxLines = 1)
-                }
             }
 
             if (showHashModeGeneralDialog) {
@@ -1000,9 +977,34 @@ internal fun SettingsTabContent(
                     onDismiss = { showSecretsDialog = false },
                 )
             }
+
+            if (!participantMode) {
+                OutlinedButton(
+                    onClick = { showSecretsDialog = true },
+                    modifier = Modifier.fillMaxWidth().height(48.dp),
+                    shape = CsqttShapes.Pill,
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        containerColor = Color.Transparent,
+                        contentColor = MaterialTheme.colorScheme.onSurface,
+                    ),
+                    border = BorderStroke(
+                        1.dp,
+                        if (passwordRequiredError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.outline.copy(alpha = 0.4f),
+                    ),
+                    contentPadding = PaddingValues(horizontal = 8.dp),
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Key,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                        tint = Color.Black,
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text("Авторизация", fontWeight = FontWeight.Bold, maxLines = 1)
+                }
+            }
         }
     }
-}
 }
 
 @Composable

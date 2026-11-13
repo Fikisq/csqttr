@@ -153,6 +153,43 @@ class DesignCompatibilityTest {
         }
     }
 
+    @Test fun classicTunnelAuthorizationIsVisibleWithoutScrolling() {
+        val store = SettingsStore(compose.activity)
+        val oldDesign = runBlocking { store.uiDesign.first() }
+        val oldProfile = runBlocking { store.activeProfile.first() }
+        val slot = runBlocking { checkNotNull(store.findFirstFreeProfile()) }
+        try {
+            runBlocking {
+                store.saveProfileConnectionSettings(slot, "203.0.113.44", 46000, "TunnelFixture44", 20)
+                store.saveProfileParticipantMode(slot, false)
+                store.saveActiveProfile(slot)
+                store.saveUiDesign("classic")
+            }
+            compose.onAllNodesWithText("Туннель").onLast().performClick()
+            val authorization = compose.onNodeWithText("Авторизация")
+            compose.waitUntil(5000) { authorization.isDisplayed() }
+            authorization.performClick()
+            val dialog = compose.onNodeWithTag("classic-tunnel-authorization")
+            val scroll = dialog.fetchSemanticsNode().config[
+                androidx.compose.ui.semantics.SemanticsProperties.VerticalScrollAxisRange
+            ]
+            assertEquals("Authorization must fit with the keyboard closed", 0f, scroll.maxValue(), 0f)
+            compose.onNodeWithText("Пароль туннеля").assertIsDisplayed()
+            compose.onNodeWithText("Показать").assertIsDisplayed().performClick()
+            compose.onNodeWithText("Скрыть").assertIsDisplayed().performClick()
+            compose.onNodeWithText("Сохранить").assertIsDisplayed().assertIsEnabled().performClick()
+            compose.waitUntil(5000) {
+                compose.onAllNodesWithTag("classic-tunnel-authorization").fetchSemanticsNodes().isEmpty()
+            }
+        } finally {
+            runBlocking {
+                store.saveActiveProfile(oldProfile)
+                store.clearProfile(slot)
+                store.saveUiDesign(oldDesign)
+            }
+        }
+    }
+
     @Test fun deployProgressIsVisibleAfterReturningToTheTabInAllDesigns() {
         val store = SettingsStore(compose.activity)
         val oldDesign = runBlocking { store.uiDesign.first() }
