@@ -22,6 +22,7 @@ import org.junit.runner.RunWith
 class HappInterfaceTest {
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
     private lateinit var store: SettingsStore
+    private var vkAccountRequests = 0
 
     private fun screenshot(name: String) {
         compose.waitForIdle()
@@ -41,7 +42,7 @@ class HappInterfaceTest {
             store.saveLoggingEnabled(true)
             store.saveProfileConnectionSettings(0, "203.0.113.10", 46000, "DemoPassword1234", 20)
         }
-        compose.setContent { CsqttV2Root(store) }
+        compose.setContent { CsqttV2Root(store, onVkAuthRequested = { vkAccountRequests++ }) }
         compose.waitForIdle()
     }
 
@@ -51,14 +52,20 @@ class HappInterfaceTest {
             store.saveProfileConnectionSettings(28, "203.0.113.28", 46000, "FixturePassword28", 10)
             store.saveProfileName(28, "Theme server B")
         }
-        for (theme in listOf("light", "dark", "light")) {
-            runBlocking { store.saveThemeMode(theme) }
-            compose.waitForIdle()
-            compose.onNodeWithText("Theme server A").assertExists()
-            compose.onNodeWithText("Theme server B").assertExists()
-            screenshot("review4-connection-$theme.png")
+        val list = compose.onNode(hasAnyAncestor(hasTestTag("servers-card")) and hasScrollToIndexAction())
+        val indexOfB = runBlocking { store.occupiedProfiles.first().sorted().indexOf(28) }
+        try {
+            for (theme in listOf("light", "dark", "light")) {
+                runBlocking { store.saveThemeMode(theme) }
+                list.performScrollToIndex(0)
+                compose.onNodeWithText("Theme server A").assertIsDisplayed()
+                list.performScrollToIndex(indexOfB)
+                compose.onNodeWithText("Theme server B").assertIsDisplayed()
+                screenshot("review4-connection-$theme.png")
+            }
+        } finally {
+            runBlocking { store.clearProfile(28); store.saveProfileName(0, ""); store.saveThemeMode("dark") }
         }
-        runBlocking { store.clearProfile(28); store.saveProfileName(0, ""); store.saveThemeMode("dark") }
     }
 
     @Test fun profileAndTurnPingResultsSurviveNavigationAndReopeningDialogs() {
@@ -165,18 +172,19 @@ class HappInterfaceTest {
         runBlocking { check(!DeployManager.isDeploying.value) }
     }
 
-    @Test fun connectedVkAccountOpensSessionControlsWithoutStartingLogin() {
+    @Test fun connectedVkAccountRequestsTheSharedAccountDialog() {
         runBlocking {
             store.saveVkAccessToken("fixture-session-token-never-sent", "fixture-user")
             store.saveVkHashMode("auto_api", forProfile = 0)
         }
-        compose.onNodeWithText("Туннель").performClick()
-        compose.waitUntil(5000) { compose.onAllNodesWithText("Аккаунт VK подключён").fetchSemanticsNodes().isNotEmpty() }
-        compose.onNodeWithText("Аккаунт VK подключён").performClick()
-        compose.onNodeWithText("Копировать токен").assertIsDisplayed()
-        compose.onNodeWithText("Удалить токен").assertIsDisplayed()
-        compose.onNodeWithText("Назад").performClick()
-        runBlocking { store.clearVkAccessToken(); store.saveVkHashMode("manual", forProfile = 0) }
+        try {
+            compose.onNodeWithText("Туннель").performClick()
+            compose.waitUntil(5000) { compose.onAllNodesWithText("Аккаунт VK подключён").fetchSemanticsNodes().isNotEmpty() }
+            compose.onNodeWithText("Аккаунт VK подключён").performClick()
+            compose.runOnIdle { check(vkAccountRequests == 1) }
+        } finally {
+            runBlocking { store.clearVkAccessToken(); store.saveVkHashMode("manual", forProfile = 0) }
+        }
     }
 
     @Test fun ownerModeRevealsRealDeployAndPersistsSelection() {
