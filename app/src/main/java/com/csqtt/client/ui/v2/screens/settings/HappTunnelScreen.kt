@@ -42,11 +42,17 @@ import kotlin.math.roundToInt
 private val draftWrites = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
 @Composable
-fun HappTunnelScreen(settingsStore: SettingsStore, version: String, onSettings: () -> Unit, onVkAuthRequested: () -> Unit) {
+internal fun HappTunnelScreen(
+    settingsStore: SettingsStore,
+    profile: Int,
+    snapshot: ProfileConnectionSnapshot,
+    version: String,
+    onSettings: () -> Unit,
+    onVkAuthRequested: () -> Unit,
+) {
     val c = V2Theme.colors
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
-    val profile by settingsStore.activeProfile.collectAsStateWithLifecycle(0)
     val editingProfile = profile
     val names by settingsStore.profileNames.collectAsStateWithLifecycle(emptyMap())
     val occupied by settingsStore.occupiedProfiles.collectAsStateWithLifecycle(emptySet())
@@ -55,8 +61,8 @@ fun HappTunnelScreen(settingsStore: SettingsStore, version: String, onSettings: 
     val starting by TunnelManager.starting.collectAsStateWithLifecycle()
     val stopping by TunnelManager.stopping.collectAsStateWithLifecycle()
     val busy = running || starting || stopping
-    val participant by settingsStore.csqttLinkMode.collectAsStateWithLifecycle(false)
-    val rawLink by settingsStore.csqttLink.collectAsStateWithLifecycle("")
+    val participant = snapshot.csqttLinkMode
+    val rawLink = snapshot.csqttLink
     val link = remember(rawLink) { com.csqtt.client.ui.legacy.utils.parseCsqttLink(rawLink) }
     val ownerHashes = if (participant) link?.hashes.orEmpty() else emptyList()
     val manualHashGroup by settingsStore.manualHashGroup.collectAsStateWithLifecycle(ManualHashGroup.Owner)
@@ -71,14 +77,13 @@ fun HappTunnelScreen(settingsStore: SettingsStore, version: String, onSettings: 
     val subnet by settingsStore.selectedTurnSubnet.collectAsStateWithLifecycle("")
     val ipLimit by settingsStore.turnSubnetIpLimit.collectAsStateWithLifecycle("ALL")
     val results by settingsStore.vkHashCheckResults.collectAsStateWithLifecycle("{}")
-    val extraWorkers by settingsStore.extraWorkers.collectAsStateWithLifecycle(false)
+    val extraWorkers = snapshot.extraWorkers
     val workerMaximum = WorkerCountPolicy.defaultMaximum(extraWorkers && authMode != "auto_js")
-    var loaded by remember(profile) { mutableStateOf(false) }
-    var host by remember(profile) { mutableStateOf("") }
-    var port by remember(profile) { mutableStateOf("46000") }
-    var password by remember(profile) { mutableStateOf("") }
-    var workers by remember(profile) { mutableIntStateOf(10) }
-    var revision by remember(profile) { mutableLongStateOf(0L) }
+    val revision = snapshot.revision
+    var host by remember(profile, revision) { mutableStateOf(snapshot.peer) }
+    var port by remember(profile, revision) { mutableStateOf(snapshot.serverPeerPort.toString()) }
+    var password by remember(profile, revision) { mutableStateOf(snapshot.connectionPassword) }
+    var workers by remember(profile, revision) { mutableIntStateOf(snapshot.workersPerHash) }
     var picker by remember { mutableStateOf(false) }
     var actionsExpanded by remember(profile) { mutableStateOf(false) }
     var confirmDelete by remember(profile) { mutableStateOf(false) }
@@ -93,7 +98,13 @@ fun HappTunnelScreen(settingsStore: SettingsStore, version: String, onSettings: 
     val effectiveWorkers = WorkerCountPolicy.normalize(workers, workerMaximum)
     val draftTracker = remember(profile) { mutableStateOf<ProfileConnectionSnapshot?>(null) }
     SideEffect {
-        draftTracker.value = if (loaded && !busy) ProfileConnectionSnapshot(revision = revision, peer = host, serverPeerPort = port.toIntOrNull() ?: 0, connectionPassword = password, workersPerHash = effectiveWorkers) else null
+        val validPort = port.toIntOrNull()?.takeIf { it in 1..65535 }
+        val changed = host.trim() != snapshot.peer || validPort != snapshot.serverPeerPort ||
+            password != snapshot.connectionPassword || effectiveWorkers != snapshot.workersPerHash
+        draftTracker.value = if (!busy && validPort != null && changed) {
+            ProfileConnectionSnapshot(revision = revision, peer = host, serverPeerPort = validPort,
+                connectionPassword = password, workersPerHash = effectiveWorkers)
+        } else null
     }
     DisposableEffect(profile) {
         val slot = profile
@@ -104,16 +115,11 @@ fun HappTunnelScreen(settingsStore: SettingsStore, version: String, onSettings: 
             }
         }
     }
-    LaunchedEffect(profile) {
-        val saved = settingsStore.readProfileConnectionSettings(profile)
-        host = saved.peer; port = saved.serverPeerPort.toString(); password = saved.connectionPassword
-        workers = saved.workersPerHash; revision = saved.revision; loaded = true
-    }
-    LaunchedEffect(profile, loaded, revision, host, port, password, effectiveWorkers) {
-        if (!loaded || busy) return@LaunchedEffect
+    LaunchedEffect(profile, revision, host, port, password, effectiveWorkers, busy) {
         delay(350)
-        val validPort = port.toIntOrNull()?.takeIf { it in 1..65535 } ?: return@LaunchedEffect
-        settingsStore.saveProfileConnectionSettings(profile, host, validPort, password, effectiveWorkers, expectedRevision = revision)
+        val draft = draftTracker.value ?: return@LaunchedEffect
+        settingsStore.saveProfileConnectionSettings(profile, draft.peer, draft.serverPeerPort, draft.connectionPassword,
+            draft.workersPerHash, expectedRevision = draft.revision)
     }
     fun requestAutoJs(nextAuth: String, apply: () -> Unit) {
         if (shouldConfirmAutoJsMode(authMode, nextAuth, autoJsAcknowledged)) pendingAutoJs = apply else apply()
@@ -157,11 +163,11 @@ fun HappTunnelScreen(settingsStore: SettingsStore, version: String, onSettings: 
                 contentModifier = Modifier.heightIn(min = (layout.height - 56.dp - happProfileHeaderHeight() - layout.gap * 2).coerceAtLeast(0.dp)),
                 verticalArrangement = Arrangement.SpaceBetween) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    HappField("Адрес сервера", host, { host = it }, Modifier.weight(1f), enabled = loaded && !busy, compact = true, shape = pill, floatingLabel = true, maxFieldHeight = 44.dp)
-                    HappField("Порт PEER", port, { port = it.filter(Char::isDigit).take(5) }, Modifier.weight(1f), number = true, enabled = loaded && !busy, compact = true, shape = pill, floatingLabel = true, maxFieldHeight = 44.dp)
+                    HappField("Адрес сервера", host, { host = it }, Modifier.weight(1f), enabled = !busy, compact = true, shape = pill, floatingLabel = true, maxFieldHeight = 44.dp)
+                    HappField("Порт PEER", port, { port = it.filter(Char::isDigit).take(5) }, Modifier.weight(1f), number = true, enabled = !busy, compact = true, shape = pill, floatingLabel = true, maxFieldHeight = 44.dp)
                 }
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Bottom) {
-                HappField("Пароль туннеля", password, { password = it }, Modifier.weight(1f), password = true, visibilityKey = profile, enabled = loaded && !busy, compact = true, shape = pill, floatingLabel = true, maxFieldHeight = 44.dp)
+                HappField("Пароль туннеля", password, { password = it }, Modifier.weight(1f), password = true, visibilityKey = profile to revision, enabled = !busy, compact = true, shape = pill, floatingLabel = true, maxFieldHeight = 44.dp)
                 Box(Modifier.weight(1f)) {
                 if (!linkTokenActive && ownerHashes.isEmpty() && authMode != "auto_js" && hashMode == "manual" || ownerHashes.isNotEmpty()) {
                     V2PillButton("Настроить хеши", { showHashes = true }, modifier = Modifier.fillMaxWidth(), height = layout.fieldHeight.coerceAtMost(44.dp), horizontalPadding = 4.dp, enabled = !busy, style = V2PillStyle.Outline, shape = pill)
@@ -236,7 +242,7 @@ fun HappTunnelScreen(settingsStore: SettingsStore, version: String, onSettings: 
         dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("Отмена") } },
     )
     if (picker) Dialog(onDismissRequest = { picker = false }) { V2ProfilePickerMenu(settingsStore, profile, names, occupied, subscriptions, busy, { picker = false }, { editing = it }) }
-    editing?.let { slot -> Dialog(onDismissRequest = { editing = null }) { V2EditProfileModal(settingsStore, slot, names[slot] ?: defaultProfileName(slot), isNew = false, onSaved = { loaded = false; scope.launch { val saved = settingsStore.readProfileConnectionSettings(profile); host = saved.peer; port = saved.serverPeerPort.toString(); password = saved.connectionPassword; workers = saved.workersPerHash; revision = saved.revision; loaded = true } }, onDismiss = { editing = null }) } }
+    editing?.let { slot -> Dialog(onDismissRequest = { editing = null }) { V2EditProfileModal(settingsStore, slot, names[slot] ?: defaultProfileName(slot), isNew = false, onSaved = { editing = null }, onDismiss = { editing = null }) } }
     if (showHashes) V2HashesDialog(parts.getOrElse(0){""}, parts.getOrElse(1){""}, parts.getOrElse(2){""}, parts.getOrElse(3){""}, parts.getOrElse(4){""}, parts.getOrElse(5){""},
         VkHashValidationCodec.decode(results), { scope.launch { settingsStore.saveVkHashCheckResults(VkHashValidationCodec.encode(it)) } },
         { list -> VkHashValidator.check(context, list, settingsStore.selectedFingerprint.first(), settingsStore.activeClientIds.first()) },

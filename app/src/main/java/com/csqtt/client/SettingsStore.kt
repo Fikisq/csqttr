@@ -906,10 +906,18 @@ private val DEPLOY_LAST_INSPECTION_PANEL = booleanPreferencesKey("deploy_last_in
         }
     }
 
-    internal suspend fun readProfileConnectionSettings(profile: Int): ProfileConnectionSnapshot =
+    internal val activeProfileConnection: Flow<Pair<Int, ProfileConnectionSnapshot>> =
         dataStore.data.map { prefs ->
+            val profile = prefs[ACTIVE_PROFILE] ?: 0
+            profile to readProfileConnectionSettings(prefs, profile)
+        }.distinctUntilChanged()
+
+    internal suspend fun readProfileConnectionSettings(profile: Int): ProfileConnectionSnapshot =
+        readProfileConnectionSettings(dataStore.data.first(), profile)
+
+    private fun readProfileConnectionSettings(prefs: Preferences, profile: Int): ProfileConnectionSnapshot {
             val secret = readConnectionPasswordState(prefs, profile)
-            ProfileConnectionSnapshot(
+            return ProfileConnectionSnapshot(
                 revision = prefs[getProfileKey(PROFILE_REVISION, profile)] ?: 0L,
                 peer = prefs[getProfileKey(PEER, profile)] ?: "",
                 serverPeerPort = prefs[getProfileKey(SERVER_PEER_PORT, profile)]
@@ -926,7 +934,7 @@ private val DEPLOY_LAST_INSPECTION_PANEL = booleanPreferencesKey("deploy_last_in
                 subscriptionTitle = prefs[getProfileKey(SUBSCRIPTION_TITLE, profile)] ?: "",
                 subscriptionPower = prefs[getProfileKey(SUBSCRIPTION_POWER, profile)] ?: 0,
             )
-        }.first()
+    }
 
     private fun Preferences.isEmptyConnectionSlot(profile: Int): Boolean =
         this[getProfileKey(PEER, profile)].isNullOrBlank() && this[getProfileKey(CSQTT_LINK, profile)].isNullOrBlank()
@@ -2097,6 +2105,10 @@ private val DEPLOY_LAST_INSPECTION_PANEL = booleanPreferencesKey("deploy_last_in
         dataStore.edit { prefs ->
             val profile = forProfile ?: prefs[ACTIVE_PROFILE] ?: 0
             if (prefs[getProfileKey(PROFILE_REMOVED, profile)] == true) return@edit
+            if (readConnectionPasswordState(prefs, profile).value != password) {
+                val revisionKey = getProfileKey(PROFILE_REVISION, profile)
+                prefs[revisionKey] = (prefs[revisionKey] ?: 0L) + 1L
+            }
             val localKey = getProfileKey(CONNECTION_PASSWORD_LOCAL, profile)
             val legacyKey = getProfileKey(CONNECTION_PASSWORD, profile)
             val encryptedKey = getProfileKey(CONNECTION_PASSWORD_ENCRYPTED, profile)
