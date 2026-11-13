@@ -98,6 +98,9 @@ fun CsqttV2Root(
         // Keep this store's own snapshot ready, without reviving a saved form from another VPS.
         val deploySettings by deployStore.deploySettingsSnapshot.collectAsStateWithLifecycle(DeploySettingsSnapshot())
         val tunnelProfile by settingsStore.tunnelScreenSnapshot.collectAsStateWithLifecycle(initialValue = null)
+        val occupiedProfiles by settingsStore.occupiedProfiles.collectAsStateWithLifecycle(emptySet())
+        val profileNames by settingsStore.profileNames.collectAsStateWithLifecycle(emptyMap())
+        val deployServers by settingsStore.deployServers.collectAsStateWithLifecycle(emptyList())
         val participantShowLogs by settingsStore.participantShowLogs.collectAsStateWithLifecycle(
             initialValue = SettingsStore.DEFAULT_PARTICIPANT_SHOW_LOGS,
         )
@@ -277,6 +280,9 @@ fun CsqttV2Root(
                                             onOpenResourceMonitor = { showResourceSheet = true },
                                             profilePickerRequest = profilePickerRequest,
                                             historicalPalette = historicalPalette,
+                                            occupiedProfiles = occupiedProfiles,
+                                            profileNames = profileNames,
+                                            deployServers = deployServers,
                                             onInvalidConfiguration = {
                                                 selectedTabName = V2Tab.Tunnel.name
                                             },

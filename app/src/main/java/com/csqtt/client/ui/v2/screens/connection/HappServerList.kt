@@ -23,6 +23,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.csqtt.client.SettingsStore
+import com.csqtt.client.DeployServerInfo
 import com.csqtt.client.defaultProfileName
 import com.csqtt.client.ProfileTunnelProbe
 import com.csqtt.client.ProfilePingResult
@@ -36,14 +37,21 @@ import kotlinx.coroutines.launch
 
 @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
-internal fun HappServerList(store: SettingsStore, active: Int, busy: Boolean, onEdit: (Int) -> Unit, modifier: Modifier = Modifier, historicalPalette: Boolean = false) {
+internal fun HappServerList(
+    store: SettingsStore,
+    active: Int,
+    busy: Boolean,
+    occupied: Set<Int>,
+    names: Map<Int, String>,
+    servers: List<DeployServerInfo>,
+    onEdit: (Int) -> Unit,
+    modifier: Modifier = Modifier,
+    historicalPalette: Boolean = false,
+) {
     val c = V2Theme.colors
     val layout = LocalV2AdaptiveMetrics.current
     val scope = rememberCoroutineScope()
     val context = LocalContext.current.applicationContext
-    val occupied by store.occupiedProfiles.collectAsStateWithLifecycle(emptySet())
-    val names by store.profileNames.collectAsStateWithLifecycle(emptyMap())
-    val servers by store.deployServers.collectAsStateWithLifecycle(emptyList())
     val latency by PingResultsCache.profileResults.collectAsStateWithLifecycle()
     val checking = remember { mutableStateMapOf<Int,Boolean>() }
     var checkJob by remember { mutableStateOf<Job?>(null) }

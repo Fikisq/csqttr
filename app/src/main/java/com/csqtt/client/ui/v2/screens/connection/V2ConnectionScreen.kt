@@ -70,6 +70,7 @@ import com.csqtt.client.CsqttConstants
 import com.csqtt.client.GoobyMode
 import com.csqtt.client.R
 import com.csqtt.client.SettingsStore
+import com.csqtt.client.DeployServerInfo
 import com.csqtt.client.StoredSecretState
 import com.csqtt.client.TunnelAuthSnapshot
 import com.csqtt.client.TunnelManager
@@ -98,7 +99,7 @@ import kotlinx.coroutines.launch
 import java.util.Locale
 
 @Composable
-fun V2ConnectionScreen(
+internal fun V2ConnectionScreen(
     settingsStore: SettingsStore,
     version: String,
     onSettings: () -> Unit,
@@ -108,6 +109,9 @@ fun V2ConnectionScreen(
     onVersionClick: (() -> Unit)? = null,
     onOpenResourceMonitor: () -> Unit = {},
     historicalPalette: Boolean = false,
+    occupiedProfiles: Set<Int>,
+    profileNames: Map<Int, String>,
+    deployServers: List<DeployServerInfo>,
 ) {
     val context = LocalContext.current.applicationContext
     val scope = rememberCoroutineScope()
@@ -132,11 +136,7 @@ fun V2ConnectionScreen(
     val vkAuthMode by settingsStore.vkAuthMode.collectAsStateWithLifecycle(initialValue = "vkcalls")
     val savedHashMode by settingsStore.vkHashMode.collectAsStateWithLifecycle(initialValue = SettingsStore.cachedVkHashMode)
     val savedVkAccessToken by settingsStore.vkAccessToken.collectAsStateWithLifecycle(initialValue = SettingsStore.cachedVkAccessToken)
-    val occupiedProfiles by settingsStore.occupiedProfiles.collectAsStateWithLifecycle(initialValue = emptySet())
-    val deployServers by settingsStore.deployServers.collectAsStateWithLifecycle(initialValue = emptyList())
-
     val activeProfile by settingsStore.activeProfile.collectAsStateWithLifecycle(initialValue = 0)
-    val profileNames by settingsStore.profileNames.collectAsStateWithLifecycle(initialValue = emptyMap())
     val profileSubscriptions by settingsStore.profileSubscriptions.collectAsStateWithLifecycle(
         initialValue = emptyMap(),
     )
@@ -417,7 +417,8 @@ fun V2ConnectionScreen(
         }
         val batterySaving by com.csqtt.client.BatterySaver.active.collectAsStateWithLifecycle()
         if (batterySaving && tunnelRunning) Text(com.csqtt.client.BatterySaver.BADGE, color = colors.warning, fontSize = 12.sp, modifier = Modifier.padding(bottom = 8.dp))
-        HappServerList(settingsStore, activeProfile, tunnelBusy, { creatingProfile = false; editingProfile = it }, Modifier.weight(1f).padding(bottom = 8.dp), historicalPalette = historicalPalette)
+        HappServerList(settingsStore, activeProfile, tunnelBusy, occupiedProfiles, profileNames, deployServers,
+            { creatingProfile = false; editingProfile = it }, Modifier.weight(1f).padding(bottom = 8.dp), historicalPalette)
     }
     if(showProfileDialog) androidx.compose.ui.window.Dialog(onDismissRequest = { showProfileDialog = false }) {
         V2ProfilePickerMenu(settingsStore, activeProfile, profileNames, occupiedProfiles, profileSubscriptions, tunnelBusy, { showProfileDialog = false }, { creatingProfile = false; editingProfile = it })
