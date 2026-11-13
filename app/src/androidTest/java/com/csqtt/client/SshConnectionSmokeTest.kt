@@ -109,6 +109,42 @@ class SshConnectionSmokeTest {
                                 printf 'PASSWORDS_OK\n'
                             """.trimIndent()
                         }
+                        "docker-state" -> """
+                            set -eu
+                            test "${'$'}(docker inspect --format '{{.State.Running}}' csqtt)" = true
+                            test "${'$'}(docker inspect --format '{{index .Config.Labels "com.csqtt.managed"}}' csqtt)" = true
+                            python3 - <<'PY'
+                            import hashlib
+                            import json
+                            import sqlite3
+
+                            def fingerprint(label, value, populated):
+                                encoded = json.dumps(value, separators=(",", ":"), ensure_ascii=True).encode()
+                                print(f"STATE {label} {populated} {hashlib.sha256(encoded).hexdigest()}")
+
+                            db = sqlite3.connect("file:/etc/csqtt/csqtt.db?mode=ro", uri=True)
+                            db.execute("BEGIN")
+                            clients = db.execute(
+                                "SELECT password, name, expires_at, is_deactivated, ports, vk_token_enabled, "
+                                "dtls_port, wg_port, local_port, group_id, routing_rule_id, sub_uuid, workers "
+                                "FROM passwords ORDER BY password"
+                            ).fetchall()
+                            hashes = db.execute(
+                                "SELECT password, vk_hash, vk_hashes FROM passwords ORDER BY password"
+                            ).fetchall()
+                            groups = db.execute("SELECT * FROM client_groups ORDER BY id").fetchall()
+                            rules = db.execute("SELECT * FROM routing_rules ORDER BY id").fetchall()
+                            meta = dict(db.execute(
+                                "SELECT key, value FROM meta WHERE key IN ('vk_access_token', 'dns', 'dns_provider')"
+                            ))
+                            fingerprint("clients", clients, len(clients))
+                            fingerprint("hashes", hashes, sum(bool(row[1] or row[2]) for row in hashes))
+                            fingerprint("groups", groups, len(groups))
+                            fingerprint("token", meta.get("vk_access_token"), int(bool(meta.get("vk_access_token"))))
+                            fingerprint("rules", rules, len(rules))
+                            fingerprint("dns", [meta.get("dns"), meta.get("dns_provider")], int(bool(meta.get("dns"))))
+                            PY
+                        """.trimIndent()
                         else -> error("Unknown CSQTT state check")
                     }
                     ssh.startSession().use { session ->
@@ -116,8 +152,16 @@ class SshConnectionSmokeTest {
                             cmd.join(30, TimeUnit.SECONDS)
                             assertEquals("Scoped CSQTT state check", 0, cmd.exitStatus)
                             val result = cmd.inputStream.bufferedReader().readText().trim()
-                            assertTrue(result in setOf("REMOVED_OK", "RESTORED_OK", "PASSWORDS_OK") ||
-                                result.matches(Regex("BACKUP_OK /root/csqtt-before-60\\.14-[A-Za-z0-9]{8}\\.tar")))
+                            if (check == "docker-state") {
+                                val lines = result.lineSequence().toList()
+                                val record = Regex("STATE (clients|hashes|groups|token|rules|dns) [0-9]+ [0-9a-f]{64}")
+                                assertTrue("Expected six redacted fingerprints",
+                                    lines.size == 6 && lines.all(record::matches) &&
+                                        lines.map { it.split(' ')[1] }.distinct().size == 6)
+                            } else {
+                                assertTrue(result in setOf("REMOVED_OK", "RESTORED_OK", "PASSWORDS_OK") ||
+                                    result.matches(Regex("BACKUP_OK /root/csqtt-before-60\\.14-[A-Za-z0-9]{8}\\.tar")))
+                            }
                             println(result)
                         }
                     }
