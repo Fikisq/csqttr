@@ -53,7 +53,8 @@ class ServerCheckTest {
     fun `a 2_5 server is updated on its own ports, whatever the form says`() {
         val p = plan(inv(server("standard", "2.5.0", 47000, 47002)), EffectiveServerPorts(22, 46000, 46002))
         assertEquals(listOf("UPDATE:MAIN:47000/47002"), p.kinds())
-        assertEquals("Обновить", p.actions[0].title)
+        assertEquals("Установить", p.actions[0].title)
+        assertEquals(DeployActionMode.Update, p.actions[0].actionMode)
         assertTrue(p.actions[0].detail.contains("2.5.0 → 2.5.2"))
         assertTrue(plan(inv(std250), docker = true).actions[0].detail.contains("будет Docker"))
         assertFalse(plan(inv(std250)).actions[0].detail.contains("будет"))
@@ -81,7 +82,7 @@ class ServerCheckTest {
         // two 2.5 servers (the old one replaced later): each updated, the profile's first
         val two = plan(inv(std250, side252), profilePeer = 46100)
         assertEquals(listOf("UPDATE:SIDE:46100/46102", "UPDATE:MAIN:46000/46002"), two.kinds())
-        assertEquals("Обновить: порт 46100", two.actions[0].title)
+        assertEquals("Установить: порт 46100", two.actions[0].title)
         assertTrue(describeServer(two.servers[1], 46100).second.contains("подключение профиля"))
         assertFalse(describeServer(two.servers[0], 46100).second.contains("подключение профиля"))
     }
