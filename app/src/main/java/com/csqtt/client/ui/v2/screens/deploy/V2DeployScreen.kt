@@ -1019,7 +1019,7 @@ internal fun V2DeployScreen(
         }
         }
         if (isDeploying) {
-            DeployProgressContent(deployProgress, deployStep, Modifier.fillMaxWidth().testTag("deploy-progress"),
+            DeployProgressContent(deployProgress, deployStep, Modifier.fillMaxWidth(),
                 accent = colors.accent, foreground = colors.textPrimary)
         } else if (actionsBusy) {
             Text(if (isInspecting) "Проверка VPS по SSH…" else "Операция выполняется · подробности в логах",

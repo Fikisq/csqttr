@@ -12,6 +12,36 @@ import org.junit.Test
 class DesignCompatibilityTest {
     @get:Rule val compose = createAndroidComposeRule<MainActivity>()
 
+    @Test fun deployProgressIsVisibleAfterReturningToTheTabInAllDesigns() {
+        val store = SettingsStore(compose.activity)
+        val oldDesign = runBlocking { store.uiDesign.first() }
+        val oldOwner = runBlocking { store.uiOwnerMode.first() }
+        try {
+            runBlocking { store.saveUiOwnerMode(true) }
+            DeployManager.startDeploy()
+            DeployManager.updateProgress(0.43f, "Бинарник...")
+            for (design in listOf("v2", "old", "classic")) {
+                runBlocking { store.saveUiDesign(design) }
+                val deploy = compose.onAllNodesWithText("Деплой")
+                compose.waitUntil(10_000) { deploy.fetchSemanticsNodes().isNotEmpty() }
+                deploy.onLast().performClick()
+                compose.onNodeWithTag("deploy-progress").assertIsDisplayed()
+                compose.onNodeWithText("Бинарник...").assertIsDisplayed()
+                compose.onNodeWithText("43%").assertIsDisplayed()
+                compose.onNodeWithText("Подкл.").performClick()
+                deploy.onLast().performClick()
+                compose.onNodeWithTag("deploy-progress").assertIsDisplayed()
+                compose.onNodeWithText("43%").assertIsDisplayed()
+            }
+        } finally {
+            DeployManager.stopDeploy()
+            runBlocking {
+                store.saveUiDesign(oldDesign)
+                store.saveUiOwnerMode(oldOwner)
+            }
+        }
+    }
+
     @Test fun threeDesignsShareSettingsAndPreserveSelectedConnection() {
         val store = SettingsStore(compose.activity)
         val oldDesign = runBlocking { store.uiDesign.first() }
