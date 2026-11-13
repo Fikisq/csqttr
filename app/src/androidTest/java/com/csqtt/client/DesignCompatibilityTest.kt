@@ -144,6 +144,7 @@ class DesignCompatibilityTest {
     @Test fun goobyHelpExplainsEachPresetInAllThreeDesigns() {
         val store = SettingsStore(compose.activity)
         val oldDesign = runBlocking { store.uiDesign.first() }
+        val profile = runBlocking { store.activeProfile.first() }
         val oldTransport = runBlocking { store.turnTransport.first() }
         val oldPreset = runBlocking { store.goobyMode.first() }
         val descriptions = mapOf(
@@ -155,7 +156,7 @@ class DesignCompatibilityTest {
         try {
             runBlocking {
                 store.saveTurnTransport(CsqttConstants.Tunnel.TURN_TRANSPORT_TCP_TLS)
-                store.saveGoobyMode(GoobyMode.GENTLE)
+                store.saveGoobyMode(GoobyMode.GENTLE, profile)
             }
             for (design in listOf("v2", "old", "classic")) {
                 runBlocking { store.saveUiDesign(design) }
@@ -174,7 +175,7 @@ class DesignCompatibilityTest {
         } finally {
             runBlocking {
                 store.saveTurnTransport(oldTransport)
-                store.saveGoobyMode(oldPreset)
+                store.saveGoobyMode(oldPreset, profile)
                 store.saveUiDesign(oldDesign)
             }
         }
