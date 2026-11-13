@@ -398,7 +398,7 @@ internal fun DeployTab(
         DeployManager.startDeploy()
         DeployManager.scope.launch {
             try {
-                settingsStore.saveDeployProfileDraft(deploymentDraft, restoreConnection = true)
+                settingsStore.saveDeployProfileDraft(deploymentDraft, restoreConnection = true, synchronizeDraftPassword = false)
                 context.startForegroundService(Intent(context, TunnelService::class.java).apply { action = "DEPLOY_START" })
                 val success = performDeploy(
                     context = context,

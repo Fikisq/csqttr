@@ -622,7 +622,7 @@ internal fun V2DeployScreen(
         DeployManager.startDeploy()
         DeployManager.scope.launch {
             try {
-                settingsStore.saveDeployProfileDraft(deploymentDraft, restoreConnection = true)
+                settingsStore.saveDeployProfileDraft(deploymentDraft, restoreConnection = true, synchronizeDraftPassword = false)
                 context.startForegroundService(
                     Intent(context, TunnelService::class.java).apply { action = "DEPLOY_START" },
                 )
@@ -1124,7 +1124,7 @@ internal fun V2DeployScreen(
     if (showDeployOptions) {
         androidx.compose.material3.AlertDialog(onDismissRequest = { showDeployOptions = false }, title = { Text("Установка CSQTT") },
             text = { Text("VPS: $host\nSSH: $sshPort · PEER: $peerPort · WEB: $webPort\n" + if(dockerInstall) "Установка в Docker" else "") },
-            confirmButton = { androidx.compose.material3.TextButton(onClick = { showDeployOptions = false; scope.launch { persistServerDraft(); checkThenDeploy() } }) { Text("Установить") } },
+            confirmButton = { androidx.compose.material3.TextButton(onClick = { showDeployOptions = false; checkThenDeploy() }) { Text("Установить") } },
             dismissButton = { androidx.compose.material3.TextButton(onClick = { showDeployOptions = false }) { Text("Отмена") } })
     }
 

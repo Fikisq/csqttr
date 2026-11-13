@@ -1779,11 +1779,17 @@ private val DEPLOY_LAST_INSPECTION_PANEL = booleanPreferencesKey("deploy_last_in
         dataStore.edit { prefs ->
             val connectionProfile = prefs[getProfileKey(DEPLOY_CONNECTION_PROFILE, profile)] ?: profile
             // the profile that started the deploy, even if another is active by the time it finished
-            if (prefs[getProfileKey(PROFILE_REMOVED, connectionProfile)] != true && (prefs[getProfileKey(PEER, connectionProfile)] ?: "").isBlank() && host.isNotBlank()) {
-                prefs[getProfileKey(PEER, connectionProfile)] = host
+            if (prefs[getProfileKey(PROFILE_REMOVED, connectionProfile)] != true) {
+                val peerKey = getProfileKey(PEER, connectionProfile)
+                val portKey = getProfileKey(SERVER_PEER_PORT, connectionProfile)
+                if (prefs[peerKey].isNullOrBlank() && host.isNotBlank()) prefs[peerKey] = host
+                if (prefs[portKey] != peerPort) {
+                    val revisionKey = getProfileKey(PROFILE_REVISION, connectionProfile)
+                    prefs[revisionKey] = (prefs[revisionKey] ?: 0L) + 1L
+                }
+                prefs[portKey] = peerPort
+                prefs[getProfileKey(MANUAL_PORTS_ENABLED, connectionProfile)] = true
             }
-            prefs[getProfileKey(SERVER_PEER_PORT, connectionProfile)] = peerPort
-            prefs[getProfileKey(MANUAL_PORTS_ENABLED, connectionProfile)] = true
             prefs[getProfileKey(SERVER_PEER_PORT, profile)] = peerPort
             prefs[getProfileKey(SERVER_WEB_PORT, profile)] = webPort
             if (peerPort != CsqttConstants.Network.DEFAULT_SERVER_PEER_PORT || webPort != CsqttConstants.Network.DEFAULT_SERVER_WEB_PORT) {
@@ -1902,7 +1908,11 @@ private val DEPLOY_LAST_INSPECTION_PANEL = booleanPreferencesKey("deploy_last_in
     internal suspend fun linkedConnectionProfile(deployProfile: Int): Int = dataStore.data.first()[getProfileKey(DEPLOY_CONNECTION_PROFILE, deployProfile)] ?: deployProfile
 
     /** One VPS and its matching connection, written to an explicit slot without moving cursors. */
-    internal suspend fun saveDeployProfileDraft(draft: DeploySettingsSnapshot, restoreConnection: Boolean = false): Int? {
+    internal suspend fun saveDeployProfileDraft(
+        draft: DeploySettingsSnapshot,
+        restoreConnection: Boolean = false,
+        synchronizeDraftPassword: Boolean = true,
+    ): Int? {
         require(draft.profile in CsqttConstants.Profiles.MIN_INDEX..CsqttConstants.Profiles.MAX_INDEX)
         require(draft.serverPeerPort in 1..65535 && draft.serverWebPort in 1..65535 && draft.sshPort.toIntOrNull() in 1..65535)
         val profile = draft.profile
@@ -1939,8 +1949,8 @@ private val DEPLOY_LAST_INSPECTION_PANEL = booleanPreferencesKey("deploy_last_in
                 val peer = prefs[getProfileKey(PEER, target)].orEmpty()
                 val isNew = peer.isBlank()
                 val oldPassword = readConnectionPasswordState(prefs, target).value
-                val updatePassword = isNew || oldPassword.isBlank() ||
-                    (target == profile && prefs[getProfileKey(DEPLOY_SERVER_CONFIGURED, profile)] != true)
+                val updatePassword = synchronizeDraftPassword && (isNew || oldPassword.isBlank() ||
+                    (target == profile && prefs[getProfileKey(DEPLOY_SERVER_CONFIGURED, profile)] != true))
                 if (peer != draft.ip.trim() ||
                     (prefs[getProfileKey(SERVER_PEER_PORT, target)] ?: CsqttConstants.Network.DEFAULT_SERVER_PEER_PORT) != draft.serverPeerPort ||
                     (updatePassword && oldPassword != mainPassword)) {
