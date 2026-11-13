@@ -115,15 +115,14 @@ internal fun V2AppsRoutingDialog(
 
     val activeSelection = if (modeIsWhitelist) whiteSelection else blackSelection
 
-    val selectionOrder = activeSelection.toList()
-    val filteredApps = remember(appsList, searchQuery, selectionOrder, showSystemApps) {
+    val filteredApps = remember(appsList, searchQuery, activeSelection, showSystemApps) {
         val visible = appsList.filter {
             (showSystemApps || !it.isSystem || it.packageName in activeSelection) &&
                 (searchQuery.isBlank() || it.name.contains(searchQuery, ignoreCase = true) ||
                     it.packageName.contains(searchQuery, ignoreCase = true))
         }.sortedWith(compareBy<AppItem> { it.name.lowercase() }.thenBy { it.packageName })
-        val byPackage = visible.associateBy { it.packageName }
-        V2AppPresets.orderedPackages(visible.map { it.packageName }, activeSelection).mapNotNull(byPackage::get)
+        val (selected, unselected) = visible.partition { it.packageName in activeSelection }
+        selected + unselected
     }
 
     val scope = rememberCoroutineScope()

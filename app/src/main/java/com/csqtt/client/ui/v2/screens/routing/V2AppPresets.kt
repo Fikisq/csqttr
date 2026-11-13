@@ -32,12 +32,6 @@ internal object V2AppPresets {
         notion.id medium.reader com.patreon.android com.supercell.brawlstars com.supercell.clashofclans
     """.trimIndent().split(Regex("\\s+")).toSet()
 
-    /** Selection iteration order is the user's addition order, including after persistence. */
-    fun orderedPackages(alphabetical: List<String>, selection: Set<String>): List<String> {
-        val available = alphabetical.toSet()
-        return selection.filter { it in available } + alphabetical.filterNot { it in selection }
-    }
-
     fun merge(existing: Set<String>, installed: Set<String>, whitelist: Boolean): Set<String> =
         existing + (if (whitelist) vpn else direct).intersect(installed)
 }
