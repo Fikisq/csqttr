@@ -107,10 +107,10 @@ internal fun HappTunnelScreen(
     SideEffect {
         val validPort = port.toIntOrNull()?.takeIf { it in 1..65535 }
         val changed = host.trim() != snapshot.peer || validPort != snapshot.serverPeerPort ||
-            password != snapshot.connectionPassword || effectiveWorkers != snapshot.workersPerHash
+            password != snapshot.connectionPassword || workers != snapshot.workersPerHash
         draftTracker.value = if (!busy && validPort != null && changed) {
             ProfileConnectionSnapshot(revision = revision, peer = host, serverPeerPort = validPort,
-                connectionPassword = password, workersPerHash = effectiveWorkers)
+                connectionPassword = password, workersPerHash = workers)
         } else null
     }
     DisposableEffect(profile) {
