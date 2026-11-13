@@ -198,6 +198,8 @@ internal fun CompactDropdownSetting(
                 expanded = expanded,
                 onDismissRequest = { expanded = false },
                 modifier = Modifier.widthIn(min = 160.dp, max = 220.dp),
+                containerColor = MaterialTheme.colorScheme.surface,
+                tonalElevation = 0.dp,
             ) {
                 options.forEach { (key, label) ->
                     val itemIndicator = indicatorProvider?.invoke(key)
