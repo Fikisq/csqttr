@@ -153,6 +153,38 @@ class DesignCompatibilityTest {
         }
     }
 
+    @Test fun classicAuthorizationFitsAtTheCurrentWindowSize() {
+        val store = SettingsStore(compose.activity)
+        val oldDesign = runBlocking { store.uiDesign.first() }
+        val oldOwner = runBlocking { store.uiOwnerMode.first() }
+        try {
+            runBlocking {
+                store.saveUiDesign("classic")
+                store.saveUiOwnerMode(true)
+            }
+            compose.onAllNodesWithText("Деплой").onLast().performClick()
+            compose.onNodeWithText("Авторизация").assertIsDisplayed().performClick()
+            val form = compose.onNodeWithTag("classic-deploy-authorization")
+            val scrollRange = form.fetchSemanticsNode().config[
+                androidx.compose.ui.semantics.SemanticsProperties.VerticalScrollAxisRange
+            ]
+            assertEquals("Authorization must fit without scrolling", 0f, scrollRange.maxValue(), 0f)
+            compose.onNodeWithText("Логин WEB (придумайте)").assertIsDisplayed()
+            for (label in listOf("пароль туннеля", "пароль веб-панели")) {
+                compose.onNodeWithContentDescription("Сгенерировать $label").assertIsDisplayed().performClick()
+                compose.onNodeWithContentDescription("Показать $label").assertIsDisplayed().performClick()
+                compose.onNodeWithContentDescription("Скрыть $label").performClick()
+            }
+            compose.onNodeWithText("Сохранить").assertIsDisplayed().assertIsEnabled().performClick()
+            form.assertDoesNotExist()
+        } finally {
+            runBlocking {
+                store.saveUiDesign(oldDesign)
+                store.saveUiOwnerMode(oldOwner)
+            }
+        }
+    }
+
     @Test fun deployProgressIsVisibleAfterReturningToTheTabInAllDesigns() {
         val store = SettingsStore(compose.activity)
         val oldDesign = runBlocking { store.uiDesign.first() }
