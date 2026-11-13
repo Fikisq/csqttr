@@ -1180,7 +1180,7 @@ NETWORK_READY_FILE="$CSQTT_DOCKER_NETWORK_READY"
 
 command -v ip >/dev/null 2>&1 || exit 20
 command -v iptables >/dev/null 2>&1 || exit 21
-[ "$(cat /proc/sys/net/ipv4/ip_forward 2>/dev/null || echo 0)" = "1" ] || exit 21[ "$(cat /proc/sys/net/ipv4/ip_forward 2>/dev/null || echo 0)" = "1" ] || exit 21[ "$(cat /proc/sys/net/ipv4/ip_forward 2>/dev/null || echo 0)" = "1" ] || exit 21[ "$(cat /proc/sys/net/ipv4/ip_forward 2>/dev/null || echo 0)" = "1" ] || exit 21[ "$(cat /proc/sys/net/ipv4/ip_forward 2>/dev/null || echo 0)" = "1" ] || exit 21
+[ "\$(cat /proc/sys/net/ipv4/ip_forward 2>/dev/null || echo 0)" = "1" ] || exit 21
 is_ignored_wan_interface() {
     ignored_iface="\${1%%@*}"
     case "\$ignored_iface" in
