@@ -140,7 +140,7 @@ class DeployScriptPreflightTest {
         assertTrue(deploy.contains("https://mirror.yandex.ru/mirrors/alpine"))
         assertTrue(deploy.contains("--add-host"))
         assertTrue(deploy.contains("--progress=plain"))
-        assertTrue(deploy.contains("Temporary failure resolving|Could not resolve|Name or service not known"))
+        assertTrue(deploy.contains("fetch|resolve|network|timed out|timeout"))
     }
 
     @Test
