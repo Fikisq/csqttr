@@ -2254,7 +2254,7 @@ write_csqtt_dockerfile() {
     cat > "$target" << 'DOCKERFILE'
 FROM alpine:3.21
 ARG CSQTT_ALPINE_MIRROR=https://dl-cdn.alpinelinux.org/alpine
-RUN set -eu; printf '%s/v3.21/main\n' "$CSQTT_ALPINE_MIRROR" > /etc/apk/repositories; timeout -k 5s 75s apk add --no-cache --no-progress ca-certificates iproute2 iptables
+RUN set -eu; printf '%s/v3.21/main\n%s/v3.21/community\n' "$CSQTT_ALPINE_MIRROR" "$CSQTT_ALPINE_MIRROR" > /etc/apk/repositories; timeout -k 5s 60s apk add --no-cache --no-progress ca-certificates iproute2 iptables
 COPY csqtt @IMG_BIN@
 COPY network-up.sh @IMG_LIB@/network-up.sh
 COPY tun-recover.sh @IMG_LIB@/tun-recover.sh
@@ -2265,32 +2265,33 @@ DOCKERFILE
 }
 
 docker_build_candidate_image() {
-    local image="$1" context_dir="$2" primary_log fallback_log
-    primary_log="$(mktemp)" || return 1
-    if timeout -k 15s "${DOCKER_BUILD_TIMEOUT_SECONDS}s" docker build --network host -t "$image" "$context_dir" >"$primary_log" 2>&1; then
-        cat "$primary_log" >>"$LOG_FILE"
-        rm -f -- "$primary_log"
-        return 0
-    fi
-    cat "$primary_log" >>"$LOG_FILE"
-    if ! grep -Eqi 'Temporary failure resolving|Could not resolve|Name or service not known|Connection timed out|Could not connect|Network is unreachable|Failed to fetch|apk|returned a non-zero code: 124' "$primary_log"; then
-        rm -f -- "$primary_log"
-        return 1
-    fi
-    rm -f -- "$primary_log"
-    prog 0.32 "Docker: загрузка пакетов с резервного зеркала Alpine"
-    log_warn "Первое зеркало Alpine недоступно при сборке. Повторяем с резервным HTTPS-зеркалом."
-    fallback_log="$(mktemp)" || return 1
-    if timeout -k 15s "${DOCKER_BUILD_TIMEOUT_SECONDS}s" docker build --network host \
-        --build-arg CSQTT_ALPINE_MIRROR=https://alpine.mirror.far.fi/alpine \
-        -t "$image" "$context_dir" >"$fallback_log" 2>&1; then
-        cat "$fallback_log" >>"$LOG_FILE"
-        rm -f -- "$fallback_log"
-        log_info "Docker-образ собран через резервное зеркало Alpine"
-        return 0
-    fi
-    cat "$fallback_log" >>"$LOG_FILE"
-    rm -f -- "$fallback_log"
+    local image="$1" context_dir="$2" mirror host ip build_log attempt=0
+    local -a host_args
+    for mirror in https://dl-cdn.alpinelinux.org/alpine https://mirror.yandex.ru/mirrors/alpine; do
+        attempt=$((attempt + 1))
+        host="${mirror#https://}"; host="${host%%/*}"
+        prog 0.32 "Docker: загрузка пакетов ($attempt/2, $host)"
+        log_step "Сборка Docker: ${mirror}"
+        host_args=()
+        ip="$(timeout 10 getent ahostsv4 "$host" 2>/dev/null | awk 'NR == 1 {print $1}' || true)"
+        if [[ "$ip" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            host_args=(--add-host "${host}:${ip}")
+        fi
+        build_log="$(mktemp)" || return 1
+        if timeout -k 15s "${DOCKER_BUILD_TIMEOUT_SECONDS}s" docker build --progress=plain --network host \
+            "${host_args[@]}" --build-arg "CSQTT_ALPINE_MIRROR=$mirror" \
+            -t "$image" "$context_dir" 2>&1 | tee "$build_log" | tee -a "$LOG_FILE"; then
+            rm -f -- "$build_log"
+            log_info "Docker-образ собран"
+            return 0
+        fi
+        if ! grep -Eqi 'fetch|resolve|network|timed out|timeout|Terminated|apk|TLS|SSL' "$build_log"; then
+            rm -f -- "$build_log"
+            return 1
+        fi
+        rm -f -- "$build_log"
+        log_warn "Не удалось получить пакеты Alpine через ${host}"
+    done
     return 1
 }
 

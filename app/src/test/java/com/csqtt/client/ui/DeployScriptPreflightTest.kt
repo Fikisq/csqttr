@@ -132,12 +132,14 @@ class DeployScriptPreflightTest {
     fun `docker image build tries an alternative repository without modifying DNS`() {
         val deploy = script()
         assertTrue(deploy.contains("DOCKER_BUILD_TIMEOUT_SECONDS"))
-        assertTrue(deploy.contains("docker build --network host"))
+        assertTrue(deploy.contains("docker build --progress=plain --network host"))
         assertTrue(deploy.contains("ARG CSQTT_ALPINE_MIRROR=https://dl-cdn.alpinelinux.org/alpine"))
         assertFalse(deploy.contains("> /etc/resolv.conf"))
         assertTrue(deploy.contains("FROM alpine:3.21"))
         assertTrue(deploy.contains("apk add --no-cache --no-progress ca-certificates iproute2 iptables"))
-        assertTrue(deploy.contains("CSQTT_ALPINE_MIRROR=https://alpine.mirror.far.fi/alpine"))
+        assertTrue(deploy.contains("https://mirror.yandex.ru/mirrors/alpine"))
+        assertTrue(deploy.contains("--add-host"))
+        assertTrue(deploy.contains("--progress=plain"))
         assertTrue(deploy.contains("Temporary failure resolving|Could not resolve|Name or service not known"))
     }
 
