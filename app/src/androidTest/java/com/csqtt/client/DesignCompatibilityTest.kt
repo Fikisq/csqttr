@@ -143,6 +143,42 @@ class DesignCompatibilityTest {
         }
     }
 
+    @Test fun classicSettingsCanDeleteOnlyTheChosenProfile() {
+        val store = SettingsStore(compose.activity)
+        val previous = runBlocking { store.activeProfile.first() }
+        val previousDesign = runBlocking { store.uiDesign.first() }
+        val other = runBlocking { store.readProfileConnectionSettings(previous) }
+        val slot = runBlocking { checkNotNull(store.findFirstFreeProfile()) }
+        val name = "Classic delete fixture"
+        try {
+            runBlocking {
+                store.saveProfileConnectionSettings(slot, "203.0.113.44", 46000, "DeleteFixture44", 20)
+                store.saveProfileName(slot, name)
+                store.saveActiveProfile(slot)
+                store.saveUiDesign("classic")
+            }
+            val gear = compose.onAllNodesWithContentDescription("Быстрые настройки")
+            compose.waitUntil(10_000) { gear.fetchSemanticsNodes().isNotEmpty() }
+            gear.onFirst().performClick()
+            compose.onNodeWithText(name).performClick()
+            compose.onNodeWithContentDescription("Редактировать: $name").performScrollTo().performClick()
+            compose.onNodeWithText("Удалить профиль").performClick()
+            compose.onNodeWithText("Отмена").performClick()
+            check(slot in runBlocking { store.occupiedProfiles.first() })
+            compose.onNodeWithText("Удалить профиль").performClick()
+            compose.onNodeWithText("Удалить").performClick()
+            compose.waitUntil(5_000) { slot !in runBlocking { store.occupiedProfiles.first() } }
+            check(slot != runBlocking { store.activeProfile.first() } || slot == previous)
+            check(other == runBlocking { store.readProfileConnectionSettings(previous) })
+        } finally {
+            runBlocking {
+                store.saveActiveProfile(previous)
+                store.clearProfile(slot)
+                store.saveUiDesign(previousDesign)
+            }
+        }
+    }
+
     @Test fun oldDesignUsesPaleBlueForTheConnectedButtonInBothThemes() {
         val store = SettingsStore(compose.activity)
         val oldDesign = runBlocking { store.uiDesign.first() }
