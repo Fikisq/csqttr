@@ -769,28 +769,6 @@ internal fun V2DeployScreen(
         checkThenDeploy()
     }
 
-    fun requestUninstall() {
-        if (DeployManager.isDeploying.value || isInspecting || isChangingSecretPath) return
-        if (host.isBlank() || !sshAuthReady) {
-            showDeployToast("Укажите данные SSH для подключения к серверу")
-            showConfigSheet = true
-            return
-        }
-        if (hostHasPortRefused()) return
-        runServerCheck { inventory ->
-            val servers = removableServers(inventory)
-            val notes = removalNotes(inventory)
-            val profilePort = resolveServerPorts(true, sshPort, peerPort, webPort).peer
-            val server = directRemoval(servers, notes, profilePort)
-            if (server != null) {
-                startUninstall(server)
-            } else {
-                checkState.removable = servers
-                checkState.removalNotes = notes
-            }
-        }
-    }
-
     fun startUninstall(server: FoundServer) {
         if (DeployManager.isDeploying.value || isInspecting || isChangingSecretPath) return
         val ports = resolveServerPorts(true, sshPort, peerPort, webPort)
@@ -848,6 +826,28 @@ internal fun V2DeployScreen(
                 }.onFailure {
                     DeployManager.writeError("Не удалось остановить foreground-режим удаления: ${it.message}")
                 }
+            }
+        }
+    }
+
+    fun requestUninstall() {
+        if (DeployManager.isDeploying.value || isInspecting || isChangingSecretPath) return
+        if (host.isBlank() || !sshAuthReady) {
+            showDeployToast("Укажите данные SSH для подключения к серверу")
+            showConfigSheet = true
+            return
+        }
+        if (hostHasPortRefused()) return
+        runServerCheck { inventory ->
+            val servers = removableServers(inventory)
+            val notes = removalNotes(inventory)
+            val profilePort = resolveServerPorts(true, sshPort, peerPort, webPort).peer
+            val server = directRemoval(servers, notes, profilePort)
+            if (server != null) {
+                startUninstall(server)
+            } else {
+                checkState.removable = servers
+                checkState.removalNotes = notes
             }
         }
     }
