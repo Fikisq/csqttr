@@ -250,7 +250,7 @@ internal val V2HistoricalLightColors = V2LightColors.copy(
     hero = Color(0xFFD9D9E4),
     heroRow = Color(0xFFC9C9D6),
     navSelected = Color(0xFFDCDCE5),
-    bottomSurface = Color(0xFFE8E8EE),
+    bottomSurface = Color(0xFFE8EDF3),
     error = Color(0xFFC54545),
 )
 

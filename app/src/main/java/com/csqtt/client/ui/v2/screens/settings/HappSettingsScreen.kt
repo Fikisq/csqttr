@@ -125,6 +125,7 @@ fun HappSettingsScreen(
     if (transfer) V2ImportExportDialog(settingsStore, { transfer = false })
     if (wifiLists) V2WifiNetworkListDialog(settingsStore, { wifiLists = false })
     if (logsHelp) AlertDialog(onDismissRequest = { logsHelp = false },
+        containerColor = V2Theme.colors.surface, tonalElevation = 0.dp,
         title = { Text("Вкладка «Логи»") },
         text = { Text("Показывает или скрывает вкладку для текущего профиля. Запись событий продолжается и при скрытой вкладке.") },
         confirmButton = { TextButton(onClick = { logsHelp = false }) { Text("Понятно") } })
