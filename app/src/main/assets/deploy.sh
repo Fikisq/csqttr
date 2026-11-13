@@ -329,9 +329,14 @@ force_release_peer_port() {
         found=0
         while IFS= read -r pid; do
             [ -n "$pid" ] || continue
+            if ! csqtt_process_is_owned "$pid"; then
+                log_error "UDP/${PEER_PORT} занят чужим процессом; остановка отменена"
+                return 1
+            fi
             found=1
             container="$(docker_container_for_pid "$pid" 2>/dev/null || true)"
             if [ -n "$container" ]; then
+                [ "$(docker inspect --format '{{.Name}}' "$container" 2>/dev/null)" = "/$CSQTT_DOCKER_CONTAINER" ] || return 1
                 log_warn "Принудительное удаление Docker runtime на UDP/${PEER_PORT}: ${container:0:12}"
                 docker update --restart=no "$container" >/dev/null 2>&1 || true
                 docker rm -f "$container" >/dev/null 2>&1 || true
@@ -2116,10 +2121,12 @@ ensure_docker() {
         fi
     fi
 
-    if command -v systemctl >/dev/null 2>&1; then
-        systemctl enable --now docker >>"$LOG_FILE" 2>&1 || true
-    elif command -v service >/dev/null 2>&1; then
-        service docker start >>"$LOG_FILE" 2>&1 || true
+    if ! docker info >/dev/null 2>&1; then
+        if command -v systemctl >/dev/null 2>&1; then
+            systemctl start docker >>"$LOG_FILE" 2>&1 || true
+        elif command -v service >/dev/null 2>&1; then
+            service docker start >>"$LOG_FILE" 2>&1 || true
+        fi
     fi
 
     docker --version | tee -a "$LOG_FILE"
@@ -2129,7 +2136,6 @@ ensure_docker() {
 
 ensure_tun_device() {
     if [ -c /dev/net/tun ]; then
-        chmod 666 /dev/net/tun 2>/dev/null || true
         return 0
     fi
     if command -v modprobe >/dev/null 2>&1; then
@@ -2138,7 +2144,6 @@ ensure_tun_device() {
     mkdir -p /dev/net
     [ -c /dev/net/tun ] || mknod /dev/net/tun c 10 200 >>"$LOG_FILE" 2>&1 || true
     [ -c /dev/net/tun ] || die "Устройство /dev/net/tun недоступно на этом VPS"
-    chmod 666 /dev/net/tun 2>/dev/null || true
 }
 
 check_kernel_compatibility() {
@@ -2208,12 +2213,10 @@ if [ ! -c /dev/net/tun ]; then
 fi
 
 [ -c /dev/net/tun ] || exit 20
-chmod 666 /dev/net/tun 2>/dev/null || true
 mkdir -p ${CSQTT_RUNTIME_DIR}
 chmod 0755 ${CSQTT_RUNTIME_DIR} 2>/dev/null || true
 rm -f ${CSQTT_DOCKER_NETWORK_READY}
 touch /run/xtables.lock
-chmod 600 /run/xtables.lock 2>/dev/null || true
 PREREQ
     chmod 0755 "$CSQTT_DOCKER_PREREQ_HELPER"
 
@@ -2231,7 +2234,7 @@ RemainAfterExit=yes
 ExecStart=${CSQTT_DOCKER_PREREQ_HELPER}
 
 [Install]
-RequiredBy=docker.service
+WantedBy=docker.service
 PREREQUNIT
     install -m 0644 "$unit_tmp" "/etc/systemd/system/${CSQTT_DOCKER_PREREQ_SERVICE}"
     rm -f "$unit_tmp"
@@ -2633,7 +2636,7 @@ do_uninstall() {
     command -v systemctl >/dev/null 2>&1 && systemctl daemon-reload >/dev/null 2>&1 || true
 
     [ "$CSQTT_ROLE" = side ] || cleanup_legacy_proxy_interfaces
-    remove_csqtt_tun_interface || log_warn "Не удалось удалить TUN-интерфейс $CSQTT_IFACE во время uninstall"
+    remove_csqtt_tun_interface || die "Не удалось удалить TUN-интерфейс $CSQTT_IFACE"
     cleanup_csqtt_netfilter_rules || true
 
     rm -f "$CSQTT_BIN" "$CSQTT_LE_RENEW_HELPER"
@@ -3015,9 +3018,9 @@ main() {
             if [ "$DEPLOY_MODE" = "docker" ]; then
                 run_timed "Сборка образа Docker и загрузка его пакетов" 0.32 prepare_docker_candidate "$UPLOAD_BINARY"
             fi
+            run_timed "Проверка совместимости TUN" 0.42 run_platform_preflight
             DEPLOY_PHASE="cutover"
             run_timed "Остановка прежнего экземпляра CSQTT" 0.46 csqtt_cleanup
-            run_timed "Проверка совместимости TUN" 0.50 run_platform_preflight
             detect_firewall
             run_timed "Настройка правил CSQTT" 0.54 setup_nat_and_firewall
             install_network_helper
