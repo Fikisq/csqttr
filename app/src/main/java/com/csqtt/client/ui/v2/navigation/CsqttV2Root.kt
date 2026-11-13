@@ -97,7 +97,7 @@ fun CsqttV2Root(
         val deployStore = remember(context) { SettingsStore(context, deployScope = true) }
         // Keep this store's own snapshot ready, without reviving a saved form from another VPS.
         val deploySettings by deployStore.deploySettingsSnapshot.collectAsStateWithLifecycle(DeploySettingsSnapshot())
-        val tunnelProfile by settingsStore.activeProfileConnection.collectAsStateWithLifecycle(initialValue = null)
+        val tunnelProfile by settingsStore.tunnelScreenSnapshot.collectAsStateWithLifecycle(initialValue = null)
         val participantShowLogs by settingsStore.participantShowLogs.collectAsStateWithLifecycle(
             initialValue = SettingsStore.DEFAULT_PARTICIPANT_SHOW_LOGS,
         )
@@ -282,8 +282,8 @@ fun CsqttV2Root(
                                             },
                                         )
 
-                                        V2Tab.Tunnel -> tunnelProfile?.let { (profile, snapshot) ->
-                                            HappTunnelScreen(settingsStore, profile, snapshot, version, { overlay = OVERLAY_SETTINGS }, onVkAuthRequested)
+                                        V2Tab.Tunnel -> tunnelProfile?.let { snapshot ->
+                                            HappTunnelScreen(settingsStore, snapshot, version, { overlay = OVERLAY_SETTINGS }, onVkAuthRequested)
                                         }
 
                                         V2Tab.Logs -> V2LogsScreen(

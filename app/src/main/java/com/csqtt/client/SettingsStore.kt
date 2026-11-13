@@ -80,6 +80,25 @@ internal data class TunnelAuthSnapshot(
 }
 
 /** Snapshot of the connection settings of a concrete profile slot (not necessarily active). */
+internal data class TunnelScreenSnapshot(
+    val profile: Int,
+    val name: String,
+    val connection: ProfileConnectionSnapshot,
+    val hashes: String,
+    val hashMode: String,
+    val authMode: String,
+    val token: String,
+    val srtp: String,
+    val transport: String,
+    val goobyMode: GoobyMode,
+    val subnet: String,
+    val ipLimit: String,
+    val hashResults: String,
+    val manualHashGroup: ManualHashGroup,
+    val autoJsAcknowledged: Boolean,
+    val tcpAcknowledged: Boolean,
+)
+
 internal data class ProfileConnectionSnapshot(
     val revision: Long = 0,
     val peer: String = "",
@@ -910,11 +929,45 @@ private val DEPLOY_LAST_INSPECTION_PANEL = booleanPreferencesKey("deploy_last_in
         }
     }
 
-    internal val activeProfileConnection: Flow<Pair<Int, ProfileConnectionSnapshot>> =
-        dataStore.data.map { prefs ->
-            val profile = prefs[ACTIVE_PROFILE] ?: 0
-            profile to readProfileConnectionSettings(prefs, profile)
-        }.distinctUntilChanged()
+    internal val tunnelScreenSnapshot: Flow<TunnelScreenSnapshot> = dataStore.data.map { prefs ->
+        val profile = prefs[ACTIVE_PROFILE] ?: 0
+        val connection = readProfileConnectionSettings(prefs, profile)
+        val ownerHashes = connection.csqttLink.takeIf { connection.csqttLinkMode }
+            ?.let { com.csqtt.client.ui.legacy.utils.parseCsqttLink(it) }?.hashes.orEmpty()
+        val selectedHashGroup = prefs[getProfileKey(MANUAL_HASH_GROUP, profile)]
+        val removed = prefs[getProfileKey(LINK_HASHES_REMOVED, profile)].orEmpty().split(',').toSet()
+        TunnelScreenSnapshot(
+            profile = profile,
+            name = prefs[getProfileKey(PROFILE_NAME, profile)] ?: defaultProfileName(profile),
+            connection = connection,
+            hashes = prefs[getProfileKey(VK_HASHES, profile)].orEmpty(),
+            hashMode = when (prefs[getProfileKey(VK_HASH_MODE, profile)]) {
+                "auto", CsqttConstants.VkAutoHash.MODE_AUTO_API -> CsqttConstants.VkAutoHash.MODE_AUTO_API
+                CsqttConstants.VkAutoHash.MODE_AUTO_JS -> CsqttConstants.VkAutoHash.MODE_AUTO_JS
+                else -> CsqttConstants.VkAutoHash.MODE_MANUAL
+            },
+            authMode = when (prefs[getProfileKey(VK_AUTH_MODE, profile)]) {
+                CsqttConstants.VkAuth.MODE_CAPTCHA -> CsqttConstants.VkAuth.MODE_CAPTCHA
+                CsqttConstants.VkAuth.MODE_AUTO_JS -> CsqttConstants.VkAuth.MODE_AUTO_JS
+                else -> CsqttConstants.VkAuth.MODE_CALLS
+            },
+            token = effectiveVkToken(prefs, profile),
+            srtp = when (prefs[getProfileKey(SRTP_MODE, profile)]) {
+                CsqttConstants.SrtpMode.WRAP -> CsqttConstants.SrtpMode.WRAP
+                CsqttConstants.SrtpMode.DTLS -> CsqttConstants.SrtpMode.DTLS
+                else -> CsqttConstants.SrtpMode.DEFAULT
+            },
+            transport = if (prefs[getProfileKey(TURN_TRANSPORT, profile)] == CsqttConstants.Tunnel.TURN_TRANSPORT_TCP_TLS)
+                CsqttConstants.Tunnel.TURN_TRANSPORT_TCP_TLS else CsqttConstants.Tunnel.DEFAULT_TURN_TRANSPORT,
+            goobyMode = readGoobyMode(prefs, profile),
+            subnet = prefs[getProfileKey(SELECTED_TURN_SUBNET, profile)].orEmpty(),
+            ipLimit = prefs[getProfileKey(TURN_SUBNET_IP_LIMIT, profile)] ?: "ALL",
+            hashResults = prefs[getProfileKey(VK_HASH_CHECK_RESULTS, profile)] ?: "{}",
+            manualHashGroup = selectManualHashGroup(ownerHashes, ManualHashGroup.entries.firstOrNull { it.name == selectedHashGroup }, removed),
+            autoJsAcknowledged = prefs[AUTO_JS_RISK_ACKNOWLEDGED] ?: false,
+            tcpAcknowledged = prefs[TCP_TRANSPORT_RISK_ACKNOWLEDGED] ?: false,
+        )
+    }.distinctUntilChanged().onIo()
 
     internal suspend fun readProfileConnectionSettings(profile: Int): ProfileConnectionSnapshot =
         readProfileConnectionSettings(dataStore.data.first(), profile)

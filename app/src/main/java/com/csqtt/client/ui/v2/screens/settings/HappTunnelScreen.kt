@@ -46,8 +46,7 @@ private val draftWrites = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 @Composable
 internal fun HappTunnelScreen(
     settingsStore: SettingsStore,
-    profile: Int,
-    snapshot: ProfileConnectionSnapshot,
+    screen: TunnelScreenSnapshot,
     version: String,
     onSettings: () -> Unit,
     onVkAuthRequested: () -> Unit,
@@ -55,6 +54,8 @@ internal fun HappTunnelScreen(
     val c = V2Theme.colors
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
+    val profile = screen.profile
+    val snapshot = screen.connection
     val editingProfile = profile
     val names by settingsStore.profileNames.collectAsStateWithLifecycle(emptyMap())
     val occupied by settingsStore.occupiedProfiles.collectAsStateWithLifecycle(emptySet())
@@ -67,18 +68,18 @@ internal fun HappTunnelScreen(
     val rawLink = snapshot.csqttLink
     val link = remember(rawLink) { com.csqtt.client.ui.legacy.utils.parseCsqttLink(rawLink) }
     val ownerHashes = if (participant) link?.hashes.orEmpty() else emptyList()
-    val manualHashGroup by settingsStore.manualHashGroup.collectAsStateWithLifecycle(ManualHashGroup.Owner)
+    val manualHashGroup = screen.manualHashGroup
     val linkTokenActive = participant && !link?.vkAccessToken.isNullOrBlank()
-    val hashes by settingsStore.vkHashes.collectAsStateWithLifecycle("")
-    val hashMode by settingsStore.vkHashMode.collectAsStateWithLifecycle("manual")
-    val authMode by settingsStore.vkAuthMode.collectAsStateWithLifecycle("vkcalls")
-    val token by settingsStore.vkAccessToken.collectAsStateWithLifecycle("")
-    val srtp by settingsStore.srtpMode.collectAsStateWithLifecycle("auto")
-    val transport by settingsStore.turnTransport.collectAsStateWithLifecycle("udp")
-    val goobyMode by settingsStore.goobyMode.collectAsStateWithLifecycle(GoobyMode.OFF)
-    val subnet by settingsStore.selectedTurnSubnet.collectAsStateWithLifecycle("")
-    val ipLimit by settingsStore.turnSubnetIpLimit.collectAsStateWithLifecycle("ALL")
-    val results by settingsStore.vkHashCheckResults.collectAsStateWithLifecycle("{}")
+    val hashes = screen.hashes
+    val hashMode = screen.hashMode
+    val authMode = screen.authMode
+    val token = screen.token
+    val srtp = screen.srtp
+    val transport = screen.transport
+    val goobyMode = screen.goobyMode
+    val subnet = screen.subnet
+    val ipLimit = screen.ipLimit
+    val results = screen.hashResults
     val extraWorkers = snapshot.extraWorkers
     val workerMaximum = WorkerCountPolicy.defaultMaximum(extraWorkers && authMode != "auto_js")
     val revision = snapshot.revision
@@ -95,8 +96,8 @@ internal fun HappTunnelScreen(
     var showCaptcha by remember(profile) { mutableStateOf(false) }
     var pendingAutoJs by remember(profile) { mutableStateOf<(() -> Unit)?>(null) }
     var pendingTcp by remember(profile) { mutableStateOf<(() -> Unit)?>(null) }
-    val autoJsAcknowledged by settingsStore.autoJsRiskAcknowledged.collectAsStateWithLifecycle(false)
-    val tcpAcknowledged by settingsStore.tcpTransportRiskAcknowledged.collectAsStateWithLifecycle(false)
+    val autoJsAcknowledged = screen.autoJsAcknowledged
+    val tcpAcknowledged = screen.tcpAcknowledged
     val effectiveWorkers = WorkerCountPolicy.normalize(workers, workerMaximum)
     val draftTracker = remember(profile) { mutableStateOf<ProfileConnectionSnapshot?>(null) }
     SideEffect {
@@ -153,7 +154,7 @@ internal fun HappTunnelScreen(
                 onDelete = { actionsExpanded = false; confirmDelete = true },
             ) { swipeModifier ->
                 HappProfileHeader(
-                    title = names[profile] ?: defaultProfileName(profile),
+                    title = screen.name,
                     subtitle = if (host.isBlank()) "Сервер не настроен" else "$host:$port",
                     onSelect = { if (actionsExpanded) actionsExpanded = false else picker = true },
                     onEdit = { actionsExpanded = false; editing = profile },
