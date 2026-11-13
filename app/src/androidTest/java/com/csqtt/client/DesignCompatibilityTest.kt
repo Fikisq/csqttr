@@ -252,7 +252,7 @@ class DesignCompatibilityTest {
         val oldTheme = runBlocking { store.themeMode.first() }
         val oldAuth = runBlocking { store.vkAuthMode.first() }
         try {
-            runBlocking { store.saveVkAuthMode(CsqttConstants.VkAuth.MODE_CALLS) }
+            runBlocking { store.saveVkAuthMode(CsqttConstants.VkAuth.MODE_CAPTCHA) }
             for (theme in listOf("light", "dark")) {
                 runBlocking { store.saveThemeMode(theme) }
                 var classicGeometry: List<Int>? = null
@@ -261,9 +261,7 @@ class DesignCompatibilityTest {
                     val tunnel = compose.onAllNodesWithText("Туннель")
                     compose.waitUntil(10_000) { tunnel.fetchSemanticsNodes().isNotEmpty() }
                     tunnel.onFirst().performClick()
-                    val credits = hasClickAction() and hasText("Авто") and
-                        hasAnySibling(hasText("Режим кредов"))
-                    compose.onNode(credits).performScrollTo().performClick()
+                    compose.onNodeWithText("Капча").performScrollTo().performClick()
                     val popup = hasAnyAncestor(isPopup())
                     val captcha = compose.onNode(hasText("Капча") and hasClickAction() and popup)
                     val help = compose.onNodeWithContentDescription("Информация: Капча")
