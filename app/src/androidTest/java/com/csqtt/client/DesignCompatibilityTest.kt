@@ -176,7 +176,9 @@ class DesignCompatibilityTest {
                 compose.onNodeWithContentDescription("Скрыть $label").performClick()
             }
             compose.onNodeWithText("Сохранить").assertIsDisplayed().assertIsEnabled().performClick()
-            form.assertDoesNotExist()
+            compose.waitUntil(5000) {
+                compose.onAllNodesWithTag("classic-deploy-authorization").fetchSemanticsNodes().isEmpty()
+            }
         } finally {
             runBlocking {
                 store.saveUiDesign(oldDesign)
