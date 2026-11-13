@@ -83,30 +83,94 @@ class SshConnectionSmokeTest {
                                 printf 'RESTORED_OK\n'
                             """.trimIndent()
                         }
-                        "passwords" -> {
-                            val slot = deployStore.linkedConnectionProfile(saved.profile)
-                            val auth = SettingsStore(context, readOnlyProfile = slot)
-                                .tunnelAuthSnapshot.first { it.profile >= 0 }
-                            assertEquals(slot, auth.profile)
-                            assertTrue("Deploy and Tunnel passwords match", saved.mainPassword == auth.connectionPassword)
-                            val generated = Regex("[A-Za-z0-9]{16}")
-                            assertTrue("Both generated passwords match the expected format",
-                                generated.matches(saved.mainPassword) && generated.matches(saved.webPassword))
-                            assertTrue("The generated passwords are different", saved.mainPassword != saved.webPassword)
+                        "passwords", "docker-fixture-add", "docker-fixture-remove" -> {
+                            if (check == "passwords") {
+                                val slot = deployStore.linkedConnectionProfile(saved.profile)
+                                val auth = SettingsStore(context, readOnlyProfile = slot)
+                                    .tunnelAuthSnapshot.first { it.profile >= 0 }
+                                assertEquals(slot, auth.profile)
+                                assertTrue("Deploy and Tunnel passwords match", saved.mainPassword == auth.connectionPassword)
+                                val generated = Regex("[A-Za-z0-9]{16}")
+                                assertTrue("Both generated passwords match the expected format",
+                                    generated.matches(saved.mainPassword) && generated.matches(saved.webPassword))
+                                assertTrue("The generated passwords are different", saved.mainPassword != saved.webPassword)
+                            }
                             val path = saved.secretPathUuid.trim().trim('/')
                             require(path.matches(Regex("[A-Za-z0-9_-]*")))
-                            val endpoint = "https://${saved.ip}:46002" +
-                                (if (path.isEmpty()) "" else "/$path") + "/api/login"
+                            val endpoint = "https://${saved.ip}:46002" + (if (path.isEmpty()) "" else "/$path")
                             val payload = org.json.JSONObject().put("user", saved.webLogin).put("pass", saved.webPassword)
-                                .toString().replace("'", "'\"'\"'")
-                            """
+                            if (check == "passwords") """
                                 set -eu
-                                printf '%s' '$payload' |
+                                printf '%s' '${payload.toString().replace("'", "'\"'\"'")}' |
                                     curl --silent --show-error --fail --max-time 10 \
                                     --cacert /etc/csqtt/web_cert.pem \
                                     --connect-to '${saved.ip}:46002:127.0.0.1:46002' \
-                                    -H 'Content-Type: application/json' --data-binary @- '$endpoint' -o /dev/null
+                                    -H 'Content-Type: application/json' --data-binary @- '$endpoint/api/login' -o /dev/null
                                 printf 'PASSWORDS_OK\n'
+                            """.trimIndent() else """
+                                set -eu
+                                test "${'$'}(docker inspect --format '{{.State.Running}}' csqtt)" = true
+                                python3 - <<'PY'
+                                import json
+                                import subprocess
+                                import urllib.parse
+
+                                endpoint = '$endpoint'
+                                curl = ["curl", "-fsS", "--max-time", "20", "--cacert", "/etc/csqtt/web_cert.pem",
+                                        "--connect-to", "${saved.ip}:46002:127.0.0.1:46002"]
+                                login = subprocess.run(curl + ["-D", "-", "-o", "/dev/null",
+                                    "-H", "Content-Type: application/json", "--data-binary", "@-", endpoint + "/api/login"],
+                                    input=${org.json.JSONObject.quote(payload.toString())},
+                                    text=True, capture_output=True, check=True)
+                                cookie = next(line.split(":", 1)[1].strip().split(";", 1)[0]
+                                              for line in login.stdout.splitlines() if line.lower().startswith("set-cookie:"))
+
+                                def api(path, method="GET", data=None):
+                                    command = curl + ["-H", "Cookie: " + cookie, "-X", method, endpoint + "/api/" + path]
+                                    if data is not None:
+                                        command += ["-H", "Content-Type: application/json", "--data-binary", "@-"]
+                                    response = subprocess.run(command, input=None if data is None else json.dumps(data),
+                                                              text=True, capture_output=True)
+                                    if response.returncode != 0:
+                                        raise RuntimeError("CSQTTR API request failed: " + method + " " + path.split("/")[0])
+                                    return response.stdout
+
+                                name = "QA 60.14 Docker retention"
+                                token = "qa-csqttr-6014-inert-token"
+                                client_hashes = "qa6014-inert-hash-one,qa6014-inert-hash-two"
+
+                                def cleanup(state):
+                                    for rule_id, rule in state["routing_rules"].items():
+                                        if rule["name"] == name:
+                                            api("routing-rules/" + urllib.parse.quote(rule_id, safe=""), "DELETE")
+                                    for client in state["clients"]:
+                                        if client["name"] == name and client["vk_hashes"] == client_hashes:
+                                            api("clients/" + urllib.parse.quote(client["password"], safe=""), "DELETE")
+                                    if state["vk_access_token"] == token:
+                                        api("settings", "POST", {"vk_token": ""})
+
+                                state = json.loads(api("export"))
+                                try:
+                                    if "$check" == "docker-fixture-add":
+                                        assert not state["clients"] and not state["routing_rules"] and not state["vk_access_token"]
+                                        try:
+                                            client = json.loads(api("clients", "POST",
+                                                {"name": name, "days": 1, "hash": client_hashes}))
+                                            api("clients/" + urllib.parse.quote(client["password"], safe="") + "/toggle", "POST")
+                                            api("routing-rules", "POST", {"name": name, "packages": ["org.example.qa"],
+                                                "domains": ["fixture.example"], "ips": ["192.0.2.0/24"],
+                                                "assigned_clients": [client["password"]]})
+                                            api("settings", "POST", {"vk_token": token})
+                                        except Exception:
+                                            cleanup(json.loads(api("export")))
+                                            raise
+                                        print("FIXTURE_ADDED")
+                                    else:
+                                        cleanup(state)
+                                        print("FIXTURE_REMOVED")
+                                finally:
+                                    api("logout", "POST")
+                                PY
                             """.trimIndent()
                         }
                         "docker-state" -> """
@@ -159,7 +223,8 @@ class SshConnectionSmokeTest {
                                     lines.size == 6 && lines.all(record::matches) &&
                                         lines.map { it.split(' ')[1] }.distinct().size == 6)
                             } else {
-                                assertTrue(result in setOf("REMOVED_OK", "RESTORED_OK", "PASSWORDS_OK") ||
+                                assertTrue(result in setOf("REMOVED_OK", "RESTORED_OK", "PASSWORDS_OK",
+                                    "FIXTURE_ADDED", "FIXTURE_REMOVED") ||
                                     result.matches(Regex("BACKUP_OK /root/csqtt-before-60\\.14-[A-Za-z0-9]{8}\\.tar")))
                             }
                             println(result)
