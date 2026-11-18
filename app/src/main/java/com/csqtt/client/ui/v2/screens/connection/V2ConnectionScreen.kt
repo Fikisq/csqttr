@@ -67,8 +67,10 @@ import com.csqtt.client.ConnectionSource
 import com.csqtt.client.ConnectionStartBlocker
 import com.csqtt.client.ConnectionStartPolicy
 import com.csqtt.client.CsqttConstants
+import com.csqtt.client.GoobyMode
 import com.csqtt.client.R
 import com.csqtt.client.SettingsStore
+import com.csqtt.client.DeployServerInfo
 import com.csqtt.client.StoredSecretState
 import com.csqtt.client.TunnelAuthSnapshot
 import com.csqtt.client.TunnelManager
@@ -76,6 +78,7 @@ import com.csqtt.client.TunnelService
 import com.csqtt.client.VkHashValidationCodec
 import com.csqtt.client.defaultProfileName
 import com.csqtt.client.newTunnelSessionId
+import com.csqtt.client.ManualHashGroup
 import com.csqtt.client.resolveConnectionSource
 import com.csqtt.client.showRaisedToast
 import com.csqtt.client.ui.legacy.utils.parseCsqttLink
@@ -85,6 +88,9 @@ import com.csqtt.client.ui.v2.components.V2FlowerButton
 import com.csqtt.client.ui.v2.components.V2TopBar
 import com.csqtt.client.ui.v2.design.V2DisplayFamily
 import com.csqtt.client.ui.v2.design.V2Shapes
+import com.csqtt.client.ui.v2.components.LocalV2AdaptiveMetrics
+import com.csqtt.client.ui.v2.components.V2AdaptiveScreen
+import com.csqtt.client.ui.v2.design.V2TextSizes
 import com.csqtt.client.ui.v2.design.V2Sizes
 import com.csqtt.client.ui.v2.design.V2Spacing
 import com.csqtt.client.ui.v2.design.V2Theme
@@ -93,7 +99,7 @@ import kotlinx.coroutines.launch
 import java.util.Locale
 
 @Composable
-fun V2ConnectionScreen(
+internal fun V2ConnectionScreen(
     settingsStore: SettingsStore,
     version: String,
     onSettings: () -> Unit,
@@ -102,6 +108,10 @@ fun V2ConnectionScreen(
     profilePickerRequest: Int = 0,
     onVersionClick: (() -> Unit)? = null,
     onOpenResourceMonitor: () -> Unit = {},
+    historicalPalette: Boolean = false,
+    occupiedProfiles: Set<Int>,
+    profileNames: Map<Int, String>,
+    deployServers: List<DeployServerInfo>,
 ) {
     val context = LocalContext.current.applicationContext
     val scope = rememberCoroutineScope()
@@ -126,11 +136,7 @@ fun V2ConnectionScreen(
     val vkAuthMode by settingsStore.vkAuthMode.collectAsStateWithLifecycle(initialValue = "vkcalls")
     val savedHashMode by settingsStore.vkHashMode.collectAsStateWithLifecycle(initialValue = SettingsStore.cachedVkHashMode)
     val savedVkAccessToken by settingsStore.vkAccessToken.collectAsStateWithLifecycle(initialValue = SettingsStore.cachedVkAccessToken)
-    val occupiedProfiles by settingsStore.occupiedProfiles.collectAsStateWithLifecycle(initialValue = emptySet())
-    val deployServers by settingsStore.deployServers.collectAsStateWithLifecycle(initialValue = emptyList())
-
     val activeProfile by settingsStore.activeProfile.collectAsStateWithLifecycle(initialValue = 0)
-    val profileNames by settingsStore.profileNames.collectAsStateWithLifecycle(initialValue = emptyMap())
     val profileSubscriptions by settingsStore.profileSubscriptions.collectAsStateWithLifecycle(
         initialValue = emptyMap(),
     )
@@ -214,9 +220,8 @@ fun V2ConnectionScreen(
     val parsedLink = remember(tunnelAuthSettings.csqttLink) {
         parseCsqttLink(tunnelAuthSettings.csqttLink)
     }
-    val linkHashesRemoved by settingsStore.linkHashesRemoved.collectAsStateWithLifecycle(initialValue = emptySet())
-    // the owner's hashes still in use: the ones the participant took out do not count
-    val linkHashes = parsedLink?.hashes.orEmpty().filterNot { it in linkHashesRemoved }
+    val manualHashGroup by settingsStore.manualHashGroup.collectAsStateWithLifecycle(ManualHashGroup.Owner)
+    val linkHashes = parsedLink?.hashes.orEmpty()
     val linkTokenActive = csqttLinkMode && !parsedLink?.vkAccessToken.isNullOrEmpty()
 
     val rawManualHashes = remember(vkHashes) {
@@ -238,6 +243,7 @@ fun V2ConnectionScreen(
         autoOrInteractive,
         hashesReady,
         manualHashes.size,
+        manualLinkGroup = manualHashGroup.takeIf { linkHashes.isNotEmpty() },
     )
     val peerPortValid = serverPeerPort in 1..65535
     val trimmedPeer = peer.trim()
@@ -282,6 +288,7 @@ fun V2ConnectionScreen(
                 putExtra("client_ids", settingsStore.activeClientIds.first())
                 putExtra("obfs_mode", CsqttConstants.Tunnel.DEFAULT_OBFS_MODE)
                 putExtra("turn_transport", settingsStore.turnTransport.first())
+                putExtra(GoobyMode.EXTRA, settingsStore.goobyMode.first().storedValue)
                 putExtra("srtp_mode", settingsStore.srtpMode.first())
                 putExtra("custom_turn_ips", settingsStore.customTurnIps.first())
                 putExtra("generation_id", nextGen)
@@ -371,23 +378,39 @@ fun V2ConnectionScreen(
         (tunnelRunning || isStarting || autoPausedForWifi || !cooldownActive || !configurationValid)
     val activeVisual = tunnelRunning || isStarting || autoPausedForWifi || tunnelStopping
 
-    Column(modifier.fillMaxSize().padding(horizontal = 16.dp)) {
+    val darkSurface = colors.background.luminance() < 0.5f
+    val powerInk = when {
+        isStarting || tunnelStopping || autoPausedForWifi || profileChecking -> colors.warning
+        tunnelRunning && historicalPalette -> androidx.compose.ui.graphics.Color(0xFFD2E8FF)
+        tunnelRunning -> colors.success
+        historicalPalette -> colors.onAccent
+        darkSurface -> androidx.compose.ui.graphics.Color(0xFF78ADF5)
+        else -> colors.accent
+    }
+    val powerOutline = when {
+        historicalPalette && !activeVisual && !profileChecking -> colors.accent.copy(alpha = 0.65f)
+        !activeVisual && !profileChecking && darkSurface -> androidx.compose.ui.graphics.Color(0xFF3567AA)
+        else -> powerInk
+    }
+
+    V2AdaptiveScreen(modifier.fillMaxSize().padding(horizontal = V2Sizes.ScreenPadding)) {
+        val layout = LocalV2AdaptiveMetrics.current
         V2TopBar(version = version, onSettings = onSettings, actions = {
             V2CircleIconButton(iconPainter = painterResource(R.drawable.ic_v2_plus), contentDescription = "Добавить профиль", onClick = { showAddChoiceDialog = true })
         })
-        Column(Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 20.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        Column(Modifier.fillMaxWidth().padding(top = layout.gap, bottom = layout.gap * 2), horizontalAlignment = Alignment.CenterHorizontally) {
             androidx.compose.material3.Surface(shape = androidx.compose.foundation.shape.CircleShape,
-                color = colors.accentSoft, modifier = Modifier.size(204.dp)) {
+                color = if (historicalPalette) colors.accentSoft else powerOutline.copy(alpha = 0.07f), modifier = Modifier.size(layout.powerSize)) {
                 Box(contentAlignment = Alignment.Center) {
             androidx.compose.material3.Surface(onClick = { toggleTunnel() }, enabled = canToggle, shape = androidx.compose.foundation.shape.CircleShape,
-                color = if(activeVisual) colors.accent else colors.flower,
-                border = androidx.compose.foundation.BorderStroke(2.dp, colors.accent.copy(alpha = 0.65f)), modifier = Modifier.size(172.dp)) {
+                color = if (historicalPalette) colors.flower else colors.surface,
+                border = androidx.compose.foundation.BorderStroke(2.dp, powerOutline), modifier = Modifier.size(layout.powerSize - 14.dp)) {
                 Column(verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
-                    val buttonText = colors.onAccent
-                    Icon(androidx.compose.material.icons.Icons.Outlined.PowerSettingsNew, if(activeVisual) "Отключить" else "Подключить", tint = buttonText, modifier = Modifier.size(56.dp))
+                    val buttonText = powerInk
+                    Icon(androidx.compose.material.icons.Icons.Outlined.PowerSettingsNew, if(activeVisual) "Отключить" else "Подключить", tint = buttonText, modifier = Modifier.size((layout.powerSize / 4).coerceIn(28.dp, 56.dp)))
                     Text(when { profileChecking -> "Проверка…"; tunnelStopping -> "Остановка…"; isStarting -> "Подключение…"; autoPausedForWifi -> "Пауза Wi-Fi"; tunnelRunning -> "Подключено"; else -> "Отключено" },
-                        fontSize = 13.sp, color = buttonText, modifier = Modifier.padding(top = 10.dp))
-                    if(tunnelRunning) Text(formatTunnelUptime(uptimeSeconds), fontSize = 13.sp, color = buttonText, modifier = Modifier.padding(top = 4.dp))
+                        fontSize = V2TextSizes.Action, color = buttonText, modifier = Modifier.padding(top = 10.dp))
+                    if(tunnelRunning) Text(formatTunnelUptime(uptimeSeconds), fontSize = V2TextSizes.Secondary, color = buttonText, modifier = Modifier.padding(top = 4.dp))
                 }
             }
                 }
@@ -395,7 +418,8 @@ fun V2ConnectionScreen(
         }
         val batterySaving by com.csqtt.client.BatterySaver.active.collectAsStateWithLifecycle()
         if (batterySaving && tunnelRunning) Text(com.csqtt.client.BatterySaver.BADGE, color = colors.warning, fontSize = 12.sp, modifier = Modifier.padding(bottom = 8.dp))
-        HappServerList(settingsStore, activeProfile, tunnelBusy, { creatingProfile = false; editingProfile = it }, Modifier.weight(1f).padding(bottom = 8.dp))
+        HappServerList(settingsStore, activeProfile, tunnelBusy, occupiedProfiles, profileNames, deployServers,
+            { creatingProfile = false; editingProfile = it }, Modifier.weight(1f).padding(bottom = 8.dp), historicalPalette)
     }
     if(showProfileDialog) androidx.compose.ui.window.Dialog(onDismissRequest = { showProfileDialog = false }) {
         V2ProfilePickerMenu(settingsStore, activeProfile, profileNames, occupiedProfiles, profileSubscriptions, tunnelBusy, { showProfileDialog = false }, { creatingProfile = false; editingProfile = it })
@@ -639,8 +663,8 @@ private fun V2ProfileCard(
                 text = displayName,
                 style = MaterialTheme.typography.titleMedium.copy(
                     fontFamily = V2DisplayFamily,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Normal,
+                    fontSize = V2TextSizes.Body,
                     letterSpacing = 0.5.sp,
                 ),
                 color = colors.textPrimary,

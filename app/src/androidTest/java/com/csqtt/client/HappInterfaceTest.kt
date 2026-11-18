@@ -1,6 +1,8 @@
 package com.csqtt.client
 
 import androidx.activity.ComponentActivity
+import androidx.compose.runtime.getValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -22,6 +24,7 @@ import org.junit.runner.RunWith
 class HappInterfaceTest {
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
     private lateinit var store: SettingsStore
+    private var vkAccountRequests = 0
 
     private fun screenshot(name: String) {
         compose.waitForIdle()
@@ -36,11 +39,15 @@ class HappInterfaceTest {
             store.saveThemeMode("dark")
             store.saveUpdateCheckIntervalHours(UPDATE_CHECK_NEVER)
             store.saveActiveProfile(0)
+            store.saveProfileName(0, "Основной тестовый профиль")
             store.saveParticipantShowLogs(true)
             store.saveLoggingEnabled(true)
             store.saveProfileConnectionSettings(0, "203.0.113.10", 46000, "DemoPassword1234", 20)
         }
-        compose.setContent { CsqttV2Root(store) }
+        compose.setContent {
+            val theme by store.themeMode.collectAsStateWithLifecycle("dark")
+            CsqttV2Root(store, onVkAuthRequested = { vkAccountRequests++ }, themeMode = theme)
+        }
         compose.waitForIdle()
     }
 
@@ -50,14 +57,20 @@ class HappInterfaceTest {
             store.saveProfileConnectionSettings(28, "203.0.113.28", 46000, "FixturePassword28", 10)
             store.saveProfileName(28, "Theme server B")
         }
-        for (theme in listOf("light", "dark", "light")) {
-            runBlocking { store.saveThemeMode(theme) }
-            compose.waitForIdle()
-            compose.onNodeWithText("Theme server A").assertExists()
-            compose.onNodeWithText("Theme server B").assertExists()
-            screenshot("review4-connection-$theme.png")
+        val list = compose.onNode(hasAnyAncestor(hasTestTag("servers-card")) and hasScrollToIndexAction())
+        val indexOfB = runBlocking { store.occupiedProfiles.first().sorted().indexOf(28) }
+        try {
+            for (theme in listOf("light", "dark", "light")) {
+                runBlocking { store.saveThemeMode(theme) }
+                list.performScrollToIndex(0)
+                compose.onNodeWithText("Theme server A").assertIsDisplayed()
+                list.performScrollToIndex(indexOfB)
+                compose.onNodeWithText("Theme server B").assertIsDisplayed()
+                screenshot("review4-connection-$theme.png")
+            }
+        } finally {
+            runBlocking { store.clearProfile(28); store.saveProfileName(0, ""); store.saveThemeMode("dark") }
         }
-        runBlocking { store.clearProfile(28); store.saveProfileName(0, ""); store.saveThemeMode("dark") }
     }
 
     @Test fun profileAndTurnPingResultsSurviveNavigationAndReopeningDialogs() {
@@ -158,48 +171,59 @@ class HappInterfaceTest {
             deploy.saveActiveProfile(25)
         }
         compose.onNodeWithText("Деплой").performClick()
-        compose.onNodeWithContentDescription("Действия веб-панели").performClick()
-        compose.onNodeWithText("Сменить путь панели").performClick()
+        compose.onNodeWithContentDescription("Изменить секретный путь").performScrollTo().performClick()
         compose.onNodeWithText("Смена пути панели").assertExists()
         compose.onNodeWithText("Отмена").performClick()
         runBlocking { check(!DeployManager.isDeploying.value) }
     }
 
-    @Test fun connectedVkAccountOpensSessionControlsWithoutStartingLogin() {
+    @Test fun connectedVkAccountRequestsTheSharedAccountDialog() {
         runBlocking {
             store.saveVkAccessToken("fixture-session-token-never-sent", "fixture-user")
             store.saveVkHashMode("auto_api", forProfile = 0)
         }
-        compose.onNodeWithText("Туннель").performClick()
-        compose.waitUntil(5000) { compose.onAllNodesWithText("Аккаунт VK подключён").fetchSemanticsNodes().isNotEmpty() }
-        compose.onNodeWithText("Аккаунт VK подключён").performClick()
-        compose.onNodeWithText("Копировать токен").assertIsDisplayed()
-        compose.onNodeWithText("Удалить токен").assertIsDisplayed()
-        compose.onNodeWithText("Назад").performClick()
-        runBlocking { store.clearVkAccessToken(); store.saveVkHashMode("manual", forProfile = 0) }
+        try {
+            compose.onNodeWithText("Туннель").performClick()
+            compose.waitUntil(5000) { compose.onAllNodesWithText("Аккаунт VK подключён").fetchSemanticsNodes().isNotEmpty() }
+            compose.onNodeWithText("Аккаунт VK подключён").performClick()
+            compose.runOnIdle { check(vkAccountRequests == 1) }
+        } finally {
+            runBlocking { store.clearVkAccessToken(); store.saveVkHashMode("manual", forProfile = 0) }
+        }
     }
 
     @Test fun ownerModeRevealsRealDeployAndPersistsSelection() {
         compose.onNodeWithContentDescription("Настройки").performClick()
         compose.onNodeWithText("Участник").performClick()
         compose.onNodeWithText("Владелец").performClick()
-        compose.onNodeWithContentDescription("Назад").performClick()
+        compose.onNodeWithContentDescription("Закрыть").performClick()
         compose.onNodeWithText("Деплой").performClick()
-        compose.onNodeWithText("IP сервера").assertIsDisplayed()
-        compose.onNodeWithText("Порт SSH").assertIsDisplayed()
-        compose.onNodeWithText("Установка в Docker").assertExists()
+        compose.onNodeWithContentDescription("Адрес сервера").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithContentDescription("Порт SSH").assertIsDisplayed()
         compose.onNodeWithText("Проверить VPS").assertDoesNotExist()
-        compose.onNodeWithText("Логин веб-панели").assertIsDisplayed()
-        compose.onNodeWithText("Пароль веб-панели").assertIsDisplayed()
+        compose.onNodeWithText("Установить").assertIsDisplayed()
+        compose.onNodeWithText("Удалить").assertIsDisplayed()
         val deploy = SettingsStore(compose.activity, deployScope = true)
-        runBlocking { deploy.saveDockerInstall(true) }
-        compose.waitUntil(5000) { compose.onAllNodes(isToggleable() and isOn()).fetchSemanticsNodes().isNotEmpty() }
+        val docker = compose.onNodeWithText("Установить в Docker")
+        docker.performScrollTo().assertIsDisplayed()
+        if (!runBlocking { deploy.deploySettingsSnapshot.first { it.isLoaded }.dockerInstall }) docker.performClick()
+        compose.waitUntil(5000) { runBlocking { deploy.deploySettingsSnapshot.first { it.isLoaded }.dockerInstall } }
         compose.onNodeWithText("Логи").performClick()
-        compose.onNodeWithText("Деплой").performClick()
-        compose.onNode(isToggleable()).assertIsOn()
+        compose.onAllNodesWithText("Деплой").onLast().performClick()
+        docker.performScrollTo().assertIsDisplayed()
+        check(runBlocking { deploy.deploySettingsSnapshot.first { it.isLoaded }.dockerInstall })
+        compose.onNodeWithText("Авторизация").performScrollTo().performClick()
+        compose.onNodeWithContentDescription("Логин веб-панели").assertIsDisplayed()
+        val before = runBlocking { deploy.deploySettingsSnapshot.first { it.isLoaded } }
         compose.onNodeWithContentDescription("Сгенерировать пароль туннеля").performClick()
-        compose.waitUntil(5000) { runBlocking { deploy.deploySettingsSnapshot.first { it.isLoaded }.mainPassword.matches(Regex("[A-Za-z0-9]{16}")) } }
-        compose.onNodeWithText("Удалить с сервера").assertExists()
+        compose.onNodeWithContentDescription("Сгенерировать пароль веб-панели").performClick()
+        compose.onNodeWithText("Сохранить").performClick()
+        compose.waitUntil(5000) {
+            val after = runBlocking { deploy.deploySettingsSnapshot.first { it.isLoaded } }
+            after.mainPassword.matches(Regex("[A-Za-z0-9]{16}")) && after.mainPassword != before.mainPassword &&
+                after.webPassword.matches(Regex("[A-Za-z0-9]{16}")) && after.webPassword != before.webPassword &&
+                after.mainPassword != after.webPassword
+        }
         compose.runOnIdle { runBlocking { check(store.uiOwnerMode.first()) } }
         screenshot("happ-deploy.png")
     }
@@ -243,14 +267,14 @@ class HappInterfaceTest {
             check(store.vkHashMode.first() == "manual")
         }
         compose.onNodeWithText("Подкл.").performClick()
-        compose.onNodeWithText("Профиль 1").performClick()
+        compose.onNodeWithText("Основной тестовый профиль").performClick()
         compose.onNodeWithText("Туннель").performClick()
         compose.waitUntil(5000) { compose.onAllNodesWithText("203.0.113.10").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText("203.0.113.10").assertIsDisplayed()
         runBlocking { check(store.readProfileConnectionSettings(0).connectionPassword == "DemoPassword1234") }
     }
 
-    @Test fun importedOwnerHashesStayHiddenAndCombineWithParticipantHashes() {
+    @Test fun importedOwnerAndOwnHashesAreVisibleAndUsedSeparately() {
         val owner = "owner-private-hash-1234567890"
         val own = "participant-own-hash-1234567890"
         runBlocking {
@@ -261,11 +285,16 @@ class HappInterfaceTest {
         compose.onNodeWithText("Туннель").performClick()
         compose.waitUntil(5000) { compose.onAllNodesWithText("Настроить хеши").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText("Настроить хеши").performClick()
+        compose.onNodeWithText(owner).assertIsDisplayed()
+        compose.onNodeWithText(own).assertDoesNotExist()
+        compose.onNodeWithText("Аккаунты VK").assertDoesNotExist()
+        compose.onNodeWithText("Заменить").assertDoesNotExist()
+        runBlocking { check(resolveConnectionSource(store)?.hashes == owner) }
+        compose.onNodeWithText("Свои").performClick()
+        compose.onNodeWithText(own).assertIsDisplayed()
         compose.onNodeWithText(owner).assertDoesNotExist()
-        compose.onNodeWithText("От владельца 1").assertExists()
-        compose.onNodeWithText(own).assertExists()
-        compose.onNodeWithContentDescription("Убрать хеш владельца 1").performClick()
-        compose.waitUntil(5000) { runBlocking { owner in store.linkHashesRemoved.first() } }
+        compose.onNodeWithText("Сохранить").performClick()
+        compose.waitUntil(5000) { runBlocking { store.manualHashGroup.first() == ManualHashGroup.Own } }
         runBlocking {
             check(resolveConnectionSource(store)?.hashes == own)
             store.saveProfileConnectionSettings(27, "203.0.113.128", 46128, "ChangedPassword", 20)
@@ -273,8 +302,19 @@ class HappInterfaceTest {
             check(source.peer == "203.0.113.128:46128")
             check(source.password == "ChangedPassword")
             check(source.hashes == own)
+
+            for (mode in listOf("auto_api", "auto_js")) {
+                store.saveVkHashMode(mode)
+                val automaticSource = checkNotNull(resolveConnectionSource(store))
+                check(automaticSource.hashes.isEmpty())
+                check(!automaticSource.hashesFromLink)
+                check(store.vkHashMode.first() == mode)
+            }
+            store.saveVkHashMode("manual")
+            check(store.manualHashGroup.first() == ManualHashGroup.Own)
+            check(resolveConnectionSource(store)?.hashes == own)
         }
-        compose.onNodeWithContentDescription("Закрыть").performClick()
+        compose.onNodeWithText("Свои: 1").assertDoesNotExist()
         runBlocking { store.clearProfile(27); store.saveActiveProfile(0) }
     }
 
@@ -305,16 +345,16 @@ class HappInterfaceTest {
         compose.onNodeWithText("Туннель").performClick()
         compose.waitUntil(5000) { compose.onAllNodesWithText("Настроить хеши").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText("Настроить хеши").performClick()
-        hashes.forEach { compose.onNodeWithText(it).assertIsDisplayed() }
+        hashes.forEach { compose.onNodeWithText(it).performScrollTo().assertIsDisplayed() }
         compose.onNodeWithText("Сохранить").assertIsDisplayed()
         screenshot("happ-manual-hashes.png")
-        compose.onNodeWithText(hashes.first()).performTextReplacement("edited-hash-1234567890")
+        compose.onNodeWithText(hashes.first()).performScrollTo().performTextReplacement("edited-hash-1234567890")
         compose.onNodeWithText("Сохранить").performClick()
         compose.waitUntil(5000) { runBlocking { store.vkHashes.first().startsWith("edited-hash-1234567890,") } }
         runBlocking { check(store.vkHashes.first().split(',').drop(1) == hashes.drop(1)) }
     }
 
-    @Test fun logsCanFilterErrorsAndRemoveSeparatorLines() {
+    @Test fun logsShowErrorsAndSuccessWithoutFilterMenus() {
         compose.runOnIdle {
             TunnelManager.logs.clear()
             TunnelManager.logs.add(LogEntry("deploy_fixture_error", "[ERR] Тест: SSH отклонён", isError = true, level = LogLevel.ERR))
@@ -322,22 +362,40 @@ class HappInterfaceTest {
             TunnelManager.logs.add(LogEntry("fixture_separator", "────────────", level = LogLevel.LOG))
         }
         compose.onNodeWithText("Логи").performClick()
-        compose.onNodeWithText("Все уровни ▾").performClick()
-        compose.onNodeWithText("Ошибки").performClick()
+        compose.onNodeWithText("Все уровни ▾").assertDoesNotExist()
+        compose.onNodeWithText("Все события ▾").assertDoesNotExist()
         compose.onNodeWithText("Тест: SSH отклонён").assertIsDisplayed()
-        compose.onNodeWithText("Тест: соединение готово").assertDoesNotExist()
-        compose.onNodeWithText("────────────").assertDoesNotExist()
-        screenshot("ui-logs-review3.png")
-        compose.onNodeWithText("Ошибки ▾").performClick()
-        compose.onNodeWithText("Все уровни").performClick()
         compose.onNodeWithText("Тест: соединение готово").assertIsDisplayed()
+        compose.onNodeWithText("────────────").assertDoesNotExist()
+    }
+
+    @Test fun appRoutingClipboardMergesWithTheSelectedList() {
+        runBlocking { store.saveAppRoutingLists("com.example.direct", "com.example.original", true) }
+        val clipboard = compose.activity.getSystemService(android.content.ClipboardManager::class.java)
+        compose.onNodeWithText("Маршрут").performClick()
+        compose.onNodeWithText("Список приложений").performScrollTo().performClick()
+        compose.onNodeWithText("Копировать список").performClick()
+        compose.runOnIdle { check(clipboard.primaryClip?.getItemAt(0)?.text == "com.example.original") }
+        compose.runOnIdle {
+            clipboard.setPrimaryClip(android.content.ClipData.newPlainText("fixture",
+                "com.example.original\ncom.example.added\ninvalid"))
+        }
+        compose.onNodeWithText("Вставить список").performClick()
+        compose.onNodeWithContentDescription("Закрыть").performClick()
+        compose.waitUntil(5000) {
+            runBlocking { store.whitelistApps.first().split(',').toSet() == setOf("com.example.original", "com.example.added") }
+        }
+        runBlocking {
+            check(store.excludedApps.first() == "com.example.direct")
+            check(store.isWhitelist.first())
+        }
     }
 
     @Test fun vpsEditorShowsPortsAndFormatHintsWithoutConnectionWorkers() {
         compose.onNodeWithContentDescription("Настройки").performClick()
         compose.onNodeWithText("Участник").performClick()
         compose.onNodeWithText("Владелец").performClick()
-        compose.onNodeWithContentDescription("Назад").performClick()
+        compose.onNodeWithContentDescription("Закрыть").performClick()
         compose.onNodeWithText("Деплой").performClick()
         compose.onNodeWithContentDescription("Добавить VPS").performClick()
         compose.waitUntil(5000) { compose.onAllNodesWithText("Новый VPS").fetchSemanticsNodes().isNotEmpty() }
@@ -352,7 +410,7 @@ class HappInterfaceTest {
         compose.onNodeWithContentDescription("Настройки").performClick()
         compose.onNodeWithText("Участник").performClick()
         compose.onNodeWithText("Владелец").performClick()
-        compose.onNodeWithContentDescription("Назад").performClick()
+        compose.onNodeWithContentDescription("Закрыть").performClick()
         compose.onNodeWithText("Деплой").performClick()
         val deploy = SettingsStore(compose.activity, deployScope = true)
         fun add(name: String, ip: String, ssh: String, peer: String, web: String): Int {

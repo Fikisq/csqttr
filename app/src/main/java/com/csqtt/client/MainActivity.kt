@@ -70,10 +70,12 @@ import com.csqtt.client.ui.legacy.AppUpdateDialog
 import com.csqtt.client.ui.legacy.ConnectionTab
 import com.csqtt.client.ui.legacy.ExceptionsTab
 import com.csqtt.client.ui.legacy.FloatingToolbar
+import com.csqtt.client.ui.v2.dialogs.V2ResourceHud
 import com.csqtt.client.ui.legacy.LogsTab
 import com.csqtt.client.ui.legacy.SettingsTab
 import com.csqtt.client.CsqttConstants
 import com.csqtt.client.ui.legacy.DeployTab
+import com.csqtt.client.ui.legacy.DeployCheckState
 import com.csqtt.client.ui.legacy.InfoTab
 import com.csqtt.client.ui.legacy.components.LocalCsqttHeaderActions
 import com.csqtt.client.ui.legacy.design.CsqttMotion
@@ -81,6 +83,7 @@ import com.csqtt.client.ui.legacy.design.CsqttShapes
 import com.csqtt.client.ui.legacy.dialogs.VkAuthDialog
 import com.csqtt.client.ui.v2.dialogs.V2VkAuthDialog
 import com.csqtt.client.ui.legacy.utils.parseCsqttLink
+import com.csqtt.client.ui.v2.design.V2DarkPalette
 import com.csqtt.client.ui.v2.navigation.CsqttV2Root
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -91,6 +94,7 @@ class MainActivity : ComponentActivity() {
     private val appSettingsStore by lazy { SettingsStore(applicationContext) }
     private var renderUi by mutableStateOf(false)
     private var showVkAuthDialog by mutableStateOf(false)
+    private var showVkAccountsDialog by mutableStateOf(false)
     private var pendingDeepLink by mutableStateOf<String?>(null)
     private var batteryPromptInFlight = false
 
@@ -115,6 +119,7 @@ class MainActivity : ComponentActivity() {
     override fun onStart() {
         super.onStart()
         activeActivities++
+        TunnelManager.setUiForeground(true)
         renderUi = true
         ManlCaptchaWebViewManager.checkAndShowPendingCaptcha(this)
     }
@@ -122,6 +127,7 @@ class MainActivity : ComponentActivity() {
     override fun onStop() {
         renderUi = false
         activeActivities = (activeActivities - 1).coerceAtLeast(0)
+        TunnelManager.setUiForeground(isForeground)
         super.onStop()
     }
 
@@ -149,35 +155,52 @@ class MainActivity : ComponentActivity() {
             val authScope = rememberCoroutineScope()
             val uiStateHolder = rememberSaveableStateHolder()
             val design by appSettingsStore.uiDesign.collectAsStateWithLifecycle<String?>(initialValue = null)
-            val chosenTheme by appSettingsStore.themeMode.collectAsStateWithLifecycle("system")
+            val storedTheme by appSettingsStore.themeMode.collectAsStateWithLifecycle<String?>(initialValue = null)
+            val chosenTheme = storedTheme ?: return@setContent
+            val chosenDesign = design ?: return@setContent
+            val uiScalePercent by appSettingsStore.uiScalePercent.collectAsStateWithLifecycle(100)
             val dark = when (chosenTheme) { "dark" -> true; "light" -> false; else -> androidx.compose.foundation.isSystemInDarkTheme() }
-            if (renderUi) {
-                uiStateHolder.SaveableStateProvider("main_ui_${design ?: "loading"}") {
-            val settingsStore = remember { appSettingsStore }
-            if (design == null) {
-                // Wait for the stored choice instead of briefly drawing the other design.
-            } else if (design == "v2") {
-                CsqttV2Root(
-                    settingsStore = settingsStore,
-                    onVkAuthRequested = { showVkAuthDialog = true },
-                )
+            val historicalPalette = chosenDesign == CsqttConstants.Theme.DESIGN_OLD
+            val v2Palette = if (historicalPalette) V2DarkPalette.HISTORICAL else V2DarkPalette.ORIGINAL
+            val uiFamily = if (chosenDesign == CsqttConstants.Theme.DESIGN_CLASSIC) {
+                CsqttConstants.Theme.DESIGN_CLASSIC
             } else {
-            val themeMode by settingsStore.themeMode.collectAsStateWithLifecycle(initialValue = CsqttConstants.Theme.MODE_SYSTEM)
+                CsqttConstants.Theme.DESIGN_V2
+            }
+            if (renderUi) {
+                uiStateHolder.SaveableStateProvider("main_ui_$uiFamily") {
+            val settingsStore = remember { appSettingsStore }
+            if (uiFamily == CsqttConstants.Theme.DESIGN_V2) {
+                val baseDensity = LocalDensity.current
+                val scaledDensity = remember(baseDensity, uiScalePercent) {
+                    Density(baseDensity.density * uiScalePercent / 100f, baseDensity.fontScale)
+                }
+                CompositionLocalProvider(LocalDensity provides scaledDensity) {
+                    CsqttV2Root(
+                        settingsStore = settingsStore,
+                        onVkAuthRequested = { showVkAccountsDialog = true },
+                        historicalPalette = historicalPalette,
+                        themeMode = chosenTheme,
+                    )
+                }
+            } else {
             val activeFingerprint by settingsStore.selectedFingerprint.collectAsStateWithLifecycle(initialValue = CsqttConstants.Tunnel.DEFAULT_FINGERPRINT)
             val scope = rememberCoroutineScope()
 
             val baseDensity = LocalDensity.current
-            val fixedDensity = remember(baseDensity.density) { Density(baseDensity.density, 1f) }
+            val fixedDensity = remember(baseDensity.density, uiScalePercent) {
+                Density(baseDensity.density * uiScalePercent / 100f, 1f)
+            }
 
             CompositionLocalProvider(LocalDensity provides fixedDensity) {
-            CSQTTTheme(themeMode = themeMode) {
+            CSQTTTheme(themeMode = chosenTheme) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background,
                 ) {
                     MainScreen(
                         settingsStore = settingsStore,
-                        themeMode = themeMode,
+                        themeMode = chosenTheme,
                         onThemeChange = { mode ->
                             scope.launch {
                                 settingsStore.saveThemeMode(mode)
@@ -187,7 +210,7 @@ class MainActivity : ComponentActivity() {
                         onFingerprintChange = { fp ->
                             scope.launch { settingsStore.saveFingerprint(fp) }
                         },
-                        onVkAuthRequested = { showVkAuthDialog = true },
+                        onVkAuthRequested = { showVkAccountsDialog = true },
                     )
                     // A csqtt:// link, the classic way: confirm, then it replaces the current configuration. It stays
                     // pending until the user chooses, so the dialog survives a rotation instead of losing the link.
@@ -215,23 +238,50 @@ class MainActivity : ComponentActivity() {
             }
                 }
             }
+            if (showVkAccountsDialog) {
+                com.csqtt.client.ui.v2.design.CsqttV2Theme(darkTheme = dark, themePalette = v2Palette) {
+                    com.csqtt.client.ui.v2.dialogs.V2VkAccountsDialog(
+                        store = appSettingsStore,
+                        onAuthorize = {
+                            showVkAccountsDialog = false
+                            VkAuthWebViewManager.clearVkSessionCookies { cleared ->
+                                if (!isFinishing && !isDestroyed) {
+                                    if (cleared) {
+                                        showVkAuthDialog = true
+                                    } else {
+                                        authContext.showRaisedToast("Не удалось открыть вход в другой аккаунт VK", Toast.LENGTH_LONG)
+                                    }
+                                }
+                            }
+                        },
+                        onDismiss = { showVkAccountsDialog = false },
+                    )
+                }
+            }
             if (showVkAuthDialog) {
-                val onToken: (VkAuthPayload) -> Unit = { payload ->
-                        showVkAuthDialog = false
-                        authScope.launch {
+                val onToken: (VkAuthPayload) -> Unit = onToken@{ payload ->
+                    if (!showVkAuthDialog) return@onToken
+                    showVkAuthDialog = false
+                    authScope.launch {
+                        try {
                             appSettingsStore.saveVkAccessToken(payload.token, payload.userId)
-                            authContext.showRaisedToast(if (payload.expiresIn > 0) "Токен VK сохранён (временный)" else "Токен VK сохранён", Toast.LENGTH_SHORT)
+                            authContext.showRaisedToast("Аккаунт VK сохранён", Toast.LENGTH_SHORT)
+                        } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                            throw cancelled
+                        } catch (_: Exception) {
+                            authContext.showRaisedToast("Не удалось сохранить аккаунт VK. Проверьте, что туннель остановлен", Toast.LENGTH_LONG)
                         }
                     }
-                if (design == "classic") CSQTTTheme(themeMode = chosenTheme) {
+                }
+                if (chosenDesign == CsqttConstants.Theme.DESIGN_CLASSIC) CSQTTTheme(themeMode = chosenTheme) {
                     com.csqtt.client.ui.legacy.dialogs.VkAuthDialog(onToken, onDismiss = { showVkAuthDialog = false })
-                } else com.csqtt.client.ui.v2.design.CsqttV2Theme(darkTheme = dark) {
+                } else com.csqtt.client.ui.v2.design.CsqttV2Theme(darkTheme = dark, themePalette = v2Palette) {
                     VkAuthDialog(onToken, onDismiss = { showVkAuthDialog = false })
                 }
             }
             val pendingLink = pendingDeepLink
-            if (pendingLink != null && design == "v2") {
-                com.csqtt.client.ui.v2.design.CsqttV2Theme(darkTheme = dark) {
+            if (pendingLink != null && uiFamily == CsqttConstants.Theme.DESIGN_V2) {
+                com.csqtt.client.ui.v2.design.CsqttV2Theme(darkTheme = dark, themePalette = v2Palette) {
                 com.csqtt.client.ui.v2.dialogs.V2BrowserImportDialog(
                     rawLink = pendingLink,
                     settingsStore = remember { appSettingsStore },
@@ -332,15 +382,15 @@ internal fun shouldCommitNavigationSwipe(progress: Float): Boolean = progress > 
 internal fun resolveActiveNavIds(csqttLinkMode: Boolean, participantShowLogs: Boolean): List<Int> {
     val allIds = listOf(0, 1, 2, 3, 4)
     return allIds.filter { id ->
-        if (csqttLinkMode) {
-            if (id == 2) return@filter false
-            if (id == 3 && !participantShowLogs) return@filter false
+        when (id) {
+            2 -> !csqttLinkMode
+            3 -> participantShowLogs
+            else -> true
         }
-        true
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun MainScreen(
     settingsStore: SettingsStore,
@@ -362,13 +412,16 @@ fun MainScreen(
     val deploySettings by deployStore.deploySettingsSnapshot.collectAsStateWithLifecycle(
         initialValue = DeploySettingsSnapshot()
     )
+    val deployCheckState = remember(deploySettings.profile, deploySettings.ip) { DeployCheckState() }
     val tunnelAuthSettings by settingsStore.tunnelAuthSnapshot.collectAsStateWithLifecycle(
         initialValue = TunnelAuthSnapshot()
     )
-    val ownerMode by settingsStore.uiOwnerMode.collectAsStateWithLifecycle(false)
-    val csqttLinkMode = !ownerMode // Navigation role is independent of a profile's link authentication.
-    val participantShowLogs by settingsStore.participantShowLogs.collectAsStateWithLifecycle(initialValue = false)
-    val autoPauseOnWifi by settingsStore.autoPauseOnWifi.collectAsStateWithLifecycle(initialValue = false)
+    val storedOwnerMode by settingsStore.uiOwnerMode.collectAsStateWithLifecycle<Boolean?>(initialValue = null)
+    val storedShowLogs by settingsStore.participantShowLogs.collectAsStateWithLifecycle<Boolean?>(initialValue = null)
+    val csqttLinkMode = storedOwnerMode != true // Navigation role is independent of a profile's link authentication.
+    val participantShowLogs = storedShowLogs ?: SettingsStore.DEFAULT_PARTICIPANT_SHOW_LOGS
+    var resourceMonitorOpen by rememberSaveable { mutableStateOf(false) }
+    var floatingHudEnabled by rememberSaveable { mutableStateOf(false) }
     val excludedApps by settingsStore.excludedApps.collectAsStateWithLifecycle(
         initialValue = SettingsStore.cachedExcludedApps ?: ""
     )
@@ -391,7 +444,9 @@ fun MainScreen(
     )
     var pendingRelease by remember { mutableStateOf<AppReleaseInfo?>(null) }
     val currentVersion = remember { "v${BuildConfig.VERSION_NAME.removePrefix("v").substringBefore('-')}" }
-    val safeBottomInset = with(density) { WindowInsets.safeDrawing.getBottom(density).toDp() }
+    val safeBottomInset = with(density) {
+        WindowInsets.systemBars.union(WindowInsets.displayCutout).getBottom(density).toDp()
+    }
     val navToolbarHeight = 66.dp
     val navToolbarBottomMargin = 10.dp
     val navContentGap = 5.dp
@@ -405,15 +460,9 @@ fun MainScreen(
         navItems.filter { it.id in allowedIds }
     }
     val tabStateHolder = rememberSaveableStateHolder()
-    LaunchedEffect(csqttLinkMode, participantShowLogs) {
-        if (csqttLinkMode) {
-            if (selectedTab == 2 || (selectedTab == 3 && !participantShowLogs)) {
-                selectedTab = 0
-            }
-        }
-    }
-    LaunchedEffect(activeNavItems) {
-        if (activeNavItems.none { it.id == selectedTab }) {
+    LaunchedEffect(storedOwnerMode, storedShowLogs, activeNavItems) {
+        // Wait for the stored role and log visibility before invalidating a restored tab.
+        if (storedOwnerMode != null && storedShowLogs != null && activeNavItems.none { it.id == selectedTab }) {
             selectedTab = 0
         }
     }
@@ -479,6 +528,8 @@ fun MainScreen(
         }
     }
 
+    if (storedOwnerMode == null || storedShowLogs == null) return
+
     Box(modifier = Modifier.fillMaxSize()) {
         AppBackdrop(modifier = Modifier.matchParentSize())
 
@@ -491,14 +542,20 @@ fun MainScreen(
                     onActiveProfileChange = { profile ->
                         scope.launch { settingsStore.saveActiveProfile(profile) }
                     },
+                    onAddProfile = { profile ->
+                        scope.launch {
+                            settingsStore.saveActiveProfile(profile)
+                            selectedTab = 1
+                        }
+                    },
                     currentTheme = themeMode,
                     onThemeChange = onThemeChange,
                     activeFingerprint = activeFingerprint,
                     onFingerprintChange = onFingerprintChange,
-                    autoPauseOnWifi = autoPauseOnWifi,
-                    onAutoPauseOnWifiChange = { enabled ->
-                        scope.launch { settingsStore.saveAutoPauseOnWifi(enabled) }
-                    },
+                    resourceMonitorOpen = resourceMonitorOpen,
+                    onResourceMonitorOpenChange = { resourceMonitorOpen = it },
+                    floatingHudEnabled = floatingHudEnabled,
+                    onToggleFloatingHud = { floatingHudEnabled = it },
                 )
             },
         ) {
@@ -556,7 +613,16 @@ fun MainScreen(
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
-                            .padding(bottom = navOverlayReserve),
+                            .padding(bottom = navOverlayReserve)
+                            .then(
+                                if (selectedTab == 1 || selectedTab == 2) {
+                                    Modifier.windowInsetsPadding(
+                                        WindowInsets.imeAnimationTarget.exclude(WindowInsets(bottom = navOverlayReserve)),
+                                    )
+                                } else {
+                                    Modifier
+                                },
+                            ),
                     ) {
                         key(selectedTab) {
                             val tab = selectedTab
@@ -591,11 +657,11 @@ fun MainScreen(
                                     Spacer(modifier = Modifier.fillMaxSize())
                                 }
                                 2 -> if (!csqttLinkMode) {
-                                    DeployTab(deployStore, deploySettings)
+                                    DeployTab(deployStore, deploySettings, deployCheckState)
                                 } else {
                                     Spacer(modifier = Modifier.fillMaxSize())
                                 }
-                                3 -> if (!csqttLinkMode || participantShowLogs) {
+                                3 -> if (participantShowLogs) {
                                     LogsTab(settingsStore)
                                 } else {
                                     Spacer(modifier = Modifier.fillMaxSize())
@@ -631,6 +697,11 @@ fun MainScreen(
                             dragProgress.floatValue = 0f
                         },
                         modifier = Modifier.align(Alignment.BottomCenter)
+                    )
+                    V2ResourceHud(
+                        visible = floatingHudEnabled,
+                        onClick = { resourceMonitorOpen = true },
+                        modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = navOverlayReserve),
                     )
                 }
             }
@@ -728,7 +799,10 @@ private fun ProxyNavigationBar(
     BoxWithConstraints(
         modifier = modifier
             .fillMaxWidth()
-            .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom))
+            .windowInsetsPadding(
+                WindowInsets.systemBars.union(WindowInsets.displayCutout)
+                    .only(WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom),
+            )
             .padding(horizontal = 22.dp, vertical = 10.dp)
     ) {
         val trackPadding = 6.dp

@@ -29,6 +29,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
@@ -98,10 +101,13 @@ private fun LogsTerminal() {
     val copiedMessage = stringResource(R.string.logs_copied)
     val isDeploying by DeployManager.isDeploying.collectAsStateWithLifecycle()
 
-    LaunchedEffect(currentLogs.size, isDeploying) {
-        if (isDeploying) {
-            val latestDeployIndex = currentLogs.indexOfLast { it.key.startsWith("deploy_") }
-            if (latestDeployIndex >= 0) listState.animateScrollToItem(latestDeployIndex)
+    val latestDeployIndex = if (isDeploying) currentLogs.indexOfLast { it.key.startsWith("deploy_") } else -1
+    val latestDeployKey = currentLogs.getOrNull(latestDeployIndex)?.key
+    var lastFollowedKey by rememberSaveable { mutableStateOf<String?>(null) }
+    LaunchedEffect(latestDeployKey) {
+        if (latestDeployKey != null && latestDeployKey != lastFollowedKey) {
+            listState.scrollToItem(latestDeployIndex)
+            lastFollowedKey = latestDeployKey
         }
     }
 
@@ -125,7 +131,7 @@ private fun LogsTerminal() {
             ) {
                 items(
                     items = currentLogs,
-                    key = { it.key },
+                    key = { it.listKey },
                     contentType = { "log_line" },
                 ) { entry ->
                     LogLine(entry)
@@ -142,7 +148,7 @@ private fun LogsTerminal() {
         ) {
             IconButton(
                 onClick = {
-                    val text = currentLogs.joinToString("\n") { "${it.message} (x${it.count})" }
+                    val text = currentLogs.joinToString("\n") { "${it.exportMessage} (x${it.count})" }
                     val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                     clipboard.setPrimaryClip(ClipData.newPlainText("CSQTT Logs", text))
                     context.showRaisedToast(copiedMessage, Toast.LENGTH_SHORT)

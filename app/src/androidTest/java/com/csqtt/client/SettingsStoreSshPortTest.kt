@@ -12,6 +12,81 @@ import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
 class SettingsStoreSshPortTest {
+    @Test fun tunnelSnapshotKeepsProfileAddressAndWorkerLimitTogether() = runBlocking<Unit> {
+        val store = SettingsStore(InstrumentationRegistry.getInstrumentation().targetContext)
+        val original = store.activeProfile.first()
+        val slot = checkNotNull(store.findFirstFreeProfile())
+        val originalExtra = store.extraWorkers.first()
+        try {
+            store.saveProfileConnectionSettings(slot, "203.0.113.77", 49400, "FixturePassword12", 100)
+            store.saveExtraWorkers(true)
+            assertTrue(SettingsStore(InstrumentationRegistry.getInstrumentation().targetContext, readOnlyProfile = original).extraWorkers.first())
+            store.saveActiveProfile(slot)
+            val extra = store.tunnelAuthSnapshot.first { it.profile == slot }
+            assertEquals("203.0.113.77", extra.peer)
+            assertEquals(49400, extra.serverPeerPort)
+            assertEquals(100, extra.workersMaximum)
+            assertEquals(100, extra.workers)
+            store.saveExtraWorkers(false)
+            val regular = store.tunnelAuthSnapshot.first { it.profile == slot }
+            assertEquals(70, regular.workersMaximum)
+            assertEquals(70, regular.workers)
+            assertEquals(extra.peer, regular.peer)
+            assertEquals(extra.serverPeerPort, regular.serverPeerPort)
+            assertEquals(100, store.readProfileConnectionSettings(slot).workersPerHash)
+            store.saveExtraWorkers(true)
+            store.saveVkAuthMode(CsqttConstants.VkAuth.MODE_AUTO_JS)
+            assertEquals(70, store.workersMaximum.first())
+            assertTrue(store.extraWorkers.first())
+        } finally {
+            store.saveExtraWorkers(originalExtra)
+            store.saveActiveProfile(original)
+            store.clearProfile(slot)
+        }
+    }
+
+    @Test fun extraWorkersRoundTripUsesGeneralSettingsAndReadsLegacyBackups() = runBlocking<Unit> {
+        val store = SettingsStore(InstrumentationRegistry.getInstrumentation().targetContext)
+        val original = store.extraWorkers.first()
+        try {
+            store.saveExtraWorkers(true)
+            val exported = store.exportConfigJson(false, false, false, true)
+            store.saveExtraWorkers(false)
+            assertTrue(store.importConfigJson(exported, false, false, false, true))
+            assertTrue(store.extraWorkers.first())
+            val legacy = """{"deploy":{"extra_workers":false}}"""
+            assertTrue(store.importConfigJson(legacy, false, true, false, false))
+            assertTrue(store.extraWorkers.first())
+            assertTrue(store.importConfigJson(legacy, false, false, false, true))
+            assertFalse(store.extraWorkers.first())
+        } finally {
+            store.saveExtraWorkers(original)
+        }
+    }
+
+    @Test fun activeConnectionExportRestoresTunnelFieldsWithoutOverwritingAnotherProfile() = runBlocking<Unit> {
+        val store = SettingsStore(InstrumentationRegistry.getInstrumentation().targetContext)
+        val original = store.activeProfile.first()
+        val originalConnection = store.readProfileConnectionSettings(original)
+        val slot = checkNotNull(store.findFirstFreeProfile())
+        try {
+            store.saveProfileConnectionSettings(slot, "203.0.113.79", 49410, "FixturePassword34", 30)
+            store.saveActiveProfile(slot)
+            val exported = store.exportConfigJson(true, false, false, false)
+            store.saveProfileConnectionSettings(slot, "203.0.113.80", 49411, "ReplacementFixture", 30)
+            assertTrue(store.importConfigJson(exported, true, false, false, false))
+            val restored = store.readProfileConnectionSettings(slot)
+            assertEquals("203.0.113.79", restored.peer)
+            assertEquals(49410, restored.serverPeerPort)
+            assertTrue(restored.connectionPassword == "FixturePassword34")
+            assertEquals(slot, store.activeProfile.first())
+            assertTrue(originalConnection == store.readProfileConnectionSettings(original))
+        } finally {
+            store.saveActiveProfile(original)
+            store.clearProfile(slot)
+        }
+    }
+
     @Test fun deletedConnectionCannotBeRestoredByLateTunnelOrVpsAutosaves() = runBlocking<Unit> {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val store = SettingsStore(context)
@@ -76,14 +151,12 @@ class SettingsStoreSshPortTest {
         store.saveSrtpMode(CsqttConstants.SrtpMode.WRAP)
         store.saveTurnTransport(CsqttConstants.Tunnel.TURN_TRANSPORT_TCP_TLS)
         store.saveSelectedTurnSubnet("fixture-subnet", "10")
-        store.saveExtraWorkers(true)
         store.saveProfileWorkersPerHash(26, 60)
         store.saveActiveProfile(27)
         store.saveVkHashMode("manual")
         store.saveSrtpMode(CsqttConstants.SrtpMode.DTLS)
         store.saveTurnTransport("udp")
         store.saveSelectedTurnSubnet("", "ALL")
-        store.saveExtraWorkers(false)
         store.saveProfileWorkersPerHash(27, 20)
         // A late callback belongs to its captured slot, even after selection moved.
         store.saveVkHashMode("auto_api", forProfile = 26)
@@ -94,14 +167,13 @@ class SettingsStoreSshPortTest {
         assertEquals(CsqttConstants.Tunnel.TURN_TRANSPORT_TCP_TLS, a.turnTransport.first())
         assertEquals("fixture-subnet", a.selectedTurnSubnet.first())
         assertEquals("10", a.turnSubnetIpLimit.first())
-        assertTrue(a.extraWorkers.first())
+
         assertEquals(60, a.workersPerHash.first())
         store.saveActiveProfile(27)
         assertEquals("manual", store.vkHashMode.first())
         assertEquals("udp", store.turnTransport.first())
         assertEquals(CsqttConstants.SrtpMode.DTLS, store.srtpMode.first())
         assertEquals("", store.selectedTurnSubnet.first())
-        assertFalse(store.extraWorkers.first())
         assertEquals(20, store.workersPerHash.first())
         store.saveActiveProfile(previous)
     }
@@ -120,17 +192,31 @@ class SettingsStoreSshPortTest {
         assertEquals(defaults.mainPassword, scoped.deploySettingsSnapshot.first().mainPassword)
         deploy.saveDeployProfileDraft(defaults.copy(ip = "203.0.113.94", serverName = "Owner fixture", serverPeerPort = 49400, serverWebPort = 49402), restoreConnection = true)
         val connection = store.readProfileConnectionSettings(slot)
+        assertEquals(CsqttConstants.VkAutoHash.MODE_MANUAL, scoped.vkHashMode.first())
         assertEquals("203.0.113.94", connection.peer)
         assertEquals(49400, connection.serverPeerPort)
         assertEquals(defaults.mainPassword, connection.connectionPassword)
         assertEquals("Owner fixture", store.profileNames.first()[slot])
         val occupied = store.occupiedProfiles.first()
-        for (theme in listOf("light", "dark", "light")) {
-            store.saveThemeMode(theme)
-            assertEquals(occupied, store.occupiedProfiles.first())
-            assertEquals(defaults.webPassword, scoped.deploySettingsSnapshot.first().webPassword)
+        val otherSlot = store.findFirstFreeDeployProfile()!!
+        deploy.ensureDeployProfileDefaults(otherSlot)
+        val other = SettingsStore(context, readOnlyProfile = otherSlot).deploySettingsSnapshot.first { it.isLoaded }
+        val generated = listOf(defaults.mainPassword, defaults.webPassword, other.mainPassword, other.webPassword)
+        check(generated.all { it.matches(Regex("[A-Za-z0-9]{16}")) })
+        check(generated.toSet().size == 4)
+        val initialDesign = store.uiDesign.first()
+        for (design in CsqttConstants.Theme.DESIGNS) {
+            store.saveUiDesign(design)
+            for (theme in listOf("light", "dark")) {
+                store.saveThemeMode(theme)
+                assertEquals(occupied, store.occupiedProfiles.first())
+                val sameProfile = scoped.deploySettingsSnapshot.first { it.isLoaded }
+                check(defaults.mainPassword == sameProfile.mainPassword)
+                check(defaults.webPassword == sameProfile.webPassword)
+            }
         }
-        store.saveThemeMode("dark")
+        store.saveUiDesign(initialDesign)
+        deploy.clearDeployProfile(otherSlot)
         deploy.clearDeployProfile(slot)
         store.clearProfile(slot)
     }

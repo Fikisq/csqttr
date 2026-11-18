@@ -51,15 +51,18 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.csqtt.client.CsqttConstants
+import com.csqtt.client.R
 import com.csqtt.client.SettingsStore
 import com.csqtt.client.TunnelAuthSnapshot
 import com.csqtt.client.TunnelManager
+import com.csqtt.client.ManualHashGroup
 import com.csqtt.client.VkHashValidationCodec
 import com.csqtt.client.VkHashValidator
 import com.csqtt.client.showRaisedToast
@@ -141,7 +144,9 @@ fun V2SettingsScreen(
     val autoPauseOnWifi by settingsStore.autoPauseOnWifi.collectAsStateWithLifecycle(initialValue = false)
     val wifiNetworkListMode by settingsStore.wifiNetworkListMode.collectAsStateWithLifecycle(initialValue = "whitelist")
     val wifiNetworkListSsids by settingsStore.wifiNetworkListSsids.collectAsStateWithLifecycle(initialValue = "")
-    val participantShowLogs by settingsStore.participantShowLogs.collectAsStateWithLifecycle(initialValue = false)
+    val participantShowLogs by settingsStore.participantShowLogs.collectAsStateWithLifecycle(
+        initialValue = SettingsStore.DEFAULT_PARTICIPANT_SHOW_LOGS,
+    )
     val extraWorkers by settingsStore.extraWorkers.collectAsStateWithLifecycle(
         initialValue = SettingsStore.cachedExtraWorkers ?: false,
     )
@@ -219,7 +224,7 @@ fun V2SettingsScreen(
         com.csqtt.client.ui.legacy.utils.parseCsqttLink(tunnelAuthSettings.csqttLink)
     }
     val linkHashes = parsedCsqttLink?.hashes.orEmpty()
-    val linkHashesRemoved by settingsStore.linkHashesRemoved.collectAsStateWithLifecycle(initialValue = emptySet())
+    val manualHashGroup by settingsStore.manualHashGroup.collectAsStateWithLifecycle(ManualHashGroup.Owner)
     val linkVkAccessToken = parsedCsqttLink?.vkAccessToken.orEmpty()
     val linkTokenActive = participantMode && linkVkAccessToken.isNotEmpty()
 
@@ -325,11 +330,6 @@ fun V2SettingsScreen(
         }
     }
 
-    LaunchedEffect(effectiveVkAuthMode, extraWorkers) {
-        if (effectiveVkAuthMode == CsqttConstants.VkAuth.MODE_AUTO_JS && extraWorkers) {
-            settingsStore.saveExtraWorkers(false)
-        }
-    }
 
     LaunchedEffect(initialized, participantMode, linkHashes, linkTokenActive, vkAuthMode, savedHashMode) {
         if (!initialized || !participantMode) return@LaunchedEffect
@@ -409,7 +409,7 @@ fun V2SettingsScreen(
                     // the owner's hashes (never shown) plus the participant's own, edited in one sheet
                     V2ActionSetting(
                         title = "VK хеши",
-                        action = "От владельца: ${linkHashes.count { it !in linkHashesRemoved }} · свои: $filledHashCount",
+                        action = "${manualHashGroup.label}: ${if (manualHashGroup == ManualHashGroup.Owner) linkHashes.size else filledHashCount}",
                         onAction = { showHashesDialog = true },
                     )
                 } else if (linkTokenActive) {
@@ -860,12 +860,14 @@ fun V2SettingsScreen(
                 },
             )
 
+            val classicDesignLabel = stringResource(R.string.design_classic_csqtt_250)
+            val v2DesignLabel = stringResource(R.string.design_csqttr_253)
             V2DropdownSetting(
                 title = "Дизайн",
-                value = "Новый",
-                options = listOf("Классический", "Новый"),
+                value = v2DesignLabel,
+                options = listOf(v2DesignLabel, classicDesignLabel),
                 onSelected = { label ->
-                    if (label == "Классический") {
+                    if (label == classicDesignLabel) {
                         scope.launch { settingsStore.saveUiDesign(CsqttConstants.Theme.DESIGN_CLASSIC) }
                     }
                 },
@@ -901,8 +903,7 @@ fun V2SettingsScreen(
     if (showHashesDialog) {
         V2HashesDialog(
             ownerHashes = if (participantMode) linkHashes else emptyList(),
-            removedOwnerHashes = linkHashesRemoved,
-            onRemovedOwnerHashesChange = { removed -> scope.launch { settingsStore.saveLinkHashesRemoved(removed) } },
+            selectedGroup = if (participantMode && linkHashes.isNotEmpty()) manualHashGroup else ManualHashGroup.Own,
             hash1 = vkHash1,
             hash2 = vkHash2,
             hash3 = vkHash3,
@@ -934,19 +935,18 @@ fun V2SettingsScreen(
                     )
                 }
             },
-            onSave = { h1: String, h2: String, h3: String, h4: String, h5: String, h6: String ->
-                vkHash1 = stripVkUrlStatic(h1)
-                vkHash2 = stripVkUrlStatic(h2)
-                vkHash3 = stripVkUrlStatic(h3)
-                vkHash4 = stripVkUrlStatic(h4)
-                vkHash5 = stripVkUrlStatic(h5)
-                vkHash6 = stripVkUrlStatic(h6)
+            onSave = { group, hashes ->
+                vkHash1 = hashes[0]
+                vkHash2 = hashes[1]
+                vkHash3 = hashes[2]
+                vkHash4 = hashes[3]
+                vkHash5 = hashes[4]
+                vkHash6 = hashes[5]
                 scope.launch {
-                    settingsStore.saveVkHashesOnly(
-                        listOf(vkHash1, vkHash2, vkHash3, vkHash4, vkHash5, vkHash6)
-                            .filter { it.isNotBlank() && it.length >= 16 }
-                            .distinct()
-                            .joinToString(","),
+                    settingsStore.saveManualHashes(
+                        group,
+                        hashes.filter { it.length >= 16 }.distinct().joinToString(","),
+                        activeProfile,
                     )
                 }
             },

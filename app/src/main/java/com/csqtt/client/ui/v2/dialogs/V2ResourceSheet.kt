@@ -34,7 +34,6 @@ import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
@@ -44,6 +43,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.LifecycleStartEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.csqtt.client.ui.v2.components.V2Card
 import com.csqtt.client.ui.v2.components.V2CircleIconButton
@@ -70,9 +70,9 @@ fun V2ResourceSheet(
     val snapshot by ResourceMonitor.snapshot.collectAsStateWithLifecycle()
     val session by ResourceMonitor.session.collectAsStateWithLifecycle()
 
-    DisposableEffect(Unit) {
-        ResourceMonitor.setDetailedMemoryEnabled(true)
-        onDispose { ResourceMonitor.setDetailedMemoryEnabled(false) }
+    LifecycleStartEffect(Unit) {
+        val consumer = ResourceMonitor.acquireVisibleConsumer()
+        onStopOrDispose { consumer.close() }
     }
 
     fun animateDismiss(onDone: () -> Unit = onDismiss) {

@@ -17,17 +17,11 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import android.widget.Toast
 import com.csqtt.client.showRaisedToast
-import com.csqtt.client.ui.selectedApplicationsFirst
 import org.json.JSONArray
 import org.json.JSONObject
 import androidx.compose.material.icons.Icons
@@ -36,7 +30,6 @@ import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.SwapVert
 import androidx.compose.material.icons.outlined.Apps
 import androidx.compose.material.icons.outlined.Language
-import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Checkbox
@@ -50,7 +43,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -62,14 +55,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -80,14 +72,16 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.csqtt.client.R
 import com.csqtt.client.SettingsStore
 import com.csqtt.client.TunnelManager
-import com.csqtt.client.ui.legacy.components.CsqttEmptyState
-import com.csqtt.client.ui.legacy.components.CsqttLoadingState
 import com.csqtt.client.ui.legacy.components.CsqttScreen
-import com.csqtt.client.ui.legacy.components.CsqttSegmentedControl
 import com.csqtt.client.ui.legacy.components.CsqttSettingRow
 import com.csqtt.client.ui.legacy.design.CsqttShapes
 import com.csqtt.client.ui.legacy.design.CsqttSizes
 import com.csqtt.client.ui.legacy.design.CsqttSpacing
+import com.csqtt.client.ui.v2.design.LocalV2Colors
+import com.csqtt.client.ui.v2.design.V2ClassicLightColors
+import com.csqtt.client.ui.v2.design.V2ClassicOriginalColors
+import com.csqtt.client.ui.v2.screens.routing.V2AppsRoutingDialog
+import com.csqtt.client.ui.v2.screens.routing.appsCountLabel
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -99,8 +93,6 @@ private object AppCache {
     var cachedList: List<AppItem>? = null
 }
 
-private enum class RoutingMode { ExcludeSelected, IncludeSelected }
-
 @Composable
 fun ExceptionsTab(
     settingsStore: SettingsStore,
@@ -111,7 +103,6 @@ fun ExceptionsTab(
     serverRoutingActive: Boolean = TunnelManager.serverRoutingActive.value,
 ) {
     val context = LocalContext.current.applicationContext
-    val focusManager = LocalFocusManager.current
     val scope = rememberCoroutineScope()
     val tunnelRunning by TunnelManager.running.collectAsStateWithLifecycle()
     val serverRoutingActiveLive by TunnelManager.serverRoutingActive.collectAsStateWithLifecycle(
@@ -345,7 +336,6 @@ fun ExceptionsTab(
     var showAppsDialog by rememberSaveable { mutableStateOf(false) }
     var showDomainsDialog by rememberSaveable { mutableStateOf(false) }
     var showIpsDialog by rememberSaveable { mutableStateOf(false) }
-    var showRoutingModeInfoDialog by rememberSaveable { mutableStateOf(false) }
     var showRulesTransferDialog by rememberSaveable { mutableStateOf(false) }
 
     LaunchedEffect(isServerRouting) {
@@ -357,42 +347,13 @@ fun ExceptionsTab(
         }
     }
 
-    var dialogSnapshotBlacklist by remember { mutableStateOf<Set<String>?>(null) }
-    var dialogSnapshotWhitelist by remember { mutableStateOf<Set<String>?>(null) }
-    var dialogSnapshotIsWhitelist by remember { mutableStateOf<Boolean?>(null) }
-
-    val openAppsDialog = {
-        dialogSnapshotBlacklist = blacklistSelection
-        dialogSnapshotWhitelist = whitelistSelection
-        dialogSnapshotIsWhitelist = isWhitelist
-        showAppsDialog = true
-    }
-
-    val closeAppsDialog = {
-        showAppsDialog = false
-        val currentBlack = blacklistSelection
-        val currentWhite = whitelistSelection
-        val currentIsWhite = isWhitelist
-        val blackChanged = dialogSnapshotBlacklist != null && dialogSnapshotBlacklist != currentBlack
-        val whiteChanged = dialogSnapshotWhitelist != null && dialogSnapshotWhitelist != currentWhite
-        val modeChanged = dialogSnapshotIsWhitelist != null && dialogSnapshotIsWhitelist != currentIsWhite
-        if (blackChanged || whiteChanged || modeChanged) {
-            appPersistenceScope.launch {
-                settingsStore.saveAppRoutingLists(
-                    currentBlack.sorted().joinToString(","),
-                    currentWhite.sorted().joinToString(","),
-                )
-                TunnelManager.reloadVpn()
-            }
-        }
-    }
-
-    var appSearchQuery by rememberSaveable { mutableStateOf("") }
-
     LaunchedEffect(Unit) {
         withContext(Dispatchers.IO) { settingsStore.migrateLegacyWhitelistMode() }
         isMigrationReady = true
+    }
 
+    LaunchedEffect(showAppsDialog) {
+        if (!showAppsDialog) return@LaunchedEffect
         AppCache.cachedList?.let {
             appsList = it
             isAppsLoading = false
@@ -414,7 +375,7 @@ fun ExceptionsTab(
                     AppItem(
                         name = app.loadLabel(packageManager).toString(),
                         packageName = app.packageName,
-                        icon = runCatching { app.loadIcon(packageManager).toBitmap().asImageBitmap() }.getOrNull(),
+                        icon = runCatching { app.loadIcon(packageManager).toBitmap(width = 96, height = 96).asImageBitmap() }.getOrNull(),
                         isSystem = (app.flags and android.content.pm.ApplicationInfo.FLAG_SYSTEM) != 0,
                     )
                 }
@@ -426,64 +387,16 @@ fun ExceptionsTab(
         isAppsLoading = false
     }
 
-    val appListState = rememberLazyListState()
-    val routingMode = if (isWhitelist) RoutingMode.IncludeSelected else RoutingMode.ExcludeSelected
-    val activeAppSelection = if (isWhitelist) whitelistSelection else blacklistSelection
-
-    // LazyColumn preserves its visible item by key after sorting. On reopening
-    // or changing mode, reset the viewport so the selected group is visible.
-    LaunchedEffect(showAppsDialog, isWhitelist, appSearchQuery) {
-        if (showAppsDialog) appListState.scrollToItem(0)
-    }
-
-    val filteredApps = remember(appsList, appSearchQuery, activeAppSelection) {
-        val base = if (appSearchQuery.isBlank()) {
-            appsList
-        } else {
-            appsList.filter {
-                it.name.contains(appSearchQuery, ignoreCase = true) ||
-                    it.packageName.contains(appSearchQuery, ignoreCase = true)
-            }
-        }
-        selectedApplicationsFirst(base, activeAppSelection, { it.packageName }, { it.name })
-    }
-
     fun persistAppSelections(black: Set<String>?, white: Set<String>?, mode: Boolean? = null) {
         val nextBlack = black ?: blacklistSelection
         val nextWhite = white ?: whitelistSelection
         appPersistenceScope.launch {
             settingsStore.saveAppRoutingLists(
-                nextBlack.sorted().joinToString(","),
-                nextWhite.sorted().joinToString(","),
+                nextBlack.joinToString(","),
+                nextWhite.joinToString(","),
                 mode,
             )
             if (mode != null) TunnelManager.reloadVpn()
-        }
-    }
-
-    fun persistAppSelection(selection: Set<String>, forWhitelist: Boolean) {
-        if (forWhitelist) {
-            persistAppSelections(black = null, white = selection)
-        } else {
-            persistAppSelections(black = selection, white = null)
-        }
-    }
-
-    DisposableEffect(Unit) {
-        onDispose {
-            val pendingBlacklist = blacklistSelection
-            val pendingWhitelist = whitelistSelection
-            val blacklistChanged = pendingBlacklist != lastSavedBlacklist
-            val whitelistChanged = pendingWhitelist != lastSavedWhitelist
-            if (!blacklistChanged && !whitelistChanged) return@onDispose
-            lastSavedBlacklist = pendingBlacklist
-            lastSavedWhitelist = pendingWhitelist
-            appPersistenceScope.launch {
-                settingsStore.saveAppRoutingLists(
-                    pendingBlacklist.sorted().joinToString(","),
-                    pendingWhitelist.sorted().joinToString(","),
-                )
-            }
         }
     }
 
@@ -524,11 +437,7 @@ fun ExceptionsTab(
                         overflow = TextOverflow.Ellipsis,
                     )
                     Text(
-                        text = if (isWhitelist) {
-                            "Белый список: ${whitelistSelection.size} в туннеле"
-                        } else {
-                            "Чёрный список: ${blacklistSelection.size} исключено"
-                        },
+                        text = appsCountLabel(isWhitelist, blacklistSelection.size, whitelistSelection.size),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
@@ -538,7 +447,7 @@ fun ExceptionsTab(
                 }
 
                 OutlinedButton(
-                    onClick = openAppsDialog,
+                    onClick = { showAppsDialog = true },
                     enabled = true,
                     modifier = Modifier
                         .fillMaxWidth()
@@ -584,19 +493,19 @@ fun ExceptionsTab(
                         overflow = TextOverflow.Ellipsis,
                     )
                     val statusText = if (domainIsWhitelist) {
-                        "Белый список: ${directDomainsList.size} в туннеле"
+                        "С VPN: ${directDomainsList.size} в туннеле"
                     } else {
                         when {
-                            directDomainsList.isEmpty() -> "Чёрный список: 0 доменов исключено"
+                            directDomainsList.isEmpty() -> "Без VPN: 0 доменов исключено"
                             templateDomainsEnabled -> {
                                 val customCount = directDomainsList.count { !templateDomains.contains(it) }
                                 if (customCount > 0) {
-                                    "Исключено: ${templateDomains.size} готовых + $customCount своих"
+                                    "Без VPN: ${templateDomains.size} готовых + $customCount своих"
                                 } else {
-                                    "Исключено: ${directDomainsList.size} (Готовый список RU)"
+                                    "Без VPN: ${directDomainsList.size} (Готовый список RU)"
                                 }
                             }
-                            else -> "Чёрный список: ${directDomainsList.size} исключено"
+                            else -> "Без VPN: ${directDomainsList.size} исключено"
                         }
                     }
                     Text(
@@ -665,9 +574,9 @@ fun ExceptionsTab(
                         overflow = TextOverflow.Ellipsis,
                     )
                     val statusText = if (ipIsWhitelist) {
-                        "Белый список: ${directIpsList.size} в туннеле"
+                        "С VPN: ${directIpsList.size} в туннеле"
                     } else {
-                        "Чёрный список: ${directIpsList.size} исключено"
+                        "Без VPN: ${directIpsList.size} исключено"
                     }
                     Text(
                         text = statusText,
@@ -782,325 +691,34 @@ fun ExceptionsTab(
     }
 
         if (showAppsDialog) {
-            Dialog(
-                onDismissRequest = closeAppsDialog,
-                properties = DialogProperties(usePlatformDefaultWidth = false),
-            ) {
-                Surface(
-                    shape = CsqttShapes.Dialog,
-                    color = appSectionCardColor(),
-                    contentColor = MaterialTheme.colorScheme.onSurface,
-                    border = BorderStroke(1.dp, appSectionCardBorderColor()),
-                    tonalElevation = 0.dp,
-                    modifier = Modifier
-                        .fillMaxWidth(0.95f)
-                        .fillMaxHeight(0.92f),
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(horizontal = 16.dp, vertical = 14.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Outlined.Apps,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onSurface,
-                                    modifier = Modifier.size(22.dp),
-                                )
-                                Text(
-                                    text = "Список приложений",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    maxLines = 1,
-                                    softWrap = false,
-                                    overflow = TextOverflow.Ellipsis,
-                                )
-                            }
-                            IconButton(
-                                onClick = closeAppsDialog,
-                                modifier = Modifier.size(36.dp),
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Close,
-                                    contentDescription = null,
-                                )
-                            }
-                        }
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        ) {
-                            if (!isWhitelist) {
-                                Button(
-                                    onClick = {},
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .height(CsqttSizes.ControlHeight),
-                                    shape = CsqttShapes.Pill,
-                                    colors = ButtonDefaults.buttonColors(
-                                        containerColor = Color(0xFF1475FD),
-                                        contentColor = Color.White,
-                                    ),
-                                    enabled = isMigrationReady,
-                                ) {
-                                    Text(
-                                        text = "Чёрный список",
-                                        fontWeight = FontWeight.SemiBold,
-                                        maxLines = 1,
-                                        softWrap = false,
-                                        overflow = TextOverflow.Ellipsis,
-                                    )
-                                }
-                            } else {
-                                OutlinedButton(
-                                    onClick = {
-                                        scope.launch {
-                                            settingsStore.saveIsWhitelist(false)
-                                        }
-                                    },
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .height(CsqttSizes.ControlHeight),
-                                    shape = CsqttShapes.Pill,
-                                    colors = ButtonDefaults.outlinedButtonColors(
-                                        containerColor = Color.Transparent,
-                                        contentColor = MaterialTheme.colorScheme.onSurface,
-                                    ),
-                                    border = BorderStroke(
-                                        1.dp,
-                                        MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
-                                    ),
-                                    enabled = isMigrationReady,
-                                ) {
-                                    Text(
-                                        text = "Чёрный список",
-                                        fontWeight = FontWeight.SemiBold,
-                                        maxLines = 1,
-                                        softWrap = false,
-                                        overflow = TextOverflow.Ellipsis,
-                                    )
-                                }
-                            }
-
-                            if (isWhitelist) {
-                                Button(
-                                    onClick = {},
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .height(CsqttSizes.ControlHeight),
-                                    shape = CsqttShapes.Pill,
-                                    colors = ButtonDefaults.buttonColors(
-                                        containerColor = Color(0xFF1475FD),
-                                        contentColor = Color.White,
-                                    ),
-                                    enabled = isMigrationReady,
-                                ) {
-                                    Text(
-                                        text = "Белый список",
-                                        fontWeight = FontWeight.SemiBold,
-                                        maxLines = 1,
-                                        softWrap = false,
-                                        overflow = TextOverflow.Ellipsis,
-                                    )
-                                }
-                            } else {
-                                OutlinedButton(
-                                    onClick = {
-                                        scope.launch {
-                                            settingsStore.saveIsWhitelist(true)
-                                        }
-                                    },
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .height(CsqttSizes.ControlHeight),
-                                    shape = CsqttShapes.Pill,
-                                    colors = ButtonDefaults.outlinedButtonColors(
-                                        containerColor = Color.Transparent,
-                                        contentColor = MaterialTheme.colorScheme.onSurface,
-                                    ),
-                                    border = BorderStroke(
-                                        1.dp,
-                                        MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
-                                    ),
-                                    enabled = isMigrationReady,
-                                ) {
-                                    Text(
-                                        text = "Белый список",
-                                        fontWeight = FontWeight.SemiBold,
-                                        maxLines = 1,
-                                        softWrap = false,
-                                        overflow = TextOverflow.Ellipsis,
-                                    )
-                                }
-                            }
-                        }
-
-                        OutlinedTextField(
-                            value = appSearchQuery,
-                            onValueChange = { appSearchQuery = it },
-                            label = {
-                                Text(
-                                    stringResource(R.string.exceptions_search_label),
-                                    maxLines = 1,
-                                    softWrap = false,
-                                    overflow = TextOverflow.Ellipsis,
-                                )
-                            },
-                            placeholder = {
-                                Text(
-                                    stringResource(R.string.exceptions_search_placeholder),
-                                    maxLines = 1,
-                                    softWrap = false,
-                                    overflow = TextOverflow.Ellipsis,
-                                )
-                            },
-                            leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = null) },
-                            singleLine = true,
-                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                            keyboardActions = KeyboardActions(onSearch = { focusManager.clearFocus() }),
-                            shape = CsqttShapes.Control,
-                            modifier = Modifier.fillMaxWidth(),
-                        )
-
-                        Text(
-                            text = stringResource(R.string.exceptions_selected_count, activeAppSelection.size),
-                            style = MaterialTheme.typography.labelLarge,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
-                            softWrap = false,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-
-                        when {
-                            !isMigrationReady || isAppsLoading -> {
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .weight(1f),
-                                    contentAlignment = Alignment.Center,
-                                ) {
-                                    CsqttLoadingState(label = stringResource(R.string.exceptions_loading))
-                                }
-                            }
-
-                            filteredApps.isEmpty() -> {
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .weight(1f),
-                                    contentAlignment = Alignment.Center,
-                                ) {
-                                    CsqttEmptyState(
-                                        title = stringResource(R.string.exceptions_empty_title),
-                                        description = stringResource(R.string.exceptions_empty_description),
-                                        icon = Icons.Outlined.Apps,
-                                    )
-                                }
-                            }
-
-                            else -> {
-                                LazyColumn(
-                                    state = appListState,
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .weight(1f),
-                                    contentPadding = PaddingValues(bottom = 8.dp),
-                                    verticalArrangement = Arrangement.spacedBy(CsqttSpacing.Xs),
-                                ) {
-                                    items(
-                                        items = filteredApps,
-                                        key = { it.packageName },
-                                        contentType = { "application" },
-                                    ) { app ->
-                                        val isSelected = app.packageName in activeAppSelection
-                                        AppRow(
-                                            app = app,
-                                            isSelected = isSelected,
-                                            onClick = {
-                                                val newSelection = if (isSelected) {
-                                                    activeAppSelection - app.packageName
-                                                } else {
-                                                    activeAppSelection + app.packageName
-                                                }
-                                                if (isWhitelist) {
-                                                    whitelistSelection = newSelection
-                                                    persistAppSelection(newSelection, forWhitelist = true)
-                                                } else {
-                                                    blacklistSelection = newSelection
-                                                    persistAppSelection(newSelection, forWhitelist = false)
-                                                }
-                                            },
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
+            val palette = if (MaterialTheme.colorScheme.background.luminance() > 0.5f) {
+                V2ClassicLightColors
+            } else {
+                V2ClassicOriginalColors
             }
-        }
-
-        if (showRoutingModeInfoDialog) {
-            Dialog(
-                onDismissRequest = { showRoutingModeInfoDialog = false },
-                properties = DialogProperties(usePlatformDefaultWidth = false),
-            ) {
-                Surface(
-                    shape = CsqttShapes.Dialog,
-                    color = appSectionCardColor(),
-                    contentColor = MaterialTheme.colorScheme.onSurface,
-                    border = BorderStroke(1.dp, appSectionCardBorderColor()),
-                    tonalElevation = 0.dp,
-                    modifier = Modifier.fillMaxWidth(0.92f),
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .padding(horizontal = 20.dp, vertical = 18.dp)
-                            .verticalScroll(rememberScrollState()),
-                        verticalArrangement = Arrangement.spacedBy(12.dp),
-                    ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Text(
-                                text = "Режим исключения",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                maxLines = 1,
-                                softWrap = false,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                            IconButton(
-                                onClick = { showRoutingModeInfoDialog = false },
-                                modifier = Modifier.size(36.dp),
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Close,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
+            CompositionLocalProvider(LocalV2Colors provides palette) {
+                V2AppsRoutingDialog(
+                    appsList = appsList,
+                    isAppsLoading = isAppsLoading || !isMigrationReady,
+                    isWhitelist = isWhitelist,
+                    blacklist = blacklistSelection,
+                    whitelist = whitelistSelection,
+                    showSystemApps = showSystemApps,
+                    onShowSystemAppsChange = { enabled -> scope.launch { settingsStore.saveShowSystemApps(enabled) } },
+                    onClose = { black, white, modeWhite ->
+                        val changed = modeWhite != isWhitelist || black != blacklistSelection || white != whitelistSelection
+                        val orderChanged = black.toList() != blacklistSelection.toList() || white.toList() != whitelistSelection.toList()
+                        if (changed || orderChanged) {
+                            blacklistSelection = black
+                            whitelistSelection = white
+                            appPersistenceScope.launch {
+                                settingsStore.saveAppRoutingLists(black.joinToString(","), white.joinToString(","), modeWhite)
+                                if (changed) TunnelManager.reloadVpn()
                             }
                         }
-                        Text(
-                            text = "• В режиме чёрного списка отмеченные приложения не идут в туннель CSQTT.\n\n• В режиме белого списка только отмеченные приложения идут в туннель CSQTT (и ни одного другого).",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurface,
-                        )
-                    }
-                }
+                        showAppsDialog = false
+                    },
+                )
             }
         }
 
@@ -1215,7 +833,7 @@ fun ExceptionsTab(
                                     ),
                                 ) {
                                     Text(
-                                        text = "Чёрный список",
+                                        text = "Без VPN",
                                         fontWeight = FontWeight.SemiBold,
                                         maxLines = 1,
                                         softWrap = false,
@@ -1239,7 +857,7 @@ fun ExceptionsTab(
                                     ),
                                 ) {
                                     Text(
-                                        text = "Чёрный список",
+                                        text = "Без VPN",
                                         fontWeight = FontWeight.SemiBold,
                                         maxLines = 1,
                                         softWrap = false,
@@ -1261,7 +879,7 @@ fun ExceptionsTab(
                                     ),
                                 ) {
                                     Text(
-                                        text = "Белый список",
+                                        text = "С VPN",
                                         fontWeight = FontWeight.SemiBold,
                                         maxLines = 1,
                                         softWrap = false,
@@ -1285,7 +903,7 @@ fun ExceptionsTab(
                                     ),
                                 ) {
                                     Text(
-                                        text = "Белый список",
+                                        text = "С VPN",
                                         fontWeight = FontWeight.SemiBold,
                                         maxLines = 1,
                                         softWrap = false,
@@ -1526,7 +1144,7 @@ fun ExceptionsTab(
                                     ),
                                 ) {
                                     Text(
-                                        text = "Чёрный список",
+                                        text = "Без VPN",
                                         fontWeight = FontWeight.SemiBold,
                                         maxLines = 1,
                                         softWrap = false,
@@ -1550,7 +1168,7 @@ fun ExceptionsTab(
                                     ),
                                 ) {
                                     Text(
-                                        text = "Чёрный список",
+                                        text = "Без VPN",
                                         fontWeight = FontWeight.SemiBold,
                                         maxLines = 1,
                                         softWrap = false,
@@ -1572,7 +1190,7 @@ fun ExceptionsTab(
                                     ),
                                 ) {
                                     Text(
-                                        text = "Белый список",
+                                        text = "С VPN",
                                         fontWeight = FontWeight.SemiBold,
                                         maxLines = 1,
                                         softWrap = false,
@@ -1596,7 +1214,7 @@ fun ExceptionsTab(
                                     ),
                                 ) {
                                     Text(
-                                        text = "Белый список",
+                                        text = "С VPN",
                                         fontWeight = FontWeight.SemiBold,
                                         maxLines = 1,
                                         softWrap = false,
@@ -1943,161 +1561,155 @@ fun ExceptionsTab(
                                         context.showRaisedToast("Буфер обмена пуст", Toast.LENGTH_SHORT)
                                         return@Button
                                     }
-                                    var importedAny = false
-                                    val rootJson = runCatching { JSONObject(clipText) }.getOrNull()
-                                    if (rootJson != null) {
-                                        if (transferAppsSelected && rootJson.has("apps")) {
-                                            val appsObj = rootJson.getJSONObject("apps")
-                                            val isWhite = if (appsObj.has("active_mode")) {
-                                                appsObj.optString("active_mode") == "whitelist"
-                                            } else {
-                                                appsObj.optBoolean("is_whitelist", isWhitelist)
-                                            }
-                                            val newBlack = mutableSetOf<String>()
-                                            val blackArr = appsObj.optJSONArray("blacklist")
-                                            if (blackArr != null) {
-                                                for (i in 0 until blackArr.length()) {
-                                                    val pkg = blackArr.optString(i)
-                                                    if (isValidPackage(pkg)) newBlack.add(pkg)
+                                    scope.launch(Dispatchers.Main.immediate) {
+                                        var importedAny = false
+                                        val rootJson = runCatching { JSONObject(clipText) }.getOrNull()
+                                        if (rootJson != null) {
+                                            if (transferAppsSelected && rootJson.has("apps")) {
+                                                val appsObj = rootJson.getJSONObject("apps")
+                                                val isWhite = if (appsObj.has("active_mode")) {
+                                                    appsObj.optString("active_mode") == "whitelist"
+                                                } else {
+                                                    appsObj.optBoolean("is_whitelist", isWhitelist)
                                                 }
-                                            }
-                                            val newWhite = mutableSetOf<String>()
-                                            val whiteArr = appsObj.optJSONArray("whitelist")
-                                            if (whiteArr != null) {
-                                                for (i in 0 until whiteArr.length()) {
-                                                    val pkg = whiteArr.optString(i)
-                                                    if (isValidPackage(pkg)) newWhite.add(pkg)
-                                                }
-                                            }
-                                            blacklistSelection = newBlack
-                                            whitelistSelection = newWhite
-                                            persistAppSelections(black = newBlack, white = newWhite, mode = isWhite)
-                                            importedAny = true
-                                        }
-                                        if (transferDomainsSelected && rootJson.has("domains")) {
-                                            val domainsObj = rootJson.getJSONObject("domains")
-                                            val isWhite = if (domainsObj.has("active_mode")) {
-                                                domainsObj.optString("active_mode") == "whitelist"
-                                            } else {
-                                                domainsObj.optBoolean("is_whitelist", domainIsWhitelist)
-                                            }
-                                            val isTemplate = domainsObj.optBoolean("template_domains", false)
-                                            val impBlack = mutableListOf<String>()
-                                            val blackArr = domainsObj.optJSONArray("blacklist")
-                                            if (blackArr != null) {
-                                                for (i in 0 until blackArr.length()) {
-                                                    val d = cleanDomain(blackArr.optString(i))
-                                                    if (isValidDomain(d)) impBlack.add(d)
-                                                }
-                                            }
-                                            val impWhite = mutableListOf<String>()
-                                            val whiteArr = domainsObj.optJSONArray("whitelist")
-                                            if (whiteArr != null) {
-                                                for (i in 0 until whiteArr.length()) {
-                                                    val d = cleanDomain(whiteArr.optString(i))
-                                                    if (isValidDomain(d)) impWhite.add(d)
-                                                }
-                                            }
-                                            val flatArr = domainsObj.optJSONArray("direct_domains")
-                                            if (flatArr != null && impBlack.isEmpty() && impWhite.isEmpty()) {
-                                                for (i in 0 until flatArr.length()) {
-                                                    val d = cleanDomain(flatArr.optString(i))
-                                                    if (isValidDomain(d)) {
-                                                        if (isWhite) impWhite.add(d) else impBlack.add(d)
+                                                val newBlack = mutableSetOf<String>()
+                                                val blackArr = appsObj.optJSONArray("blacklist")
+                                                if (blackArr != null) {
+                                                    for (i in 0 until blackArr.length()) {
+                                                        val pkg = blackArr.optString(i)
+                                                        if (isValidPackage(pkg)) newBlack.add(pkg)
                                                     }
                                                 }
+                                                val newWhite = mutableSetOf<String>()
+                                                val whiteArr = appsObj.optJSONArray("whitelist")
+                                                if (whiteArr != null) {
+                                                    for (i in 0 until whiteArr.length()) {
+                                                        val pkg = whiteArr.optString(i)
+                                                        if (isValidPackage(pkg)) newWhite.add(pkg)
+                                                    }
+                                                }
+                                                blacklistSelection = newBlack
+                                                whitelistSelection = newWhite
+                                                settingsStore.saveAppRoutingLists(newBlack.joinToString(","), newWhite.joinToString(","), isWhite)
+                                                importedAny = true
                                             }
-                                            val formattedBlack = impBlack.distinct().take(1024).joinToString(",")
-                                            val formattedWhite = impWhite.distinct().take(1024).joinToString(",")
-                                            scope.launch {
+                                            if (transferDomainsSelected && rootJson.has("domains")) {
+                                                val domainsObj = rootJson.getJSONObject("domains")
+                                                val isWhite = if (domainsObj.has("active_mode")) {
+                                                    domainsObj.optString("active_mode") == "whitelist"
+                                                } else {
+                                                    domainsObj.optBoolean("is_whitelist", domainIsWhitelist)
+                                                }
+                                                val isTemplate = domainsObj.optBoolean("template_domains", false)
+                                                val impBlack = mutableListOf<String>()
+                                                val blackArr = domainsObj.optJSONArray("blacklist")
+                                                if (blackArr != null) {
+                                                    for (i in 0 until blackArr.length()) {
+                                                        val d = cleanDomain(blackArr.optString(i))
+                                                        if (isValidDomain(d)) impBlack.add(d)
+                                                    }
+                                                }
+                                                val impWhite = mutableListOf<String>()
+                                                val whiteArr = domainsObj.optJSONArray("whitelist")
+                                                if (whiteArr != null) {
+                                                    for (i in 0 until whiteArr.length()) {
+                                                        val d = cleanDomain(whiteArr.optString(i))
+                                                        if (isValidDomain(d)) impWhite.add(d)
+                                                    }
+                                                }
+                                                val flatArr = domainsObj.optJSONArray("direct_domains")
+                                                if (flatArr != null && impBlack.isEmpty() && impWhite.isEmpty()) {
+                                                    for (i in 0 until flatArr.length()) {
+                                                        val d = cleanDomain(flatArr.optString(i))
+                                                        if (isValidDomain(d)) {
+                                                            if (isWhite) impWhite.add(d) else impBlack.add(d)
+                                                        }
+                                                    }
+                                                }
+                                                val formattedBlack = impBlack.distinct().take(1024).joinToString(",")
+                                                val formattedWhite = impWhite.distinct().take(1024).joinToString(",")
                                                 settingsStore.saveDomainIsWhitelist(isWhite)
                                                 settingsStore.saveTemplateDomainsEnabled(isTemplate)
                                                 if (impBlack.isNotEmpty() || !isWhite) settingsStore.saveDirectDomainsBlack(formattedBlack)
                                                 if (impWhite.isNotEmpty() || isWhite) settingsStore.saveDirectDomainsWhite(formattedWhite)
                                                 TunnelManager.pushLocalRouting(context)
+                                                importedAny = true
                                             }
-                                            importedAny = true
-                                        }
-                                        if (transferIpsSelected && rootJson.has("ips")) {
-                                            val ipsObj = rootJson.getJSONObject("ips")
-                                            val isWhite = if (ipsObj.has("active_mode")) {
-                                                ipsObj.optString("active_mode") == "whitelist"
-                                            } else {
-                                                ipsObj.optBoolean("is_whitelist", ipIsWhitelist)
-                                            }
-                                            val impBlack = mutableListOf<String>()
-                                            val blackArr = ipsObj.optJSONArray("blacklist")
-                                            if (blackArr != null) {
-                                                for (i in 0 until blackArr.length()) {
-                                                    val r = cleanIpRule(blackArr.optString(i))
-                                                    if (isValidIpRule(r)) impBlack.add(r)
+                                            if (transferIpsSelected && rootJson.has("ips")) {
+                                                val ipsObj = rootJson.getJSONObject("ips")
+                                                val isWhite = if (ipsObj.has("active_mode")) {
+                                                    ipsObj.optString("active_mode") == "whitelist"
+                                                } else {
+                                                    ipsObj.optBoolean("is_whitelist", ipIsWhitelist)
                                                 }
-                                            }
-                                            val impWhite = mutableListOf<String>()
-                                            val whiteArr = ipsObj.optJSONArray("whitelist")
-                                            if (whiteArr != null) {
-                                                for (i in 0 until whiteArr.length()) {
-                                                    val r = cleanIpRule(whiteArr.optString(i))
-                                                    if (isValidIpRule(r)) impWhite.add(r)
-                                                }
-                                            }
-                                            val flatArr = ipsObj.optJSONArray("direct_ips")
-                                            if (flatArr != null && impBlack.isEmpty() && impWhite.isEmpty()) {
-                                                for (i in 0 until flatArr.length()) {
-                                                    val r = cleanIpRule(flatArr.optString(i))
-                                                    if (isValidIpRule(r)) {
-                                                        if (isWhite) impWhite.add(r) else impBlack.add(r)
+                                                val impBlack = mutableListOf<String>()
+                                                val blackArr = ipsObj.optJSONArray("blacklist")
+                                                if (blackArr != null) {
+                                                    for (i in 0 until blackArr.length()) {
+                                                        val r = cleanIpRule(blackArr.optString(i))
+                                                        if (isValidIpRule(r)) impBlack.add(r)
                                                     }
                                                 }
-                                            }
-                                            val formattedBlack = impBlack.distinct().take(1024).joinToString(",")
-                                            val formattedWhite = impWhite.distinct().take(1024).joinToString(",")
-                                            scope.launch {
+                                                val impWhite = mutableListOf<String>()
+                                                val whiteArr = ipsObj.optJSONArray("whitelist")
+                                                if (whiteArr != null) {
+                                                    for (i in 0 until whiteArr.length()) {
+                                                        val r = cleanIpRule(whiteArr.optString(i))
+                                                        if (isValidIpRule(r)) impWhite.add(r)
+                                                    }
+                                                }
+                                                val flatArr = ipsObj.optJSONArray("direct_ips")
+                                                if (flatArr != null && impBlack.isEmpty() && impWhite.isEmpty()) {
+                                                    for (i in 0 until flatArr.length()) {
+                                                        val r = cleanIpRule(flatArr.optString(i))
+                                                        if (isValidIpRule(r)) {
+                                                            if (isWhite) impWhite.add(r) else impBlack.add(r)
+                                                        }
+                                                    }
+                                                }
+                                                val formattedBlack = impBlack.distinct().take(1024).joinToString(",")
+                                                val formattedWhite = impWhite.distinct().take(1024).joinToString(",")
                                                 settingsStore.saveIpIsWhitelist(isWhite)
                                                 settingsStore.saveIpRoutingEnabled(true)
                                                 if (impBlack.isNotEmpty() || !isWhite) settingsStore.saveDirectIpsBlack(formattedBlack)
                                                 if (impWhite.isNotEmpty() || isWhite) settingsStore.saveDirectIpsWhite(formattedWhite)
                                                 TunnelManager.pushLocalRouting(context)
+                                                importedAny = true
                                             }
-                                            importedAny = true
-                                        }
-                                    } else {
-                                        if (transferAppsSelected) {
-                                            val parsed = parseAppExportFromText(clipText)
-                                            if (parsed != null) {
-                                                val (impBlack, impWhite) = parsed
-                                                val nBlack = if (impBlack.isNotEmpty()) blacklistSelection + impBlack else null
-                                                val nWhite = if (impWhite.isNotEmpty()) whitelistSelection + impWhite else null
-                                                if (nBlack != null || nWhite != null) {
-                                                    nBlack?.let { blacklistSelection = it }
-                                                    nWhite?.let { whitelistSelection = it }
-                                                    persistAppSelections(black = nBlack, white = nWhite)
-                                                    importedAny = true
+                                        } else {
+                                            if (transferAppsSelected) {
+                                                val parsed = parseAppExportFromText(clipText)
+                                                if (parsed != null) {
+                                                    val (impBlack, impWhite) = parsed
+                                                    val nBlack = if (impBlack.isNotEmpty()) blacklistSelection + impBlack else null
+                                                    val nWhite = if (impWhite.isNotEmpty()) whitelistSelection + impWhite else null
+                                                    if (nBlack != null || nWhite != null) {
+                                                        nBlack?.let { blacklistSelection = it }
+                                                        nWhite?.let { whitelistSelection = it }
+                                                        settingsStore.saveAppRoutingLists(blacklistSelection.joinToString(","), whitelistSelection.joinToString(","))
+                                                        importedAny = true
+                                                    }
                                                 }
                                             }
-                                        }
-                                        if (transferDomainsSelected) {
-                                            val importedDomains = parseDomainsFromText(clipText)
-                                            if (importedDomains.isNotEmpty()) {
-                                                val currentList = if (domainIsWhitelist) parseDomainsFromText(directDomainsWhiteStr) else parseDomainsFromText(directDomainsBlackStr)
-                                                val combined = (currentList + importedDomains).distinct().take(1024).joinToString(",")
-                                                scope.launch {
+                                            if (transferDomainsSelected) {
+                                                val importedDomains = parseDomainsFromText(clipText)
+                                                if (importedDomains.isNotEmpty()) {
+                                                    val currentList = if (domainIsWhitelist) parseDomainsFromText(directDomainsWhiteStr) else parseDomainsFromText(directDomainsBlackStr)
+                                                    val combined = (currentList + importedDomains).distinct().take(1024).joinToString(",")
                                                     if (domainIsWhitelist) {
                                                         settingsStore.saveDirectDomainsWhite(combined)
                                                     } else {
                                                         settingsStore.saveDirectDomainsBlack(combined)
                                                     }
                                                     TunnelManager.pushLocalRouting(context)
+                                                    importedAny = true
                                                 }
-                                                importedAny = true
                                             }
-                                        }
-                                        if (transferIpsSelected) {
-                                            val importedIps = parseIpsFromText(clipText)
-                                            if (importedIps.isNotEmpty()) {
-                                                val currentList = if (ipIsWhitelist) parseIpsFromText(directIpsWhiteStr) else parseIpsFromText(directIpsBlackStr)
-                                                val combined = (currentList + importedIps).distinct().take(1024).joinToString(",")
-                                                scope.launch {
+                                            if (transferIpsSelected) {
+                                                val importedIps = parseIpsFromText(clipText)
+                                                if (importedIps.isNotEmpty()) {
+                                                    val currentList = if (ipIsWhitelist) parseIpsFromText(directIpsWhiteStr) else parseIpsFromText(directIpsBlackStr)
+                                                    val combined = (currentList + importedIps).distinct().take(1024).joinToString(",")
                                                     settingsStore.saveIpRoutingEnabled(true)
                                                     if (ipIsWhitelist) {
                                                         settingsStore.saveDirectIpsWhite(combined)
@@ -2105,19 +1717,19 @@ fun ExceptionsTab(
                                                         settingsStore.saveDirectIpsBlack(combined)
                                                     }
                                                     TunnelManager.pushLocalRouting(context)
+                                                    importedAny = true
                                                 }
-                                                importedAny = true
                                             }
                                         }
-                                    }
-                                    if (importedAny) {
-                                        if (transferAppsSelected) {
-                                            TunnelManager.reloadVpn()
+                                        if (importedAny) {
+                                            if (transferAppsSelected) {
+                                                TunnelManager.reloadVpn()
+                                            }
+                                            context.showRaisedToast("Правила успешно импортированы", Toast.LENGTH_SHORT)
+                                            showRulesTransferDialog = false
+                                        } else {
+                                            context.showRaisedToast("В буфере обмена нет подходящих данных", Toast.LENGTH_SHORT)
                                         }
-                                        context.showRaisedToast("Правила успешно импортированы", Toast.LENGTH_SHORT)
-                                        showRulesTransferDialog = false
-                                    } else {
-                                        context.showRaisedToast("В буфере обмена нет подходящих данных", Toast.LENGTH_SHORT)
                                     }
                                 },
                                 modifier = Modifier

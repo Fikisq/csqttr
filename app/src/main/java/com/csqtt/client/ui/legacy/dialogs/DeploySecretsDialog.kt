@@ -16,6 +16,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.outlined.Visibility
+import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.HorizontalDivider
@@ -29,6 +31,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -43,6 +46,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import com.csqtt.client.SettingsStore
 import com.csqtt.client.ui.legacy.appSectionCardBorderColor
 import com.csqtt.client.ui.legacy.appSectionCardColor
@@ -56,6 +61,7 @@ import kotlinx.coroutines.launch
 @Composable
 fun DeploySecretsDialog(
     settingsStore: SettingsStore,
+    deployProfile: Int,
     initialMainPass: String,
     initialSshLogin: String,
     initialSshPass: String,
@@ -68,9 +74,16 @@ fun DeploySecretsDialog(
     var mainPassInput by rememberSaveable {
         mutableStateOf(initialMainPass.ifBlank { generate16CharPassword() })
     }
-    var webLoginInput by rememberSaveable { mutableStateOf(initialWebLogin) }
-    var webPassInput by rememberSaveable { mutableStateOf(initialWebPass) }
-    var passwordsVisible by rememberSaveable { mutableStateOf(false) }
+    var webLoginInput by rememberSaveable { mutableStateOf(initialWebLogin.ifBlank { "admin" }) }
+    var webPassInput by rememberSaveable {
+        mutableStateOf(initialWebPass.ifBlank { generate16CharPassword() })
+    }
+    var mainPasswordVisible by remember { mutableStateOf(false) }
+    var webPasswordVisible by remember { mutableStateOf(false) }
+    LifecycleEventEffect(Lifecycle.Event.ON_STOP) {
+        mainPasswordVisible = false
+        webPasswordVisible = false
+    }
 
     Dialog(
         onDismissRequest = onDismiss,
@@ -160,14 +173,15 @@ fun DeploySecretsDialog(
                     supportingText = if (mainPassInput.isNotEmpty() && !isMainPassValid) {
                         { Text(TUNNEL_PASSWORD_RULE, color = MaterialTheme.colorScheme.error) }
                     } else null,
+                    visualTransformation = if (mainPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                     trailingIcon = {
-                        IconButton(onClick = { mainPassInput = generate16CharPassword() }) {
-                            Icon(
-                                imageVector = Icons.Default.Refresh,
-                                contentDescription = "Сгенерировать пароль (16 символов)",
-                                tint = MaterialTheme.colorScheme.primary,
-                            )
-                        }
+                        DeployPasswordActions(
+                            label = "пароль туннеля",
+                            visible = mainPasswordVisible,
+                            onToggle = { mainPasswordVisible = !mainPasswordVisible },
+                            onGenerate = { mainPassInput = generate16CharPassword() },
+                        )
                     },
                 )
 
@@ -204,15 +218,29 @@ fun DeploySecretsDialog(
                     shape = CsqttShapes.Control,
                     isError = !isWebPassValid,
                     supportingText = if (webPassInput.isNotEmpty() && !isWebPassValid) invalidHint else null,
-                    visualTransformation = if (passwordsVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                    visualTransformation = if (webPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                    trailingIcon = {
+                        DeployPasswordActions(
+                            label = "пароль веб-панели",
+                            visible = webPasswordVisible,
+                            onToggle = { webPasswordVisible = !webPasswordVisible },
+                            onGenerate = { webPassInput = generate16CharPassword() },
+                        )
+                    },
                 )
 
                 Button(
                     onClick = {
                         scope.launch {
-                            settingsStore.saveDeploySecrets(mainPassInput, initialSshLogin, initialSshPass, webLoginInput, webPassInput)
-                            settingsStore.saveConnectionPassword(mainPassInput)
+                            settingsStore.saveDeploySecrets(
+                                mainPassInput, initialSshLogin, initialSshPass, webLoginInput, webPassInput,
+                                forProfile = deployProfile,
+                            )
+                            settingsStore.saveConnectionPassword(
+                                mainPassInput,
+                                forProfile = settingsStore.linkedConnectionProfile(deployProfile),
+                            )
                             onSaved()
                             onDismiss()
                         }
@@ -225,6 +253,33 @@ fun DeploySecretsDialog(
                     Text("Сохранить", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun DeployPasswordActions(
+    label: String,
+    visible: Boolean,
+    onToggle: () -> Unit,
+    onGenerate: () -> Unit,
+) {
+    Row {
+        IconButton(onClick = onToggle, modifier = Modifier.size(36.dp)) {
+            Icon(
+                imageVector = if (visible) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility,
+                contentDescription = "${if (visible) "Скрыть" else "Показать"} $label",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(18.dp),
+            )
+        }
+        IconButton(onClick = onGenerate, modifier = Modifier.size(36.dp)) {
+            Icon(
+                imageVector = Icons.Default.Refresh,
+                contentDescription = "Сгенерировать $label",
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(20.dp),
+            )
         }
     }
 }

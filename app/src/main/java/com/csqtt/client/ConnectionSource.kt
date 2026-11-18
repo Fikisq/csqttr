@@ -13,10 +13,24 @@ data class ConnectionSource(
     val tokenFromLink: Boolean,
 )
 
-/** A participant's hashes: the owner's from the link minus the ones taken out, then the participant's own. */
-internal fun participantHashes(linkHashes: List<String>, removed: Set<String>, ownHashes: String): String =
-    (linkHashes.filterNot { it in removed } + ownHashes.split(Regex("[,\\s\\n]+")))
-        .map(String::trim).filter(String::isNotEmpty).distinct().joinToString(",")
+internal enum class ManualHashGroup(val label: String) {
+    Owner("От владельца"),
+    Own("Свои"),
+}
+
+internal fun selectManualHashGroup(
+    ownerHashes: List<String>,
+    saved: ManualHashGroup?,
+    previouslyRemoved: Set<String> = emptySet(),
+): ManualHashGroup = when {
+    ownerHashes.isEmpty() -> ManualHashGroup.Own
+    saved != null -> saved
+    ownerHashes.all { it in previouslyRemoved } -> ManualHashGroup.Own
+    else -> ManualHashGroup.Owner
+}
+
+internal fun participantHashes(linkHashes: List<String>, group: ManualHashGroup, ownHashes: String): String =
+    if (group == ManualHashGroup.Owner) linkHashes.joinToString(",") else ownHashes
 
 suspend fun resolveConnectionSource(store: SettingsStore, updateLogMask: Boolean = true): ConnectionSource? {
     val invalidHashes = VkHashValidationCodec.decode(store.vkHashCheckResults.first())
@@ -29,15 +43,15 @@ suspend fun resolveConnectionSource(store: SettingsStore, updateLogMask: Boolean
     if (store.csqttLinkMode.first()) {
         val link = parseCsqttLink(store.csqttLink.first()) ?: return null
         if (updateLogMask) TunnelManager.ownerHashes = link.hashes
-        val removed = store.linkHashesRemoved.first()
         val tokenFromLink = link.vkAccessToken.isNotEmpty()
+        val useManualHashes = !tokenFromLink &&
+            store.vkHashMode.first() == CsqttConstants.VkAutoHash.MODE_MANUAL &&
+            store.vkAuthMode.first() != CsqttConstants.VkAuth.MODE_AUTO_JS
         return ConnectionSource(
             peer = link.peerAddress(),
             password = link.password,
-            hashes = if (tokenFromLink) "" else activeHashes(participantHashes(link.hashes, removed, store.vkHashes.first())),
-            // a link with hashes hides the hash mode, so the participant's list (the owner's kept + their own) is used as
-            // is — even with every owner hash taken out — never through a stored hash mode they cannot see
-            hashesFromLink = link.hashes.isNotEmpty(),
+            hashes = if (useManualHashes) activeHashes(store.readParticipantHashes(link.hashes)) else "",
+            hashesFromLink = useManualHashes && link.hashes.isNotEmpty(),
             vkAccessToken = link.vkAccessToken,
             tokenFromLink = tokenFromLink,
         )

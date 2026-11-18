@@ -18,7 +18,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -26,6 +25,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.LifecycleStartEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.csqtt.client.ui.v2.design.V2Shapes
 import com.csqtt.client.ui.v2.design.V2Theme
@@ -42,10 +42,10 @@ fun V2ResourceHud(
     val snapshot by ResourceMonitor.snapshot.collectAsStateWithLifecycle()
     val session by ResourceMonitor.session.collectAsStateWithLifecycle()
 
-    DisposableEffect(visible) {
-        if (visible) ResourceMonitor.setDetailedMemoryEnabled(true)
-        onDispose {
-            if (visible) ResourceMonitor.setDetailedMemoryEnabled(false)
+    if (visible) {
+        LifecycleStartEffect(Unit) {
+            val consumer = ResourceMonitor.acquireVisibleConsumer()
+            onStopOrDispose { consumer.close() }
         }
     }
 

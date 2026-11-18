@@ -5,10 +5,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
 /**
- * «Экономия батареи» (off by default): at or below the chosen charge, and while the phone is not charging, the app
- * stops holding the CPU awake for the tunnel — the partial wake locks of TunnelService and TunVpnService. The Wi-Fi
- * locks stay. Measured on a phone (2.5.2, screen off, a night each): ~78 → ~65 mA, the CPU awake 100 % → 8 % of the
- * time; the price is a tunnel that sleeps between Android's maintenance windows (the server reached it ~1 in 7 times).
+ * While «Экономия батареи» is active, both tunnel services release their CPU and Wi-Fi locks.
+ * Deploy operations can still hold a CPU wake lock.
  */
 object BatterySaver {
     // «Авто» (the default): with the phone's own battery saver. «Свой уровень»: at or below the chosen charge.
@@ -28,7 +26,7 @@ object BatterySaver {
 
     /** The «i» text of both designs: what it saves and what it costs, in the user's terms. */
     const val DESCRIPTION =
-        "Когда экономия включена, CSQTT перестаёт держать процессор телефона включённым ради туннеля.\n\n" +
+        "Когда экономия включена, CSQTT отпускает блокировки процессора и высокопроизводительного режима Wi-Fi.\n\n" +
             "С выключенным экраном телефон расходует заметно меньше заряда, но туннель засыпает вместе с ним: " +
             "сообщения, звонки и уведомления, которые идут через VPN, могут приходить с большой задержкой, а загрузки " +
             "останавливаются. Когда экран включается, туннель продолжает работу.\n\n" +

@@ -42,6 +42,9 @@ val releaseSigningProblems = mutableListOf<String>().apply {
 }
 val releaseSigningReady = releaseSigningProblems.isEmpty()
 
+val debugMinify = providers.gradleProperty("csqtt.debugMinify").map(String::toBooleanStrict).getOrElse(false)
+val debugVersionCode = providers.gradleProperty("csqtt.debugVersionCode").map(String::toInt)
+
 val supportedAbis = listOf("arm64-v8a", "armeabi-v7a", "x86_64")
 val selectedAbis = providers.gradleProperty("csqtt.abis").orNull
     ?.split(',')?.map(String::trim)?.filter(String::isNotEmpty)?.distinct()
@@ -107,6 +110,13 @@ android {
 
     buildTypes {
         getByName("debug") {
+            isMinifyEnabled = debugMinify
+            if (isMinifyEnabled) {
+                proguardFiles(
+                    getDefaultProguardFile("proguard-android-optimize.txt"),
+                    "proguard-rules.pro",
+                )
+            }
             applicationIdSuffix = providers.gradleProperty("csqtt.debugApplicationIdSuffix")
                 .getOrElse(".forktest")
             manifestPlaceholders["csqttDebugAppLabel"] = providers.gradleProperty("csqtt.debugAppLabel")
@@ -162,6 +172,18 @@ android {
     sourceSets {
         getByName("main") {
             jniLibs.directories.add("src/main/jniLibs")
+        }
+    }
+}
+
+androidComponents {
+    onVariants(selector().withBuildType("debug")) { variant ->
+        if (debugMinify) {
+            // AndroidX ships 32-bit x86 libraries, while CSQTTR has no x86 client.
+            variant.packaging.jniLibs.excludes.add("**/x86/**")
+        }
+        if (debugVersionCode.isPresent) {
+            variant.outputs.forEach { it.versionCode.set(debugVersionCode) }
         }
     }
 }

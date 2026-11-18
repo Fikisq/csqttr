@@ -2,8 +2,6 @@
 
 package com.csqtt.client.ui.v2.screens.deploy
 
-import android.content.ClipData
-import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.os.Handler
@@ -21,6 +19,15 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.material3.TextButton
+import androidx.compose.ui.platform.testTag
+import com.csqtt.client.ui.v2.components.V2AdaptiveScreen
+import com.csqtt.client.ui.v2.components.V2AdaptiveForm
+import com.csqtt.client.ui.v2.components.LocalV2AdaptiveMetrics
+import com.csqtt.client.ui.v2.design.V2TextSizes
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -44,10 +51,9 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Download
-import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Replay
@@ -94,22 +100,24 @@ import com.csqtt.client.SshHostKeyStore
 import com.csqtt.client.TunnelManager
 import com.csqtt.client.TunnelService
 import com.csqtt.client.showRaisedToast
-import com.csqtt.client.isNewerVersion
 import com.csqtt.client.ui.legacy.CheckChoice
 import com.csqtt.client.ui.legacy.CheckChoiceStyle
-import com.csqtt.client.ui.legacy.DeployActionMode
 import com.csqtt.client.ui.legacy.DeployInstance
 import com.csqtt.client.ui.legacy.DeployPlan
 import com.csqtt.client.ui.legacy.EffectiveServerPorts as CheckPorts
 import com.csqtt.client.ui.legacy.FoundServer
 import com.csqtt.client.ui.legacy.PlanAction
-import com.csqtt.client.ui.legacy.PlanKind
+import com.csqtt.client.ui.legacy.DeployProgressContent
+import com.csqtt.client.ui.legacy.DeployCheckState
 import com.csqtt.client.ui.legacy.ServerCheckDialog
 import com.csqtt.client.ui.legacy.ServerInventory
 import com.csqtt.client.ui.legacy.ServerPlace
 import com.csqtt.client.ui.legacy.deployInstance
 import com.csqtt.client.ui.legacy.describeServer
+import com.csqtt.client.ui.legacy.directInstall
+import com.csqtt.client.ui.legacy.directRemoval
 import com.csqtt.client.ui.legacy.peerPortOrDefault
+import com.csqtt.client.ui.legacy.webPortOrDefault
 import com.csqtt.client.ui.legacy.performServerCheck
 import com.csqtt.client.ui.legacy.planDeploy
 import com.csqtt.client.ui.legacy.removableServers
@@ -129,6 +137,7 @@ import com.csqtt.client.ui.v2.components.V2PillButton
 import com.csqtt.client.ui.v2.components.V2PillStyle
 import androidx.compose.material.icons.filled.ContentCopy
 import com.csqtt.client.ui.v2.components.V2TopBar
+import com.csqtt.client.ui.v2.components.HappProfileHeader
 import com.csqtt.client.ui.v2.design.V2BodyFamily
 import com.csqtt.client.ui.v2.design.V2DisplayFamily
 import com.csqtt.client.ui.v2.design.V2Palette
@@ -194,6 +203,7 @@ private fun DeploySettingsSnapshot.toInspectionResult(): ServerInspectionResult?
 internal fun V2DeployScreen(
     settingsStore: SettingsStore,
     savedSettings: DeploySettingsSnapshot,
+    checkState: DeployCheckState,
     version: String,
     onSettings: () -> Unit,
     modifier: Modifier = Modifier,
@@ -205,6 +215,8 @@ internal fun V2DeployScreen(
 
     if (!savedSettings.isLoaded) return
     val isDeploying by DeployManager.isDeploying.collectAsStateWithLifecycle()
+    val deployProgress by DeployManager.deployProgress.collectAsStateWithLifecycle()
+    val deployStep by DeployManager.currentStep.collectAsStateWithLifecycle()
     val deployServers by settingsStore.deployServers.collectAsStateWithLifecycle(initialValue = emptyList())
     val tunnelRunning by TunnelManager.running.collectAsStateWithLifecycle()
 
@@ -224,7 +236,6 @@ internal fun V2DeployScreen(
     val savedServerPeerPort = savedSettings.serverPeerPort
     val savedServerWebPort = savedSettings.serverWebPort
     val savedSecretPathUuid = savedSettings.secretPathUuid
-    val savedServerConfigured = savedSettings.serverConfigured
     val rememberedInspection = savedSettings.toInspectionResult()
 
     val isInspecting by ServerMaintenanceState.isInspecting.collectAsStateWithLifecycle()
@@ -232,12 +243,8 @@ internal fun V2DeployScreen(
     val isChangingSecretPath by ServerMaintenanceState.isChangingSecretPath.collectAsStateWithLifecycle()
     val changeSecretPathStage by ServerMaintenanceState.changeSecretPathStage.collectAsStateWithLifecycle()
 
-    val serverDeployed = savedServerConfigured ||
-        rememberedInspection.confirmsDeployment() ||
-        inspectionResult.confirmsDeployment()
-
     var showConfigSheet by remember { mutableStateOf(false) }
-    var showActionsMenu by rememberSaveable { mutableStateOf(false) }
+    var showRenameDialog by rememberSaveable(savedSettings.profile) { mutableStateOf(false) }
     var showServerMenu by remember { mutableStateOf(false) }
     var addingServer by remember { mutableStateOf(false) }
     var serverCardExpanded by rememberSaveable { mutableStateOf(true) }
@@ -263,26 +270,13 @@ internal fun V2DeployScreen(
     var manualPorts by remember(savedSettings.profile) { mutableStateOf(savedManualPorts) }
     var sshKeysMode by remember(savedSettings.profile) { mutableStateOf(savedSshKeysMode) }
 
-    var showReinstallDialog by remember(savedSettings.profile) { mutableStateOf(false) }
-
     var showSecretsDialog by remember(savedSettings.profile) { mutableStateOf(false) }
-    var showDeployOptions by remember(savedSettings.profile) { mutableStateOf(false) }
-    var deployOptionsModeKey by remember(savedSettings.profile) {
-        mutableStateOf(DeployActionMode.Install.name)
-    }
     var showDeleteAppServerDialog by rememberSaveable(savedSettings.profile) { mutableStateOf(false) }
     var showSshKeysDialog by rememberSaveable(savedSettings.profile) { mutableStateOf(false) }
     var showDockerInfoDialog by rememberSaveable(savedSettings.profile) { mutableStateOf(false) }
     var showRegenConfirmDialog by rememberSaveable(savedSettings.profile) { mutableStateOf(false) }
     // A server that presented another SSH key than the remembered one, and the action to run again once it is trusted.
     var keyChange by remember(savedSettings.profile) { mutableStateOf<Pair<SshHostKeyStore.KeyChange, () -> Unit>?>(null) }
-    // The server check, as in the classic design: what was found and offered (with the mode the user asked for), the
-    // replacement awaiting its confirmation, and the removal list
-    var checkPlan by remember(savedSettings.profile) { mutableStateOf<Pair<DeployActionMode, DeployPlan>?>(null) }
-    var pendingReplace by remember(savedSettings.profile) { mutableStateOf<Pair<DeployActionMode, PlanAction>?>(null) }
-    var removable by remember(savedSettings.profile) { mutableStateOf<List<FoundServer>?>(null) }
-    var removeNotes by remember(savedSettings.profile) { mutableStateOf<List<String>>(emptyList()) }
-    var pendingRemove by remember(savedSettings.profile) { mutableStateOf<FoundServer?>(null) }
 
     // Load drafts from their own stored slot; tab state must not restore another VPS draft.
     var syncedHost by remember(savedSettings.profile) { mutableStateOf(savedIp) }
@@ -470,7 +464,7 @@ internal fun V2DeployScreen(
                     settingsStore.saveDeployProfileDraft(savedSettings.copy(serverName = serverName, ip = host.trim(),
                         sshLogin = sshLogin, sshPassword = sshPassword, sshPort = ports.ssh.toString(),
                         serverPeerPort = ports.peer, serverWebPort = ports.web, mainPassword = mainPassDraft,
-                        sshKeysMode = sshKeysMode, dockerInstall = dockerInstall,
+                        sshKeysMode = sshKeysMode, dockerInstall = dockerInstall, manualPortsEnabled = manualPorts,
                         webLogin = panelLoginDraft, webPassword = panelPasswordDraft))
                 }
                 addingServer = true
@@ -539,14 +533,17 @@ internal fun V2DeployScreen(
         return savedSettings.copy(serverName = serverName, ip = host.trim(), mainPassword = mainPassDraft,
             sshLogin = sshLogin, sshPassword = sshPassword, sshPort = ports.ssh.toString(),
             serverPeerPort = ports.peer, serverWebPort = ports.web, sshKeysMode = sshKeysMode,
-            dockerInstall = dockerInstall, manualPortsEnabled = true,
+            dockerInstall = dockerInstall, manualPortsEnabled = manualPorts,
             webLogin = panelLoginDraft, webPassword = panelPasswordDraft)
     }
     suspend fun persistServerDraft() { settingsStore.saveDeployProfileDraft(serverDraft()) }
     var draftDiscarded by remember(savedSettings.profile) { mutableStateOf(false) }
     val draftTracker = remember(savedSettings.profile) { mutableStateOf<DeploySettingsSnapshot?>(null) }
     SideEffect {
-        draftTracker.value = if(savedSettings.isLoaded && portsValid && !actionsBusy && !addingServer && !draftDiscarded) serverDraft() else null
+        val currentDraft = serverDraft()
+        draftTracker.value = currentDraft.takeIf {
+            savedSettings.isLoaded && portsValid && !actionsBusy && !addingServer && !draftDiscarded && it != savedSettings
+        }
     }
     DisposableEffect(savedSettings.profile) {
         onDispose {
@@ -572,20 +569,14 @@ internal fun V2DeployScreen(
             showDeployToast("VPS и профиль подключения сохранены")
         }
     }
-    LaunchedEffect(savedSettings.profile, serverName, host, sshLogin, sshPassword, sshPort, peerPort, webPort, dockerInstall, sshKeysMode, mainPassDraft, panelLoginDraft, panelPasswordDraft) {
-        if (!savedSettings.isLoaded || actionsBusy || addingServer) return@LaunchedEffect
+    LaunchedEffect(savedSettings.profile, serverName, host, sshLogin, sshPassword, sshPort, peerPort, webPort, manualPorts, dockerInstall, sshKeysMode, mainPassDraft, panelLoginDraft, panelPasswordDraft) {
         delay(500)
-        if (portsValid) persistServerDraft()
+        draftTracker.value?.let { settingsStore.saveDeployProfileDraft(it) }
     }
 
-    fun launchDeploy(requested: DeployActionMode, chosen: PlanAction) {
+    fun launchDeploy(chosen: PlanAction) {
         if (DeployManager.isDeploying.value || isInspecting || isChangingSecretPath) return
-        // The mode asked for holds for the 2.5 server in the standard place. Anything else the check offered (next to
-        // 2.1, replacing it, the second server csqtt25, an empty VPS) is a plain install, as in the classic design: a
-        // reinstall never wipes a 2.1 server's database, an update never looks for a config the side server lacks
-        val mode = if (chosen.kind == PlanKind.UPDATE && chosen.instance == DeployInstance.MAIN) requested else DeployActionMode.Install
         val deployProfile = savedSettings.profile
-        val requiresCredentials = mode != DeployActionMode.Update
         when {
             host.isBlank() -> {
                 showDeployToast("Укажите IP-адрес сервера")
@@ -603,19 +594,19 @@ internal fun V2DeployScreen(
                 showConfigSheet = true
                 return
             }
-            requiresCredentials && !mainPasswordConfigured -> {
+            !mainPasswordConfigured -> {
                 showDeployToast("Пароль туннеля: $TUNNEL_PASSWORD_RULE")
                 showSecretsDialog = true
                 return
             }
-            requiresCredentials && !webPanelConfigured -> {
+            !webPanelConfigured -> {
                 showDeployToast("Укажите логин и пароль web-панели")
                 showSecretsDialog = true
                 return
             }
         }
 
-        val deploymentDraft = serverDraft()
+        val deploymentDraft = serverDraft().copy(serverPeerPort = chosen.peerPort, serverWebPort = chosen.webPort)
         val deployMainPassword = mainPassDraft
         val deployHost = host
         val ports = resolveServerPorts(true, sshPort, peerPort, webPort)
@@ -623,74 +614,14 @@ internal fun V2DeployScreen(
         val deployKeyPassphrase = if (sshKeysMode) savedSshKeyPassphrase else ""
         val deployCertificate = if (sshKeysMode) savedSshCertificate else ""
         val deployPassword = if (sshKeysMode) "" else sshPassword
-        val actionLabel = when (mode) {
-            DeployActionMode.Install -> "Установка"
-            DeployActionMode.Update -> "Обновление"
-            DeployActionMode.Reinstall -> "Переустановка"
-        }
 
-        DeployManager.startDeploy()
+        DeployManager.startDeploy(keepLogs = true)
         DeployManager.scope.launch {
             try {
-                settingsStore.saveDeployProfileDraft(deploymentDraft, restoreConnection = true)
+                settingsStore.saveDeployProfileDraft(deploymentDraft, restoreConnection = true, synchronizeDraftPassword = false)
                 context.startForegroundService(
                     Intent(context, TunnelService::class.java).apply { action = "DEPLOY_START" },
                 )
-
-                var deployDockerMode = dockerInstall
-
-                if (mode == DeployActionMode.Update) {
-                    DeployManager.updateProgress(0.01f, "Проверка версии на сервере…")
-                    val inspection = ServerMaintenanceOperations.inspectServer(
-                        context = context,
-                        host = host,
-                        user = sshLogin,
-                        pass = deployPassword,
-                        port = ports.ssh,
-                        webPort = ports.web,
-                        panelSecretPath = savedSecretPathUuid,
-                        privateKey = deployPrivateKey,
-                        keyPassphrase = deployKeyPassphrase,
-                        certificate = deployCertificate,
-                    )
-                    if (!inspection.isSuccess) {
-                        DeployManager.stopDeploy(inspection.message)
-                        if (!offerNewHostKey(host, ports.ssh) { launchDeploy(requested, chosen) }) {
-                            showDeployToast("Не удалось проверить версию: ${inspection.message}")
-                        }
-                        return@launch
-                    }
-                    deployDockerMode = when (inspection.serviceStatus) {
-                        "docker_active" -> true
-                        "systemd_active", "process_running" -> false
-                        else -> dockerInstall
-                    }
-                    if (deployDockerMode != dockerInstall) {
-                        settingsStore.saveDockerInstall(deployDockerMode)
-                    }
-                    val bundledVersion = bundledServerVersion(context)
-                    if (bundledVersion.isBlank()) {
-                        DeployManager.stopDeploy("Не удалось определить версию серверной сборки")
-                        showDeployToast("Не удалось определить версию серверной сборки в приложении")
-                        return@launch
-                    }
-                    val installedVersion = comparableServerVersion(inspection.installedVersion)
-                    if (installedVersion.isNotBlank() && !isNewerVersion(installedVersion, bundledVersion)) {
-                        DeployManager.stopDeploy("Уже актуальная версия")
-                        showDeployToast("На сервере уже актуальная версия v$bundledVersion")
-                        return@launch
-                    }
-                    if (installedVersion.isBlank()) {
-                        TunnelManager.addDeployWarningLog(
-                            "Версия на сервере не определена — будет загружена сборка v$bundledVersion",
-                        )
-                    } else {
-                        DeployManager.updateProgress(
-                            0.03f,
-                            "Сервер устарел: v$installedVersion → v$bundledVersion",
-                        )
-                    }
-                }
 
                 val success = performDeploy(
                     context = context,
@@ -707,9 +638,9 @@ internal fun V2DeployScreen(
                     privateKey = deployPrivateKey,
                     keyPassphrase = deployKeyPassphrase,
                     certificate = deployCertificate,
-                    installInDocker = deployDockerMode,
-                    secretPath = if (mode == DeployActionMode.Update) "" else savedSecretPathUuid.ifBlank { "" },
-                    mode = mode,
+                    installInDocker = deploymentDraft.dockerInstall,
+                    secretPath = savedSecretPathUuid,
+                    mode = chosen.actionMode,
                     instance = chosen.instance,
                 )
                 if (success) {
@@ -721,9 +652,9 @@ internal fun V2DeployScreen(
                             arch = inspectionResult?.arch
                                 ?.takeIf { it.isNotBlank() && it != "unknown" }
                                 .orEmpty(),
-                            serviceStatus = if (deployDockerMode) "docker_active" else "systemd_active",
+                            serviceStatus = if (deploymentDraft.dockerInstall) "docker_active" else "systemd_active",
                             installedVersion = deployedVersion,
-                            message = if (deployDockerMode) {
+                            message = if (deploymentDraft.dockerInstall) {
                                 "Docker-контейнер активен"
                             } else {
                                 "Служба systemd активна"
@@ -733,17 +664,15 @@ internal fun V2DeployScreen(
                     }
                     // the profile that started the deploy, even if another is active by now; it connects to the server
                     // just deployed, on its ports (46100 next to 2.1)
-                    if (mode != DeployActionMode.Update) {
-                        settingsStore.saveConnectionPassword(deployMainPassword, forProfile = settingsStore.linkedConnectionProfile(deployProfile))
-                        TunnelManager.addDeployInfoLog("Пароль подключения синхронизирован с паролем сервера")
-                    }
+                    settingsStore.saveConnectionPassword(deployMainPassword, forProfile = settingsStore.linkedConnectionProfile(deployProfile))
+                    TunnelManager.addDeployInfoLog("Пароль подключения синхронизирован с паролем сервера")
                     settingsStore.saveDeployedServer(deployProfile, deployHost, chosen.peerPort, chosen.webPort)
-                    showDeployToast("$actionLabel успешно завершена")
-                } else if (!offerNewHostKey(host, ports.ssh) { launchDeploy(requested, chosen) }) {
-                    showDeployToast(DeployManager.lastResult.value.ifBlank { "Ошибка: $actionLabel" })
+                    showDeployToast("Установка успешно завершена")
+                } else if (!offerNewHostKey(host, ports.ssh) { launchDeploy(chosen) }) {
+                    showDeployToast(DeployManager.lastResult.value.ifBlank { "Ошибка установки" })
                 }
             } catch (e: CancellationException) {
-                DeployManager.stopDeploy("$actionLabel отменена")
+                DeployManager.stopDeploy("Установка отменена")
                 throw e
             } catch (e: Exception) {
                 val message = friendlyDeployError(e.message)
@@ -782,8 +711,10 @@ internal fun V2DeployScreen(
                     privateKey = if (sshKeysMode) savedSshPrivateKey else "",
                     keyPassphrase = if (sshKeysMode) savedSshKeyPassphrase else "",
                 )
-                DeployManager.stopDeploy()
-                withContext(Dispatchers.Main) { onChecked(inventory) }
+                withContext(Dispatchers.Main) {
+                    DeployManager.stopDeploy()
+                    onChecked(inventory)
+                }
             } catch (e: CancellationException) {
                 DeployManager.stopDeploy("Проверка отменена")
                 throw e
@@ -797,21 +728,22 @@ internal fun V2DeployScreen(
         }
     }
 
-    /** Checks the server, then offers only what fits it (install, update, next to 2.1, replace — or nothing, and why). */
-    fun checkThenDeploy(mode: DeployActionMode) {
+    fun checkThenDeploy() {
         runServerCheck { inventory ->
             val ports = resolveServerPorts(true, sshPort, peerPort, webPort)
-            checkPlan = mode to planDeploy(
+            val plan = planDeploy(
                 inventory = inventory,
-                manualPorts = CheckPorts(ports.ssh, ports.peer, ports.web),
+                manualPorts = if (manualPorts) CheckPorts(ports.ssh, ports.peer, ports.web) else null,
                 profilePeerPort = ports.peer,
                 dockerInstall = dockerInstall,
                 appVersion = BuildConfig.VERSION_NAME.removePrefix("v"),
             )
+            val action = plan.directInstall()
+            if (action != null) launchDeploy(action) else checkState.plan = plan
         }
     }
 
-    fun startDeploy(mode: DeployActionMode) {
+    fun startDeploy() {
         if (DeployManager.isDeploying.value || isInspecting || isChangingSecretPath) return
         when {
             host.isBlank() -> {
@@ -825,33 +757,13 @@ internal fun V2DeployScreen(
                 return
             }
             hostHasPortRefused() -> return
-            mode == DeployActionMode.Update && !portsValid -> {
+            !portsValid -> {
                 showDeployToast("Проверьте правильность портов")
                 showConfigSheet = true
                 return
             }
         }
-        if (mode != DeployActionMode.Update) {
-            deployOptionsModeKey = mode.name
-            showDeployOptions = true
-            return
-        }
-        checkThenDeploy(mode)
-    }
-
-    /** «Удалить CSQTT с сервера»: the check lists the servers this app installed, the user picks one. */
-    fun requestUninstall() {
-        if (DeployManager.isDeploying.value || isInspecting || isChangingSecretPath) return
-        if (host.isBlank() || !sshAuthReady) {
-            showDeployToast("Укажите данные SSH для подключения к серверу")
-            showConfigSheet = true
-            return
-        }
-        if (hostHasPortRefused()) return
-        runServerCheck {
-            removable = removableServers(it)
-            removeNotes = removalNotes(it)
-        }
+        checkThenDeploy()
     }
 
     fun startUninstall(server: FoundServer) {
@@ -862,7 +774,7 @@ internal fun V2DeployScreen(
         val uninstallCertificate = if (sshKeysMode) savedSshCertificate else ""
         val uninstallPassword = if (sshKeysMode) "" else sshPassword
 
-        DeployManager.startDeploy()
+        DeployManager.startDeploy(keepLogs = true)
         DeployManager.scope.launch {
             try {
                 context.startForegroundService(
@@ -875,6 +787,7 @@ internal fun V2DeployScreen(
                     pass = uninstallPassword,
                     port = ports.ssh,
                     peerPort = server.peerPortOrDefault(),
+                    webPort = server.webPortOrDefault(),
                     onProgress = DeployManager::updateProgress,
                     privateKey = uninstallPrivateKey,
                     keyPassphrase = uninstallKeyPassphrase,
@@ -914,19 +827,33 @@ internal fun V2DeployScreen(
         }
     }
 
+    fun requestUninstall() {
+        if (DeployManager.isDeploying.value || isInspecting || isChangingSecretPath) return
+        if (host.isBlank() || !sshAuthReady) {
+            showDeployToast("Укажите данные SSH для подключения к серверу")
+            showConfigSheet = true
+            return
+        }
+        if (hostHasPortRefused()) return
+        runServerCheck { inventory ->
+            val servers = removableServers(inventory)
+            val notes = removalNotes(inventory)
+            val profilePort = resolveServerPorts(true, sshPort, peerPort, webPort).peer
+            val server = directRemoval(servers, notes, profilePort)
+            if (server != null) {
+                startUninstall(server)
+            } else {
+                checkState.removable = servers
+                checkState.removalNotes = notes
+            }
+        }
+    }
+
     fun panelUrl(): String {
         val ports = resolveServerPorts(true, sshPort, peerPort, webPort)
         val cleanPath = savedSecretPathUuid.trim().trimStart('/')
         val panelPath = if (cleanPath.isNotBlank()) "/$cleanPath" else ""
         return "https://${host.trim()}:${ports.web}$panelPath"
-    }
-
-    fun copyPanelLink() {
-        val effectiveHost = host.trim()
-        val text = if (effectiveHost.isNotBlank()) panelUrl() else savedSecretPathUuid
-        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-        clipboard.setPrimaryClip(ClipData.newPlainText("csqtt_web_panel", text))
-        showDeployToast("Ссылка скопирована")
     }
 
     fun openPanel() {
@@ -1006,73 +933,116 @@ internal fun V2DeployScreen(
         }
     }
 
-    Column(modifier.fillMaxSize().padding(horizontal = 16.dp)) {
+    V2AdaptiveScreen(modifier.fillMaxSize().padding(horizontal = V2Sizes.ScreenPadding), dense = true) {
+        val layout = LocalV2AdaptiveMetrics.current
         V2TopBar(version = version, title = "Деплой", onSettings = onSettings)
-        Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            V2Card(contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp), borderColor = colors.outline) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    androidx.compose.material3.TextButton(onClick = { showServerMenu = true }, enabled = !actionsBusy, modifier = Modifier.weight(1f)) { Text(serverTitle, maxLines = 1, overflow = TextOverflow.Ellipsis) }
-                    V2CircleIconButton(icon = Icons.Default.Edit, contentDescription = "Редактировать VPS", onClick = {
-                        if (!actionsBusy && host.isNotBlank()) { addingServer = false; showConfigSheet = true }
-                    })
-                    V2CircleIconButton(icon = Icons.Default.Delete, contentDescription = "Удалить VPS из приложения", onClick = { if(!actionsBusy && host.isNotBlank()) showDeleteAppServerDialog = true })
-                    V2CircleIconButton(icon = Icons.Default.Add, contentDescription = "Добавить VPS", onClick = { openAddServerSheet() })
-                    V2CircleIconButton(icon = Icons.Default.MoreVert, contentDescription = "Действия веб-панели", onClick = {
-                        if (!actionsBusy) showActionsMenu = true
-                    })
-                }
+        V2AdaptiveForm(Modifier.weight(1f).fillMaxWidth(), fieldRows = 3, controlRows = 4,
+            extraHeight = 80.dp) { form ->
+        val formLayout = LocalV2AdaptiveMetrics.current
+        val pill = RoundedCornerShape(50)
+        BoxWithConstraints(Modifier.fillMaxSize()) {
+        val cardMinimum = (maxHeight - form.profileHeight - layout.gap).coerceAtLeast(0.dp)
+        Column(Modifier.fillMaxWidth().imePadding().verticalScroll(rememberScrollState()).testTag("deploy-settings"), verticalArrangement = Arrangement.spacedBy(layout.gap)) {
+            HappProfileHeader(
+                title = serverTitle,
+                subtitle = if (host.isBlank()) "Сервер не настроен" else null,
+                onSelect = { showServerMenu = true },
+                onEdit = { showRenameDialog = true },
+                enabled = !actionsBusy,
+                modifier = Modifier.testTag("deploy-profile-header"),
+                editDescription = "Изменить название профиля",
+            ) {
+                    androidx.compose.material3.IconButton(onClick = { showDeleteAppServerDialog = true }, enabled = !actionsBusy && host.isNotBlank(), modifier = Modifier.size(44.dp)) {
+                        Icon(Icons.Default.Delete, "Удалить VPS из приложения", tint = colors.danger, modifier = Modifier.size(20.dp))
+                    }
+                    androidx.compose.material3.IconButton(onClick = { openAddServerSheet() }, enabled = !actionsBusy, modifier = Modifier.size(44.dp)) {
+                        Icon(Icons.Default.Add, "Добавить VPS", tint = colors.textPrimary, modifier = Modifier.size(22.dp))
+                    }
             }
-            V2Card(contentPadding = PaddingValues(4.dp), borderColor = colors.outline) {
+            V2Card(modifier = Modifier.testTag("deploy-card"), shape = RoundedCornerShape(28.dp), contentPadding = PaddingValues(start = 14.dp, end = 14.dp, top = 12.dp, bottom = 8.dp), color = colors.surface,
+                contentModifier = Modifier.heightIn(min = cardMinimum), verticalArrangement = Arrangement.SpaceBetween) {
+                Column {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    HappField("IP сервера", host, { value -> val split = splitPastedHostPort(host, value); host = split?.first ?: value; if (split != null) sshPort = split.second }, Modifier.weight(1.65f), enabled = !actionsBusy)
-                    HappField("Порт SSH", sshPort, { sshPort = it.filter(Char::isDigit).take(5) }, Modifier.weight(1f), number = true, enabled = !actionsBusy)
+                    HappField("Адрес сервера", host, { value -> val split = splitPastedHostPort(host, value); host = split?.first ?: value; if (split != null) sshPort = split.second }, Modifier.weight(1f), enabled = !actionsBusy, compact = true, shape = pill, floatingLabel = true, maxFieldHeight = 44.dp)
+                    HappField("Порт SSH", sshPort, { sshPort = it.filter(Char::isDigit).take(5) }, Modifier.weight(1f), number = true, enabled = !actionsBusy, compact = true, shape = pill, floatingLabel = true, maxFieldHeight = 44.dp)
                 }
-                Spacer(Modifier.height(4.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Bottom) {
-                    HappField("Логин SSH", sshLogin, { sshLogin = it }, Modifier.weight(1f), enabled = !actionsBusy)
-                    if(sshKeysMode) androidx.compose.material3.OutlinedButton(onClick = { showSshKeysDialog = true }, modifier = Modifier.weight(1f).height(54.dp), enabled = !actionsBusy) { Text(if(sshKeysFilled > 0) "Ключ задан" else "Ключ SSH", fontSize = 12.sp) }
-                    else HappField("Пароль SSH", sshPassword, { sshPassword = it }, Modifier.weight(1f), password = true, enabled = !actionsBusy)
-                }
-                HappChoice("Способ входа", if(sshKeysMode) "SSH-ключ" else "Пароль", listOf("Пароль", "SSH-ключ"), { sshKeysMode = it == "SSH-ключ" }, enabled = !actionsBusy,
-                    help = "Вход на VPS по паролю или приватному ключу SSH. Пароль ключа и сертификат OpenSSH задаются в окне ключей.")
-            }
-            V2Card(contentPadding = PaddingValues(4.dp), borderColor = colors.outline) {
-                Row(Modifier.fillMaxWidth().height(28.dp).clickable(enabled = !actionsBusy) { dockerInstall = !dockerInstall }, verticalAlignment = Alignment.CenterVertically) {
-                    Text("Установка в Docker", Modifier.weight(1f), fontSize = 14.sp)
-                    com.csqtt.client.ui.v2.components.V2Switch(dockerInstall, { dockerInstall = it }, enabled = !actionsBusy)
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    HappField("Порт PEER", peerPort, { peerPort = it.filter(Char::isDigit).take(5); manualPorts = true }, Modifier.weight(1f), number = true, enabled = !actionsBusy)
-                    HappField("Порт WEB", webPort, { webPort = it.filter(Char::isDigit).take(5); manualPorts = true }, Modifier.weight(1f), number = true, enabled = !actionsBusy)
-                }
-                Spacer(Modifier.height(4.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Bottom) {
-                    HappField("Пароль туннеля", mainPassDraft, { mainPassDraft = it }, Modifier.weight(1f), password = true, enabled = !actionsBusy)
-                    androidx.compose.material3.IconButton(onClick = { mainPassDraft = generate16CharPassword() }, enabled = !actionsBusy, modifier = Modifier.height(44.dp)) {
-                        Icon(Icons.Default.Refresh, contentDescription = "Сгенерировать пароль туннеля", tint = colors.accent)
+                androidx.compose.animation.AnimatedVisibility(
+                    visible = manualPorts,
+                    enter = androidx.compose.animation.expandVertically(animationSpec = androidx.compose.animation.core.tween(140), expandFrom = Alignment.Top),
+                    exit = androidx.compose.animation.shrinkVertically(animationSpec = androidx.compose.animation.core.tween(120), shrinkTowards = Alignment.Top),
+                ) {
+                    Column {
+                    Spacer(Modifier.height(8.dp))
+                    Row(Modifier.testTag("deploy-manual-ports"), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        HappField("Порт туннеля", peerPort, { peerPort = it.filter(Char::isDigit).take(5) }, Modifier.weight(1f), number = true, enabled = !actionsBusy, compact = true, shape = pill, floatingLabel = true, maxFieldHeight = 44.dp)
+                        HappField("Порт WEB", webPort, { webPort = it.filter(Char::isDigit).take(5) }, Modifier.weight(1f), number = true, enabled = !actionsBusy, compact = true, shape = pill, floatingLabel = true, maxFieldHeight = 44.dp)
+                    }
                     }
                 }
-                Spacer(Modifier.height(4.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    HappField("Логин веб-панели", panelLoginDraft, { panelLoginDraft = it }, Modifier.weight(1f), enabled = !actionsBusy)
-                    HappField("Пароль веб-панели", panelPasswordDraft, { panelPasswordDraft = it }, Modifier.weight(1f), password = true, enabled = !actionsBusy)
+                Spacer(Modifier.height(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Bottom) {
+                    HappField("Логин SSH", sshLogin, { sshLogin = it }, Modifier.weight(1f), enabled = !actionsBusy, compact = true, shape = pill, floatingLabel = true, maxFieldHeight = 44.dp)
+                    if (sshKeysMode) Column(Modifier.weight(1f)) {
+                        V2PillButton(if(sshKeysFilled > 0) "Изменить ключ" else "Настроить ключ",
+                            onClick = { showSshKeysDialog = true }, modifier = Modifier.fillMaxWidth(),
+                            enabled = !actionsBusy, style = V2PillStyle.Outline, height = maxOf(48.dp, formLayout.fieldHeight.coerceAtMost(44.dp) + 8.dp),
+                            horizontalPadding = 4.dp, shape = pill)
+                    }
+                    else HappField("Пароль SSH", sshPassword, { sshPassword = it }, Modifier.weight(1f), password = true, visibilityKey = savedSettings.profile, enabled = !actionsBusy, compact = true, shape = pill, floatingLabel = true, maxFieldHeight = 44.dp)
+                }
+                }
+                DeployFormToggle("Ключи SSH", sshKeysMode, { sshKeysMode = it }, enabled = !actionsBusy)
+                DeployFormToggle("Ручные порты", manualPorts, { manualPorts = it }, enabled = !actionsBusy)
+                DeployFormToggle("Установить в Docker", dockerInstall, { dockerInstall = it }, enabled = !actionsBusy)
+                Row(Modifier.fillMaxWidth().heightIn(min = formLayout.rowHeight).clickable(enabled = !actionsBusy) { showSecretsDialog = true }, verticalAlignment = Alignment.CenterVertically) {
+                    Text("Авторизация", Modifier.weight(1f), fontSize = V2TextSizes.Body)
+                    Text("›", fontSize = 22.sp, color = colors.textSecondary)
+                }
+                Column {
+                Text("Секретный путь и ссылка панели", color = colors.textSecondary, fontSize = V2TextSizes.Secondary)
+                Surface(shape = pill, color = colors.field, border = androidx.compose.foundation.BorderStroke(1.dp, colors.outline), modifier = Modifier.fillMaxWidth().padding(top = 4.dp)) {
+                    Row(Modifier.heightIn(min = 58.dp).padding(start = 12.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text(panelDisplayUrl, Modifier.weight(1f).clickable(enabled = !actionsBusy && host.isNotBlank(), onClick = ::openPanel).padding(vertical = 8.dp), color = colors.accent, fontSize = V2TextSizes.Body, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                        androidx.compose.material3.IconButton(onClick = {
+                            showRegenConfirmDialog = true
+                        }, enabled = !actionsBusy && host.isNotBlank() && sshAuthReady, modifier = Modifier.size(48.dp)) {
+                            Icon(Icons.Default.Refresh, "Изменить секретный путь", tint = colors.textSecondary, modifier = Modifier.size(26.dp))
+                        }
+                    }
+                }
                 }
             }
-            if(actionsBusy) Text(if(isInspecting) "Проверка VPS по SSH…" else "Операция выполняется · подробности в логах", color = colors.textSecondary, fontSize = 12.sp)
         }
-        Column(Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                V2PillButton(if(serverDeployed) "Обновить" else "Установить", { scope.launch { persistServerDraft(); startDeploy(if(serverDeployed) DeployActionMode.Update else DeployActionMode.Install) } }, modifier = Modifier.weight(1f), enabled = !actionsBusy, height = 44.dp, fontSize = 12.sp)
-                V2PillButton("Переустановить", { showReinstallDialog = true }, modifier = Modifier.weight(1f), enabled = !actionsBusy, style = V2PillStyle.Outline, height = 44.dp, fontSize = 12.sp)
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                V2PillButton("Веб-панель", { openPanel() }, modifier = Modifier.weight(1f), enabled = !actionsBusy && host.isNotBlank(), style = V2PillStyle.Outline, height = 44.dp, fontSize = 12.sp)
-                V2PillButton("Удалить с сервера", { requestUninstall() }, modifier = Modifier.weight(1f), enabled = !actionsBusy && host.isNotBlank() && sshAuthReady, style = V2PillStyle.Danger, height = 44.dp, fontSize = 12.sp)
-            }
         }
+        }
+        if (isDeploying) {
+            DeployProgressContent(deployProgress, deployStep, Modifier.fillMaxWidth(),
+                accent = colors.accent, foreground = colors.textPrimary)
+        } else if (actionsBusy) {
+            Text(if (isInspecting) "Проверка VPS по SSH…" else "Операция выполняется · подробности в логах",
+                color = colors.textSecondary, fontSize = V2TextSizes.Secondary)
+        }
+        Row(Modifier.fillMaxWidth().testTag("deploy-actions").padding(top = 6.dp, bottom = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            V2PillButton("Удалить", { requestUninstall() }, modifier = Modifier.weight(1f), enabled = !actionsBusy && host.isNotBlank() && sshAuthReady, style = V2PillStyle.Danger, height = layout.buttonHeight, fontSize = V2TextSizes.Action, shape = RoundedCornerShape(50))
+            V2PillButton("Установить", { startDeploy() }, modifier = Modifier.weight(1f), enabled = !actionsBusy, height = layout.buttonHeight, fontSize = V2TextSizes.Action, shape = RoundedCornerShape(50), maxLines = 2)
+        }
+    }
+    if (showRenameDialog) {
+        var name by remember { mutableStateOf(serverName) }
+        androidx.compose.material3.AlertDialog(containerColor = colors.surface, onDismissRequest = { showRenameDialog = false }, title = { Text("Название профиля") },
+            text = { HappField("Название", name, { name = it }, placeholder = "Например, Финляндия") },
+            confirmButton = { androidx.compose.material3.TextButton(onClick = { serverName = name.trim(); scope.launch { settingsStore.saveDeployServerName(name, savedSettings.profile) }; showRenameDialog = false }, enabled = name.isNotBlank()) { Text("Сохранить") } },
+            dismissButton = { androidx.compose.material3.TextButton(onClick = { showRenameDialog = false }) { Text("Отмена") } })
     }
     if(showServerMenu) androidx.compose.material3.AlertDialog(onDismissRequest = { showServerMenu = false }, title = { Text("Серверы VPS") }, text = {
         Column(Modifier.verticalScroll(rememberScrollState())) {
+            if (host.isNotBlank()) {
+                TextButton(onClick = {
+                    showServerMenu = false
+                    addingServer = false
+                    showConfigSheet = true
+                }) { Text("Редактировать VPS") }
+            }
             deployServers.forEach { server -> HappActionRow(server.name, server.ip, {
                 showServerMenu = false
                 if (!actionsBusy) scope.launch {
@@ -1086,16 +1056,6 @@ internal fun V2DeployScreen(
             }) }
         }
     }, confirmButton = { androidx.compose.material3.TextButton(onClick = { showServerMenu = false; openAddServerSheet() }) { Text("Добавить VPS") } })
-
-    if (showActionsMenu) androidx.compose.material3.AlertDialog(
-        onDismissRequest = { showActionsMenu = false }, title = { Text("Веб-панель") },
-        text = { Column {
-            androidx.compose.material3.TextButton(onClick = { showActionsMenu = false; showSecretsDialog = true }) { Text("Настройки веб-панели") }
-            androidx.compose.material3.TextButton(onClick = { showActionsMenu = false; copyPanelLink() }, enabled = host.isNotBlank()) { Text("Копировать ссылку панели") }
-            androidx.compose.material3.TextButton(onClick = { showActionsMenu = false; showRegenConfirmDialog = true }, enabled = host.isNotBlank() && sshAuthReady) { Text("Сменить путь панели") }
-        } },
-        confirmButton = { androidx.compose.material3.TextButton(onClick = { showActionsMenu = false }) { Text("Закрыть") } },
-    )
 
     // Модалка (ModalBottomSheet) для заполнения и сохранения данных сервера
     if (showConfigSheet) {
@@ -1141,14 +1101,6 @@ internal fun V2DeployScreen(
             },
             connectionOnly = addingServer,
         )
-    }
-
-    if (showDeployOptions) {
-        val mode = runCatching { DeployActionMode.valueOf(deployOptionsModeKey) }.getOrDefault(DeployActionMode.Install)
-        androidx.compose.material3.AlertDialog(onDismissRequest = { showDeployOptions = false }, title = { Text("Установка CSQTT") },
-            text = { Text("VPS: $host\nSSH: $sshPort · PEER: $peerPort · WEB: $webPort\n" + if(dockerInstall) "Установка в Docker" else "") },
-            confirmButton = { androidx.compose.material3.TextButton(onClick = { showDeployOptions = false; scope.launch { persistServerDraft(); checkThenDeploy(mode) } }) { Text("Установить") } },
-            dismissButton = { androidx.compose.material3.TextButton(onClick = { showDeployOptions = false }) { Text("Отмена") } })
     }
 
     // Диалог подтверждения удаления сервера из приложения
@@ -1216,25 +1168,18 @@ internal fun V2DeployScreen(
     }
 
     val profilePeer = resolveServerPorts(true, sshPort, peerPort, webPort).peer
-    checkPlan?.let { (mode, plan) ->
+    checkState.plan?.let { plan ->
         ServerCheckDialog(
             title = "На сервере",
             servers = plan.servers.map { describeServer(it, profilePeer) },
             emptyText = "csqtt не найден — сервер чистый",
             notes = plan.notes,
             choices = plan.actions.mapIndexed { index, action ->
-                // the one action a reinstall wipes (launchDeploy keeps Reinstall only for it): say so, not "settings stay"
-                val wipes = mode == DeployActionMode.Reinstall && action.kind == PlanKind.UPDATE &&
-                    action.instance == DeployInstance.MAIN
                 CheckChoice(
-                    if (wipes) "Переустановить начисто" else action.title,
-                    if (wipes) {
-                        "Удаляются CSQTT, база клиентов, конфигурация и сертификаты, затем чистая установка. Клиенты и пароли не сохранятся"
-                    } else {
-                        action.detail
-                    },
+                    action.title,
+                    action.detail,
                     when {
-                        action.destructive || wipes -> CheckChoiceStyle.DESTRUCTIVE
+                        action.destructive -> CheckChoiceStyle.DESTRUCTIVE
                         index == 0 -> CheckChoiceStyle.RECOMMENDED
                         else -> CheckChoiceStyle.OTHER
                     },
@@ -1242,18 +1187,18 @@ internal fun V2DeployScreen(
             },
             onChoose = { index ->
                 val action = plan.actions[index]
-                checkPlan = null
-                if (action.destructive) pendingReplace = mode to action else launchDeploy(mode, action)
+                checkState.plan = null
+                if (action.destructive) checkState.replacement = action else launchDeploy(action)
             },
-            onDismiss = { checkPlan = null },
+            onDismiss = { checkState.plan = null },
         )
     }
 
-    pendingReplace?.let { (mode, action) ->
+    checkState.replacement?.let { action ->
         V2DialogContainer(
             title = "Заменить сервер?",
             icon = Icons.Filled.Delete,
-            onDismiss = { pendingReplace = null },
+            onDismiss = { checkState.replacement = null },
             actions = {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -1261,7 +1206,7 @@ internal fun V2DeployScreen(
                 ) {
                     V2PillButton(
                         text = "Отмена",
-                        onClick = { pendingReplace = null },
+                        onClick = { checkState.replacement = null },
                         style = V2PillStyle.Contrast,
                         modifier = Modifier.weight(1f),
                         height = 50.dp,
@@ -1269,8 +1214,8 @@ internal fun V2DeployScreen(
                     V2PillButton(
                         text = "Заменить",
                         onClick = {
-                            pendingReplace = null
-                            launchDeploy(mode, action)
+                            checkState.replacement = null
+                            launchDeploy(action)
                         },
                         style = V2PillStyle.Danger,
                         modifier = Modifier.weight(1f),
@@ -1288,70 +1233,83 @@ internal fun V2DeployScreen(
         }
     }
 
-    removable?.let { servers ->
+    checkState.removable?.let { servers ->
         ServerCheckDialog(
             title = "Удаление с сервера",
             servers = emptyList(),
-            emptyText = if (servers.isEmpty() && removeNotes.isEmpty()) "Серверов, установленных этим приложением, здесь нет" else "",
-            notes = removeNotes,
+            emptyText = if (servers.isEmpty() && checkState.removalNotes.isEmpty()) "Серверов, установленных этим приложением, здесь нет" else "",
+            notes = checkState.removalNotes,
             choices = servers.map { server ->
                 val (name, detail) = describeServer(server, profilePeer)
                 CheckChoice("Удалить: $name", detail, CheckChoiceStyle.DESTRUCTIVE)
             },
             onChoose = { index ->
-                pendingRemove = servers[index]
-                removable = null
+                checkState.removal = servers[index]
+                checkState.removable = null
             },
-            onDismiss = { removable = null },
+            onDismiss = { checkState.removable = null },
         )
     }
 
-    pendingRemove?.let { server ->
+    checkState.removal?.let { server ->
         val (name, _) = describeServer(server, profilePeer)
         V2UninstallConfirmDialog(
-            onDismiss = { pendingRemove = null },
+            onDismiss = { checkState.removal = null },
             onConfirm = {
-                pendingRemove = null
+                checkState.removal = null
                 startUninstall(server)
             },
             title = "Удаление: $name",
-            description = if (server.place == ServerPlace.SIDE) {
-                "Будет удалён второй сервер csqtt25: его бинарник, сервис или контейнер и только его правила firewall/NAT. " +
-                    "Остальное на этом VPS не затрагивается. База пользователей остаётся в /etc/csqtt25.\n\nЭто действие необратимо."
-            } else {
-                "Будут удалены: бинарник, systemd-сервис или контейнер, конфигурация CSQTT и только помеченные правила " +
-                    "firewall/NAT для CSQTT. Второй сервер (csqtt25), если он есть, не затрагивается. База пользователей " +
-                    "остаётся в /etc/csqtt.\n\nЭто действие необратимо."
-            },
-        )
-    }
-
-    // Диалог подтверждения переустановки: очищает базу и конфигурацию на сервере
-    if (showReinstallDialog) {
-        V2UninstallConfirmDialog(
-            onDismiss = { showReinstallDialog = false },
-            onConfirm = {
-                showReinstallDialog = false
-                startDeploy(DeployActionMode.Reinstall)
-            },
-            title = "Переустановка сервера",
-            description = "На сервере будут удалены CSQTT, SQLite-база, конфигурация и сертификаты, " +
-                "после чего выполнится чистая установка. Все данные сервера будут потеряны.\n\n" +
-                "Это действие необратимо.",
-            confirmLabel = "Переустановить",
+            description = "Будут удалены выбранный экземпляр CSQTT, его клиенты, хеши, общий токен, правила маршрутизации, DNS и настройки панели. Это действие необратимо.",
         )
     }
 
     if (showSecretsDialog) {
+        var mainPasswordInput by remember { mutableStateOf(mainPassDraft) }
         var webLoginDraft by remember { mutableStateOf(panelLoginDraft) }
         var webPasswordDraft by remember { mutableStateOf(panelPasswordDraft) }
-        androidx.compose.material3.AlertDialog(onDismissRequest = { showSecretsDialog = false }, title = { Text("Доступ к веб-панели") }, text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                HappField("Логин веб-панели", webLoginDraft, { webLoginDraft = it })
-                HappField("Пароль веб-панели", webPasswordDraft, { webPasswordDraft = it }, password = true)
-                V2SwitchSetting("Секретный путь панели", savedSettings.secretPathEnabled, { enabled -> scope.launch { settingsStore.saveDeploySecretPath(enabled) } })
-            }
-        }, confirmButton = { androidx.compose.material3.TextButton(onClick = { panelLoginDraft = webLoginDraft; panelPasswordDraft = webPasswordDraft; val draft = serverDraft().copy(webLogin = webLoginDraft, webPassword = webPasswordDraft); scope.launch { settingsStore.saveDeployProfileDraft(draft); showSecretsDialog = false } }) { Text("Сохранить") } })
+        androidx.compose.material3.AlertDialog(
+            containerColor = colors.surface,
+            onDismissRequest = { showSecretsDialog = false },
+            title = { Text("Авторизация") },
+            text = {
+                Column(
+                    modifier = Modifier.verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    HappField(
+                        "Пароль туннеля", mainPasswordInput, { mainPasswordInput = it },
+                        password = true,
+                        onGeneratePassword = { mainPasswordInput = generate16CharPassword() },
+                    )
+                    HappField("Логин веб-панели", webLoginDraft, { webLoginDraft = it })
+                    HappField(
+                        "Пароль веб-панели", webPasswordDraft, { webPasswordDraft = it },
+                        password = true,
+                        onGeneratePassword = { webPasswordDraft = generate16CharPassword() },
+                    )
+                    V2SwitchSetting("Секретный путь панели", savedSettings.secretPathEnabled, { enabled ->
+                        scope.launch { settingsStore.saveDeploySecretPath(enabled) }
+                    })
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val draft = serverDraft().copy(
+                        mainPassword = mainPasswordInput,
+                        webLogin = webLoginDraft,
+                        webPassword = webPasswordDraft,
+                    )
+                    scope.launch {
+                        settingsStore.saveDeployProfileDraft(draft)
+                        mainPassDraft = mainPasswordInput
+                        panelLoginDraft = webLoginDraft
+                        panelPasswordDraft = webPasswordDraft
+                        showSecretsDialog = false
+                    }
+                }) { Text("Сохранить") }
+            },
+        )
     }
 
     if (showSshKeysDialog) {
@@ -2047,3 +2005,11 @@ private fun V2DeployActionMenuItem(
     }
 }
 
+@Composable
+private fun DeployFormToggle(title: String, checked: Boolean, onChange: (Boolean) -> Unit, enabled: Boolean) {
+    Row(Modifier.fillMaxWidth().heightIn(min = LocalV2AdaptiveMetrics.current.rowHeight)
+        .clickable(enabled = enabled) { onChange(!checked) }, verticalAlignment = Alignment.CenterVertically) {
+        Text(title, Modifier.weight(1f), fontSize = V2TextSizes.Body)
+        com.csqtt.client.ui.v2.components.V2Switch(checked, onChange, enabled = enabled)
+    }
+}

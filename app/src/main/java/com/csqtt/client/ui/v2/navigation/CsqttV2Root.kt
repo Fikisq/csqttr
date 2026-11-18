@@ -49,7 +49,7 @@ import com.csqtt.client.updateIntervalHoursToMillis
 import com.csqtt.client.ui.v2.components.V2BottomBar
 import com.csqtt.client.ui.v2.components.V2Tab
 import com.csqtt.client.ui.v2.design.CsqttV2Theme
-import com.csqtt.client.ui.v2.design.V2Sizes
+import com.csqtt.client.ui.v2.design.V2DarkPalette
 import com.csqtt.client.ui.v2.design.V2Theme
 import com.csqtt.client.ui.v2.design.V2Transitions
 import com.csqtt.client.ui.v2.dialogs.V2AppUpdateDialog
@@ -58,6 +58,7 @@ import com.csqtt.client.ui.v2.dialogs.V2ResourceSheet
 import com.csqtt.client.ui.v2.dialogs.V2VersionSheet
 import com.csqtt.client.ui.v2.screens.connection.V2ConnectionScreen
 import com.csqtt.client.ui.v2.screens.deploy.V2DeployScreen
+import com.csqtt.client.ui.legacy.DeployCheckState
 import com.csqtt.client.ui.v2.screens.logs.V2LogsScreen
 import com.csqtt.client.ui.v2.screens.routing.V2RoutingScreen
 import com.csqtt.client.ui.v2.screens.settings.V2AboutScreen
@@ -77,8 +78,9 @@ fun CsqttV2Root(
     settingsStore: SettingsStore,
     onVkAuthRequested: () -> Unit = {},
     modifier: Modifier = Modifier,
+    historicalPalette: Boolean = false,
+    themeMode: String,
 ) {
-    val themeMode by settingsStore.themeMode.collectAsStateWithLifecycle(initialValue = CsqttConstants.Theme.MODE_SYSTEM)
     val isSystemDark = isSystemInDarkTheme()
     val isDark = when (themeMode) {
         CsqttConstants.Theme.MODE_LIGHT -> false
@@ -87,21 +89,27 @@ fun CsqttV2Root(
     }
     CsqttV2Theme(
         darkTheme = isDark,
-        themePalette = "nordic_slate",
+        themePalette = if (historicalPalette) V2DarkPalette.HISTORICAL else V2DarkPalette.ORIGINAL,
     ) {
         val colors = V2Theme.colors
         val context = LocalContext.current.applicationContext
         val scope = rememberCoroutineScope()
-        val ownerMode by settingsStore.uiOwnerMode.collectAsStateWithLifecycle(initialValue = false)
+        val storedOwnerMode by settingsStore.uiOwnerMode.collectAsStateWithLifecycle<Boolean?>(initialValue = null)
         val deployStore = remember(context) { SettingsStore(context, deployScope = true) }
         // Keep this store's own snapshot ready, without reviving a saved form from another VPS.
         val deploySettings by deployStore.deploySettingsSnapshot.collectAsStateWithLifecycle(DeploySettingsSnapshot())
-        val participantShowLogs by settingsStore.participantShowLogs.collectAsStateWithLifecycle(false)
-        val tabs = remember(ownerMode, participantShowLogs) {
+        val deployCheckState = remember(deploySettings.profile, deploySettings.ip) { DeployCheckState() }
+        val tunnelProfile by settingsStore.tunnelScreenSnapshot.collectAsStateWithLifecycle(initialValue = null)
+        val occupiedProfiles by settingsStore.occupiedProfiles.collectAsStateWithLifecycle(emptySet())
+        val profileNames by settingsStore.profileNames.collectAsStateWithLifecycle(emptyMap())
+        val deployServers by settingsStore.deployServers.collectAsStateWithLifecycle(emptyList())
+        val routingSettings by settingsStore.routingScreenSnapshot.collectAsStateWithLifecycle(initialValue = null)
+        val storedShowLogs by settingsStore.participantShowLogs.collectAsStateWithLifecycle<Boolean?>(initialValue = null)
+        val tabs = remember(storedOwnerMode, storedShowLogs) {
             V2Tab.entries.filter { tab ->
                 when (tab) {
-                    V2Tab.Deploy -> ownerMode
-                    V2Tab.Logs -> ownerMode || participantShowLogs
+                    V2Tab.Deploy -> storedOwnerMode == true
+                    V2Tab.Logs -> storedShowLogs ?: SettingsStore.DEFAULT_PARTICIPANT_SHOW_LOGS
                     else -> true
                 }
             }
@@ -120,8 +128,13 @@ fun CsqttV2Root(
             tabs.firstOrNull { it.name == selectedTabName } ?: tabs.first()
         }
 
+        LaunchedEffect(storedOwnerMode, storedShowLogs, tabs) {
+            // Wait for the stored role and log visibility before invalidating a restored tab.
+            if (storedOwnerMode != null && storedShowLogs != null && tabs.none { it.name == selectedTabName }) {
+                selectedTabName = tabs.first().name
+            }
+        }
         LaunchedEffect(selectedTab) {
-            selectedTabName = selectedTab.name
             if (selectedTab == V2Tab.Logs) TunnelManager.clearUnreadErrors()
         }
 
@@ -161,6 +174,11 @@ fun CsqttV2Root(
                 delay(waitMs)
                 if (isActive) runUpdateCheck("periodic")
             }
+        }
+
+        if (storedOwnerMode == null || storedShowLogs == null) {
+            Box(modifier.fillMaxSize().background(colors.background))
+            return@CsqttV2Theme
         }
 
         if (showVersionSheet) {
@@ -245,6 +263,7 @@ fun CsqttV2Root(
                     OVERLAY_SETTINGS -> HappSettingsScreen(
                         settingsStore = settingsStore,
                         version = version,
+                        theme = themeMode,
                         onBack = { overlay = null },
                         onAbout = { overlay = OVERLAY_ABOUT },
                         onOpenResourceMonitor = { showResourceSheet = true },
@@ -257,7 +276,8 @@ fun CsqttV2Root(
                     )
 
                     else -> Column(modifier = Modifier.fillMaxSize()) {
-                        Box(modifier = Modifier.weight(1f).imePadding()) {
+                        val formHandlesIme = selectedTab == V2Tab.Tunnel || selectedTab == V2Tab.Deploy
+                        Box(modifier = Modifier.weight(1f).then(if (formHandlesIme) Modifier else Modifier.imePadding())) {
                             key(selectedTab) {
                                 val tab = selectedTab
                                 tabStateHolder.SaveableStateProvider(key = tab.name) {
@@ -269,14 +289,21 @@ fun CsqttV2Root(
                                             onVersionClick = { showVersionSheet = true },
                                             onOpenResourceMonitor = { showResourceSheet = true },
                                             profilePickerRequest = profilePickerRequest,
+                                            historicalPalette = historicalPalette,
+                                            occupiedProfiles = occupiedProfiles,
+                                            profileNames = profileNames,
+                                            deployServers = deployServers,
                                             onInvalidConfiguration = {
                                                 selectedTabName = V2Tab.Tunnel.name
                                             },
                                         )
 
-                                        V2Tab.Tunnel -> HappTunnelScreen(settingsStore, version, { overlay = OVERLAY_SETTINGS }, onVkAuthRequested)
+                                        V2Tab.Tunnel -> tunnelProfile?.let { snapshot ->
+                                            HappTunnelScreen(settingsStore, snapshot, version, { overlay = OVERLAY_SETTINGS }, onVkAuthRequested)
+                                        }
 
                                         V2Tab.Logs -> V2LogsScreen(
+                                            settingsStore = settingsStore,
                                             version = version,
                                             onSettings = { overlay = OVERLAY_SETTINGS },
                                             onVersionClick = { showVersionSheet = true },
@@ -285,17 +312,21 @@ fun CsqttV2Root(
                                         V2Tab.Deploy -> V2DeployScreen(
                                             settingsStore = deployStore,
                                             savedSettings = deploySettings,
+                                            checkState = deployCheckState,
                                             version = version,
                                             onSettings = { overlay = OVERLAY_SETTINGS },
                                             onVersionClick = { showVersionSheet = true },
                                         )
 
-                                        V2Tab.Routing -> V2RoutingScreen(
-                                            settingsStore = settingsStore,
-                                            version = version,
-                                            onSettings = { overlay = OVERLAY_SETTINGS },
-                                            onVersionClick = { showVersionSheet = true },
-                                        )
+                                        V2Tab.Routing -> routingSettings?.let { snapshot ->
+                                            V2RoutingScreen(
+                                                settingsStore = settingsStore,
+                                                snapshot = snapshot,
+                                                version = version,
+                                                onSettings = { overlay = OVERLAY_SETTINGS },
+                                                onVersionClick = { showVersionSheet = true },
+                                            )
+                                        }
                                     }
                                 }
                             }
@@ -307,7 +338,7 @@ fun CsqttV2Root(
                             },
                             tabs = tabs,
                             modifier = Modifier.padding(
-                                horizontal = V2Sizes.ScreenPadding,
+                                horizontal = 8.dp,
                                 vertical = 8.dp,
                             ),
                         )

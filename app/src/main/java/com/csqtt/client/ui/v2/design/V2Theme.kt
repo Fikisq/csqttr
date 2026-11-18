@@ -14,6 +14,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalView
+import com.csqtt.client.BrandDarkColorScheme
+import com.csqtt.client.BrandLightColorScheme
 import androidx.core.view.WindowCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -26,7 +28,30 @@ private fun Context.findActivity(): Activity? = when (this) {
 }
 
 private fun v2ColorScheme(colors: V2Colors, dark: Boolean) =
-    if (dark) {
+    if (colors == V2CsqttrLightColors) {
+        BrandLightColorScheme.copy(
+            background = colors.background,
+            surface = colors.surface,
+            surfaceVariant = colors.surfaceElevated,
+            surfaceBright = colors.surface,
+            surfaceDim = colors.surfaceElevated,
+            surfaceContainerLowest = colors.surface,
+            surfaceContainerLow = colors.background,
+            surfaceContainer = colors.field,
+            surfaceContainerHigh = colors.surfaceElevated,
+            surfaceContainerHighest = colors.surfaceElevated,
+            outlineVariant = colors.outline,
+            error = colors.error,
+            onError = colors.onDanger,
+            surfaceTint = Color.Transparent,
+        )
+    } else if (colors == V2ClassicOriginalColors || colors == V2ClassicLightColors) {
+        (if (dark) BrandDarkColorScheme else BrandLightColorScheme).copy(
+            error = colors.error,
+            onError = colors.onDanger,
+            surfaceTint = Color.Transparent,
+        )
+    } else if (dark) {
         darkColorScheme(
             primary = colors.accent,
             onPrimary = colors.onAccent,
@@ -86,17 +111,22 @@ private fun v2ColorScheme(colors: V2Colors, dark: Boolean) =
 @Composable
 fun CsqttV2Theme(
     darkTheme: Boolean = true,
-    themePalette: String? = null,
+    themePalette: String? = V2DarkPalette.ORIGINAL,
     content: @Composable () -> Unit,
 ) {
-    val colors = if (darkTheme) v2DarkColorsForPalette(themePalette) else V2LightColors
-    val colorScheme = remember(darkTheme) { v2ColorScheme(colors, darkTheme) }
+    val colors = when {
+        darkTheme -> v2DarkColorsForPalette(themePalette)
+        themePalette == V2DarkPalette.ORIGINAL -> V2CsqttrLightColors
+        themePalette == V2DarkPalette.HISTORICAL -> V2HistoricalLightColors
+        else -> V2LightColors
+    }
+    val colorScheme = remember(darkTheme, colors) { v2ColorScheme(colors, darkTheme) }
     val view = LocalView.current
     val activity = view.context.findActivity()
     val lifecycleOwner = LocalLifecycleOwner.current
 
     if (!view.isInEditMode && activity != null) {
-        DisposableEffect(lifecycleOwner, activity, darkTheme) {
+        DisposableEffect(lifecycleOwner, activity, darkTheme, colors) {
             val window = activity.window
             val applyBars = {
                 @Suppress("DEPRECATION")

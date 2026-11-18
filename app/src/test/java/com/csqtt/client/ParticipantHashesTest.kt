@@ -9,18 +9,24 @@ class ParticipantHashesTest {
     private val c = "c".repeat(20)
 
     @Test
-    fun `the owner's hashes come first, then the participant's own`() {
-        assertEquals("$a,$b,$c", participantHashes(listOf(a, b), emptySet(), c))
+    fun selectedGroupIsTheOnlySource() {
+        assertEquals("$a,$b", participantHashes(listOf(a, b), ManualHashGroup.Owner, c))
+        assertEquals(c, participantHashes(listOf(a, b), ManualHashGroup.Own, c))
+        assertEquals("", participantHashes(listOf(a, b), ManualHashGroup.Own, ""))
     }
 
     @Test
-    fun `a removed owner hash is left out, and a replacement takes the participant's place`() {
-        assertEquals("$b,$c", participantHashes(listOf(a, b), setOf(a), c))
+    fun defaultUsesOwnerOnlyWhenOwnerValuesExist() {
+        assertEquals(ManualHashGroup.Owner, selectManualHashGroup(listOf(a), null))
+        assertEquals(ManualHashGroup.Own, selectManualHashGroup(emptyList(), ManualHashGroup.Owner))
     }
 
     @Test
-    fun `everything removed leaves only the participant's own, duplicates once`() {
-        assertEquals(c, participantHashes(listOf(a), setOf(a), "$c, $c"))
-        assertEquals(a, participantHashes(listOf(a), emptySet(), a))
+    fun explicitSelectionWinsAndFullyRemovedOwnerMigratesToOwn() {
+        assertEquals(ManualHashGroup.Own, selectManualHashGroup(listOf(a, b), ManualHashGroup.Own))
+        assertEquals(ManualHashGroup.Owner, selectManualHashGroup(listOf(a), ManualHashGroup.Owner, setOf(a)))
+        assertEquals(ManualHashGroup.Own, selectManualHashGroup(listOf(a, b), null, setOf(a, b)))
+        assertEquals(ManualHashGroup.Owner, selectManualHashGroup(listOf(a, b), null, setOf(a)))
     }
+
 }

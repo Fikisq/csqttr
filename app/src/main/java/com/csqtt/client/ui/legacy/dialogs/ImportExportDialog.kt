@@ -40,6 +40,7 @@ import com.csqtt.client.ui.legacy.appSectionCardColor
 import com.csqtt.client.ui.legacy.components.CsqttSegmentedControl
 import com.csqtt.client.ui.legacy.design.CsqttShapes
 import com.csqtt.client.ui.legacy.design.CsqttSizes
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import java.io.File
 import java.text.SimpleDateFormat
@@ -53,7 +54,7 @@ private enum class ImportExportTab {
 @Composable
 fun ImportExportDialog(
     settingsStore: SettingsStore,
-    onDismissRequest: () -> Unit
+    onDismissRequest: () -> Unit,
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -73,7 +74,7 @@ fun ImportExportDialog(
         if (jsonText.isBlank()) {
             Toast.makeText(context, "Конфигурация пуста", Toast.LENGTH_SHORT).show()
         } else {
-            scope.launch {
+            scope.launch(Dispatchers.Main.immediate) {
                 isProcessing = true
                 try {
                     val ok = settingsStore.importConfigJson(
@@ -201,7 +202,7 @@ fun ImportExportDialog(
                     ) {
                         Button(
                             onClick = {
-                                scope.launch {
+                                scope.launch(Dispatchers.Main.immediate) {
                                     isProcessing = true
                                     try {
                                         val json = settingsStore.exportConfigJson(
@@ -244,7 +245,7 @@ fun ImportExportDialog(
 
                         OutlinedButton(
                             onClick = {
-                                scope.launch {
+                                scope.launch(Dispatchers.Main.immediate) {
                                     isProcessing = true
                                     try {
                                         val json = settingsStore.exportConfigJson(

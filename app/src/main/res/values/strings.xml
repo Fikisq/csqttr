@@ -17,6 +17,9 @@
     <string name="action_copy">Копировать</string>
     <string name="action_close">Закрыть</string>
     <string name="quick_settings">Быстрые настройки</string>
+    <string name="design_classic_csqtt_250">CSQTT 2.5.0</string>
+    <string name="design_csqttr_253">CSQTTR 2.5.3</string>
+    <string name="design_historical">Старый</string>
 
     <string name="logs_enabled">Активное логирование</string>
     <string name="logs_empty_title">Событий пока нет</string>

@@ -17,10 +17,15 @@ internal object ConnectionStartPolicy {
         autoHashMode: Boolean,
         storedTokenPresent: Boolean,
         manualHashCount: Int,
+        manualLinkGroup: ManualHashGroup? = null,
     ): Boolean = when {
-        linkMode -> linkHashCount > 0 || linkTokenPresent || manualHashCount > 0 ||
-            (autoHashMode && storedTokenPresent)
+        linkMode && linkTokenPresent -> true
         autoHashMode -> storedTokenPresent
+        linkMode && manualLinkGroup != null -> when (manualLinkGroup) {
+            ManualHashGroup.Owner -> linkHashCount > 0
+            ManualHashGroup.Own -> manualHashCount > 0
+        }
+        linkMode -> linkHashCount > 0 || manualHashCount > 0
         else -> manualHashCount > 0
     }
 

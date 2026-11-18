@@ -58,7 +58,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -83,6 +85,7 @@ import com.csqtt.client.ui.v2.components.V2CircleIconButton
 import com.csqtt.client.ui.v2.components.V2PillButton
 import com.csqtt.client.ui.v2.components.V2PillStyle
 import com.csqtt.client.ui.v2.components.V2SwitchSetting
+import com.csqtt.client.ui.v2.components.V2Switch
 import com.csqtt.client.ui.v2.components.V2TextField
 import com.csqtt.client.ui.v2.design.V2Shapes
 import com.csqtt.client.ui.v2.design.V2Sizes
@@ -98,11 +101,15 @@ internal fun V2AppsRoutingDialog(
     isWhitelist: Boolean,
     blacklist: Set<String>,
     whitelist: Set<String>,
+    showSystemApps: Boolean,
+    onShowSystemAppsChange: (Boolean) -> Unit,
     onClose: (black: Set<String>, white: Set<String>, isWhitelist: Boolean) -> Unit,
 ) {
-    val colors = V2Theme.colors
+    val colors = routingColors()
     val focusManager = LocalFocusManager.current
     val listState = rememberLazyListState()
+    val context = LocalContext.current
+    val clipboard = LocalClipboardManager.current
 
     var allApps by rememberSaveable { mutableStateOf(!isWhitelist && blacklist.isEmpty()) }
     var modeIsWhitelist by rememberSaveable { mutableStateOf(isWhitelist) }
@@ -112,20 +119,14 @@ internal fun V2AppsRoutingDialog(
 
     val activeSelection = if (modeIsWhitelist) whiteSelection else blackSelection
 
-    val filteredApps = remember(appsList, searchQuery, activeSelection) {
-        val base = if (searchQuery.isBlank()) {
-            appsList
-        } else {
-            appsList.filter {
-                it.name.contains(searchQuery, ignoreCase = true) ||
-                    it.packageName.contains(searchQuery, ignoreCase = true)
-            }
-        }
-        base.sortedWith(
-            compareByDescending<AppItem> { it.packageName in activeSelection }
-                .thenBy { it.isSystem }
-                .thenBy { it.name.lowercase() },
-        )
+    val filteredApps = remember(appsList, searchQuery, activeSelection, showSystemApps) {
+        val visible = appsList.filter {
+            (showSystemApps || !it.isSystem || it.packageName in activeSelection) &&
+                (searchQuery.isBlank() || it.name.contains(searchQuery, ignoreCase = true) ||
+                    it.packageName.contains(searchQuery, ignoreCase = true))
+        }.sortedWith(compareBy<AppItem> { it.name.lowercase() }.thenBy { it.packageName })
+        val (selected, unselected) = visible.partition { it.packageName in activeSelection }
+        selected + unselected
     }
 
     val scope = rememberCoroutineScope()
@@ -260,6 +261,70 @@ internal fun V2AppsRoutingDialog(
             )
 
             Spacer(modifier = Modifier.height(V2Spacing.Xs))
+
+            if (!allApps) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(V2Spacing.Sm)) {
+                    V2PillButton(
+                        text = "Готовый список", modifier = Modifier.weight(1f),
+                        style = V2PillStyle.Outline, height = 40.dp, horizontalPadding = 4.dp,
+                        enabled = !isAppsLoading,
+                        onClick = {
+                            val preset = V2AppPresets.merge(activeSelection, appsList.map { it.packageName }.toSet(), modeIsWhitelist)
+                            if (modeIsWhitelist) whiteSelection = preset else blackSelection = preset
+                            listState.requestScrollToItem(0)
+                        },
+                    )
+                    V2PillButton(
+                        text = "Очистить список", modifier = Modifier.weight(1f),
+                        style = V2PillStyle.Outline, height = 40.dp, horizontalPadding = 4.dp,
+                        enabled = !isAppsLoading,
+                        onClick = {
+                            if (modeIsWhitelist) whiteSelection = emptySet() else blackSelection = emptySet()
+                            listState.requestScrollToItem(0)
+                        },
+                    )
+                }
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(V2Spacing.Sm)) {
+                    V2PillButton(
+                        text = "Копировать список",
+                        modifier = Modifier.weight(1f),
+                        style = V2PillStyle.Outline,
+                        height = 40.dp,
+                        horizontalPadding = 4.dp,
+                        enabled = activeSelection.isNotEmpty(),
+                        onClick = {
+                            clipboard.setText(AnnotatedString(activeSelection.sorted().joinToString("\n")))
+                            context.showRaisedToast("Список скопирован", Toast.LENGTH_SHORT)
+                        },
+                    )
+                    V2PillButton(
+                        text = "Вставить список",
+                        modifier = Modifier.weight(1f),
+                        style = V2PillStyle.Outline,
+                        height = 40.dp,
+                        horizontalPadding = 4.dp,
+                        onClick = {
+                            val imported = clipboard.getText()?.text.orEmpty()
+                                .split(Regex("[,;\\s]+"))
+                                .filter(::isValidPackage)
+                                .toSet()
+                            if (imported.isEmpty()) {
+                                context.showRaisedToast("В буфере нет имён пакетов", Toast.LENGTH_SHORT)
+                            } else {
+                                if (modeIsWhitelist) whiteSelection += imported else blackSelection += imported
+                                listState.requestScrollToItem(0)
+                            }
+                        },
+                    )
+                }
+                Row(Modifier.fillMaxWidth().heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text("Показывать системные приложения", Modifier.weight(1f), color = colors.textSecondary)
+                    V2Switch(showSystemApps, {
+                        listState.requestScrollToItem(0)
+                        onShowSystemAppsChange(it)
+                    })
+                }
+            }
 
             Text(
                 text = if (modeIsWhitelist) {
@@ -439,7 +504,7 @@ internal fun V2DomainsRoutingDialog(
                 horizontalArrangement = Arrangement.spacedBy(V2Spacing.Sm),
             ) {
                 V2PillButton(
-                    text = "Чёрный список",
+                    text = "Без VPN",
                     onClick = { modeIsWhitelist = false },
                     modifier = Modifier.weight(1f),
                     style = if (!modeIsWhitelist) V2PillStyle.Accent else V2PillStyle.Outline,
@@ -447,7 +512,7 @@ internal fun V2DomainsRoutingDialog(
                     horizontalPadding = 8.dp,
                 )
                 V2PillButton(
-                    text = "Белый список",
+                    text = "С VPN",
                     onClick = { modeIsWhitelist = true },
                     modifier = Modifier.weight(1f),
                     style = if (modeIsWhitelist) V2PillStyle.Accent else V2PillStyle.Outline,
@@ -632,7 +697,7 @@ internal fun V2IpsRoutingDialog(
                 horizontalArrangement = Arrangement.spacedBy(V2Spacing.Sm),
             ) {
                 V2PillButton(
-                    text = "Чёрный список",
+                    text = "Без VPN",
                     onClick = { modeIsWhitelist = false },
                     modifier = Modifier.weight(1f),
                     style = if (!modeIsWhitelist) V2PillStyle.Accent else V2PillStyle.Outline,
@@ -640,7 +705,7 @@ internal fun V2IpsRoutingDialog(
                     horizontalPadding = 8.dp,
                 )
                 V2PillButton(
-                    text = "Белый список",
+                    text = "С VPN",
                     onClick = { modeIsWhitelist = true },
                     modifier = Modifier.weight(1f),
                     style = if (modeIsWhitelist) V2PillStyle.Accent else V2PillStyle.Outline,
@@ -811,7 +876,7 @@ internal fun V2RulesTransferDialog(
         context.showRaisedToast("Правила экспортированы в буфер обмена", Toast.LENGTH_SHORT)
     }
 
-    fun importRules() {
+    suspend fun importRules() {
         if (!transferApps && !transferDomains && !transferIps) {
             context.showRaisedToast("Выберите хотя бы один пункт", Toast.LENGTH_SHORT)
             return
@@ -847,12 +912,10 @@ internal fun V2RulesTransferDialog(
                         if (isValidPackage(pkg)) newWhite.add(pkg)
                     }
                 }
-                scope.launch {
-                    settingsStore.saveIsWhitelist(isWhite)
-                    settingsStore.saveExcludedApps(newBlack.sorted().joinToString(","))
-                    settingsStore.saveWhitelistApps(newWhite.sorted().joinToString(","))
-                    TunnelManager.reloadVpn()
-                }
+                settingsStore.saveIsWhitelist(isWhite)
+                settingsStore.saveExcludedApps(newBlack.sorted().joinToString(","))
+                settingsStore.saveWhitelistApps(newWhite.sorted().joinToString(","))
+                TunnelManager.reloadVpn()
                 importedAny = true
             }
             if (transferDomains && rootJson.has("domains")) {
@@ -890,13 +953,11 @@ internal fun V2RulesTransferDialog(
                 }
                 val formattedBlack = impBlack.distinct().take(1024).joinToString(",")
                 val formattedWhite = impWhite.distinct().take(1024).joinToString(",")
-                scope.launch {
-                    settingsStore.saveDomainIsWhitelist(isWhite)
-                    settingsStore.saveTemplateDomainsEnabled(isTemplate)
-                    if (impBlack.isNotEmpty() || !isWhite) settingsStore.saveDirectDomainsBlack(formattedBlack)
-                    if (impWhite.isNotEmpty() || isWhite) settingsStore.saveDirectDomainsWhite(formattedWhite)
-                    TunnelManager.pushLocalRouting(context)
-                }
+                settingsStore.saveDomainIsWhitelist(isWhite)
+                settingsStore.saveTemplateDomainsEnabled(isTemplate)
+                if (impBlack.isNotEmpty() || !isWhite) settingsStore.saveDirectDomainsBlack(formattedBlack)
+                if (impWhite.isNotEmpty() || isWhite) settingsStore.saveDirectDomainsWhite(formattedWhite)
+                TunnelManager.pushLocalRouting(context)
                 importedAny = true
             }
             if (transferIps && rootJson.has("ips")) {
@@ -933,13 +994,11 @@ internal fun V2RulesTransferDialog(
                 }
                 val formattedBlack = impBlack.distinct().take(1024).joinToString(",")
                 val formattedWhite = impWhite.distinct().take(1024).joinToString(",")
-                scope.launch {
-                    settingsStore.saveIpIsWhitelist(isWhite)
-                    settingsStore.saveIpRoutingEnabled(true)
-                    if (impBlack.isNotEmpty() || !isWhite) settingsStore.saveDirectIpsBlack(formattedBlack)
-                    if (impWhite.isNotEmpty() || isWhite) settingsStore.saveDirectIpsWhite(formattedWhite)
-                    TunnelManager.pushLocalRouting(context)
-                }
+                settingsStore.saveIpIsWhitelist(isWhite)
+                settingsStore.saveIpRoutingEnabled(true)
+                if (impBlack.isNotEmpty() || !isWhite) settingsStore.saveDirectIpsBlack(formattedBlack)
+                if (impWhite.isNotEmpty() || isWhite) settingsStore.saveDirectIpsWhite(formattedWhite)
+                TunnelManager.pushLocalRouting(context)
                 importedAny = true
             }
         } else {
@@ -950,15 +1009,13 @@ internal fun V2RulesTransferDialog(
                     if (impBlack.isNotEmpty() || impWhite.isNotEmpty()) {
                         val mergedBlack = blacklistSelection + impBlack
                         val mergedWhite = whitelistSelection + impWhite
-                        scope.launch {
-                            if (impBlack.isNotEmpty()) {
-                                settingsStore.saveExcludedApps(mergedBlack.sorted().joinToString(","))
-                            }
-                            if (impWhite.isNotEmpty()) {
-                                settingsStore.saveWhitelistApps(mergedWhite.sorted().joinToString(","))
-                            }
-                            TunnelManager.reloadVpn()
+                        if (impBlack.isNotEmpty()) {
+                            settingsStore.saveExcludedApps(mergedBlack.sorted().joinToString(","))
                         }
+                        if (impWhite.isNotEmpty()) {
+                            settingsStore.saveWhitelistApps(mergedWhite.sorted().joinToString(","))
+                        }
+                        TunnelManager.reloadVpn()
                         importedAny = true
                     }
                 }
@@ -972,14 +1029,12 @@ internal fun V2RulesTransferDialog(
                         parseDomainsFromText(directDomainsBlackStr)
                     }
                     val combined = (currentList + importedDomains).distinct().take(1024).joinToString(",")
-                    scope.launch {
-                        if (domainIsWhitelist) {
-                            settingsStore.saveDirectDomainsWhite(combined)
-                        } else {
-                            settingsStore.saveDirectDomainsBlack(combined)
-                        }
-                        TunnelManager.pushLocalRouting(context)
+                    if (domainIsWhitelist) {
+                        settingsStore.saveDirectDomainsWhite(combined)
+                    } else {
+                        settingsStore.saveDirectDomainsBlack(combined)
                     }
+                    TunnelManager.pushLocalRouting(context)
                     importedAny = true
                 }
             }
@@ -992,22 +1047,23 @@ internal fun V2RulesTransferDialog(
                         parseIpsFromText(directIpsBlackStr)
                     }
                     val combined = (currentList + importedIps).distinct().take(1024).joinToString(",")
-                    scope.launch {
-                        settingsStore.saveIpRoutingEnabled(true)
-                        if (ipIsWhitelist) {
-                            settingsStore.saveDirectIpsWhite(combined)
-                        } else {
-                            settingsStore.saveDirectIpsBlack(combined)
-                        }
-                        TunnelManager.pushLocalRouting(context)
+                    settingsStore.saveIpRoutingEnabled(true)
+                    if (ipIsWhitelist) {
+                        settingsStore.saveDirectIpsWhite(combined)
+                    } else {
+                        settingsStore.saveDirectIpsBlack(combined)
                     }
+                    TunnelManager.pushLocalRouting(context)
                     importedAny = true
                 }
             }
         }
         if (importedAny) {
-            context.showRaisedToast("Правила успешно импортированы", Toast.LENGTH_SHORT)
-            animateClose()
+            withContext(Dispatchers.Main.immediate) {
+                context.showRaisedToast("Правила успешно импортированы", Toast.LENGTH_SHORT)
+            }
+            sheetState.hide()
+            onClose()
         } else {
             context.showRaisedToast("В буфере обмена нет подходящих данных", Toast.LENGTH_SHORT)
         }
@@ -1087,7 +1143,7 @@ internal fun V2RulesTransferDialog(
                 )
                 V2PillButton(
                     text = "Импорт",
-                    onClick = { importRules() },
+                    onClick = { scope.launch { importRules() } },
                     modifier = Modifier.weight(1f),
                     style = V2PillStyle.Contrast,
                 )

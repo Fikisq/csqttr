@@ -109,7 +109,7 @@ class TunnelService : Service() {
     @Volatile
     private var autoPauseOnWifiEnabled = false
     @Volatile
-    private var wifiNetworkListMode = WifiNetworkListMode.WHITELIST
+    private var wifiNetworkListMode = WifiNetworkListMode.ALL
     @Volatile
     private var wifiNetworkListSsids: Set<String> = emptySet()
     @Volatile
@@ -250,14 +250,7 @@ class TunnelService : Service() {
                             return@launch
                         }
 
-                        val domainWhite = store.domainIsWhitelist.first()
-                        val domainList = if (domainWhite) store.directDomainsWhite.first() else store.directDomainsBlack.first()
-                        val ipWhite = store.ipIsWhitelist.first()
-                        val ipList = if (ipWhite) store.directIpsWhite.first() else store.directIpsBlack.first()
-                        val hasDomains = if (domainWhite) domainList.isNotBlank() else (domainList.isNotBlank() || store.templateDomainsEnabled.first() || store.excludeRuZonesEnabled.first())
-                        val effectiveDomainEnabled = store.domainRoutingEnabled.first() && hasDomains
-                        val hasIps = ipList.isNotBlank()
-                        val effectiveIpEnabled = hasIps   // the list is the switch (TunVpnService)
+                        val routing = store.routingScreenSnapshot.first()
 
                         val params = TunnelParams(
                             peer = intent.getStringExtra("peer") ?: "",
@@ -279,6 +272,7 @@ class TunnelService : Service() {
                             turnTransport = intent.getStringExtra("turn_transport")
                                 ?.takeIf { it == CsqttConstants.Tunnel.TURN_TRANSPORT_TCP_TLS }
                                 ?: CsqttConstants.Tunnel.DEFAULT_TURN_TRANSPORT,
+                            goobyMode = GoobyMode.fromStored(intent.getStringExtra(GoobyMode.EXTRA)),
                             srtpMode = sanitizeSrtpMode(intent.getStringExtra("srtp_mode")),
                             customTurnIps = intent.getStringExtra("custom_turn_ips") ?: "",
                             generationId = genId,
@@ -286,14 +280,14 @@ class TunnelService : Service() {
                             allowHashRedistribution = resolvedHashes.allowWorkerRedistribution,
                             vkHashMode = resolvedHashes.mode,
                             vkAccessToken = resolvedHashes.accessToken,
-                            domainRoutingEnabled = effectiveDomainEnabled,
-                            domainIsWhitelist = domainWhite,
-                            excludeRuZones = if (domainWhite) false else store.excludeRuZonesEnabled.first(),
-                            templateDomains = if (domainWhite) false else store.templateDomainsEnabled.first(),
-                            directDomains = domainList,
-                            ipRoutingEnabled = effectiveIpEnabled,
-                            ipIsWhitelist = ipWhite,
-                            directIps = ipList,
+                            domainRoutingEnabled = routing.hasDomainRules,
+                            domainIsWhitelist = routing.domainIsWhitelist,
+                            excludeRuZones = routing.useRuZones,
+                            templateDomains = routing.useTemplate,
+                            directDomains = routing.activeDomains,
+                            ipRoutingEnabled = routing.activeIps.isNotBlank(),
+                            ipIsWhitelist = routing.ipIsWhitelist,
+                            directIps = routing.activeIps,
                         )
                         launch(Dispatchers.Main) {
                             if (isCurrentStart(requestGeneration)) startTunnel(params)
@@ -479,11 +473,7 @@ class TunnelService : Service() {
                         tokenFromLink = source.tokenFromLink,
                     )
                 }
-                val domainWhite = store.domainIsWhitelist.first()
-                val domainList = if (domainWhite) store.directDomainsWhite.first() else store.directDomainsBlack.first()
-                val ipWhite = store.ipIsWhitelist.first()
-                val ipList = if (ipWhite) store.directIpsWhite.first() else store.directIpsBlack.first()
-                val ipRouting = ipList.isNotBlank()   // the list is the switch (TunVpnService)
+                val routing = store.routingScreenSnapshot.first()
 
                 val params = TunnelParams(
                     peer = source.peer,
@@ -495,6 +485,7 @@ class TunnelService : Service() {
                     connectionPassword = source.password,
                     obfsMode = store.obfsMode.first(),
                     turnTransport = store.turnTransport.first(),
+                    goobyMode = store.goobyMode.first(),
                     srtpMode = sanitizeSrtpMode(store.srtpMode.first()),
                     customTurnIps = store.customTurnIps.first(),
                     vkAuthMode = vkAuthMode,
@@ -507,17 +498,14 @@ class TunnelService : Service() {
                     allowHashRedistribution = restoredHashes?.allowWorkerRedistribution == true,
                     vkHashMode = restoredHashes?.mode ?: CsqttConstants.VkAutoHash.MODE_MANUAL,
                     vkAccessToken = restoredHashes?.accessToken.orEmpty(),
-                    domainRoutingEnabled = store.domainRoutingEnabled.first() ||
-                        (!domainWhite && store.templateDomainsEnabled.first()) ||
-                        domainList.isNotBlank() ||
-                        (!domainWhite && store.excludeRuZonesEnabled.first()),
-                    domainIsWhitelist = domainWhite,
-                    excludeRuZones = if (domainWhite) false else store.excludeRuZonesEnabled.first(),
-                    templateDomains = if (domainWhite) false else store.templateDomainsEnabled.first(),
-                    directDomains = domainList,
-                    ipRoutingEnabled = ipRouting,
-                    ipIsWhitelist = ipWhite,
-                    directIps = ipList,
+                    domainRoutingEnabled = routing.hasDomainRules,
+                    domainIsWhitelist = routing.domainIsWhitelist,
+                    excludeRuZones = routing.useRuZones,
+                    templateDomains = routing.useTemplate,
+                    directDomains = routing.activeDomains,
+                    ipRoutingEnabled = routing.activeIps.isNotBlank(),
+                    ipIsWhitelist = routing.ipIsWhitelist,
+                    directIps = routing.activeIps,
                 )
                 if (
                     params.peer.isNotEmpty() &&
@@ -610,7 +598,7 @@ class TunnelService : Service() {
                 val store = SettingsStore(applicationContext)
                 val vkHashMode = store.vkHashMode.first()
                 val source = resolveConnectionSource(store) ?: return@launch
-                if (vkHashMode == CsqttConstants.VkAutoHash.MODE_MANUAL && !source.tokenFromLink) {
+                if ((source.hashesFromLink || vkHashMode == CsqttConstants.VkAutoHash.MODE_MANUAL) && !source.tokenFromLink) {
                     return@launch
                 }
                 val accountAutoJs = previous.vkAuthMode == CsqttConstants.VkAuth.MODE_AUTO_JS ||
@@ -1039,11 +1027,31 @@ class TunnelService : Service() {
     }
 
     private fun prepareForDeploy() {
+        val tunnelWasActive = TunnelManager.running.value || TunnelManager.starting.value || autoPauseRequested
+        startJob?.cancel()
+        startJob = null
+        startGeneration++
+        stopWifiAutoPauseWatch()
+        autoPauseRequested = false
+        TunnelManager.starting.value = false
         updateJob?.cancel()
         updateJob = null
+        networkSwapJob?.cancel()
+        networkSwapJob = null
+        vkRecoveryJob?.cancel()
+        vkRecoveryJob = null
         CaptchaWebViewManager.onTunnelStop()
-        TunnelManager.stop(notifyController = false)
+        TunnelManager.stop(finishVkCalls = true, notifyController = false)
         releaseWifiLock()
+        if (tunnelWasActive) {
+            serviceScope.launch {
+                autoPauseMutex.withLock {
+                    autoPausedForWifi = false
+                    TunnelManager.leaveWifiAutoPause()
+                    SettingsStore(applicationContext).saveTunnelWasRunning(false)
+                }
+            }
+        }
     }
 
     private fun releaseTunnelResources(finishVkCalls: Boolean = false) {
@@ -1079,28 +1087,8 @@ class TunnelService : Service() {
     private fun observeDomainRoutingSettings() {
         domainRoutingSettingsJob?.cancel()
         domainRoutingSettingsJob = serviceScope.launch {
-            val store = SettingsStore(applicationContext)
-            combine(
-                store.domainRoutingEnabled,
-                store.excludeRuZonesEnabled,
-                store.templateDomainsEnabled,
-                store.directDomains,
-            ) { domainEnabled, excludeRu, templateEnabled, domains ->
-                DomainRoutingUpdate(
-                    enabled = domainEnabled || templateEnabled || domains.isNotBlank() || excludeRu,
-                    excludeRuZones = excludeRu,
-                    templateDomains = templateEnabled,
-                    directDomains = domains,
-                )
-            }.distinctUntilChanged().collect { update ->
-                if (TunnelManager.running.value && !TunnelManager.serverRoutingActive.value) {
-                    TunnelManager.updateDomainRouting(
-                        enabled = update.enabled,
-                        excludeRuZones = update.excludeRuZones,
-                        templateDomains = update.templateDomains,
-                        directDomains = update.directDomains,
-                    )
-                }
+            SettingsStore(applicationContext).routingScreenSnapshot.collect { routing ->
+                if (TunnelManager.running.value) TunnelManager.applyLocalRouting(routing)
             }
         }
     }
@@ -1352,8 +1340,12 @@ class TunnelService : Service() {
         BatterySaver.setActive(save)
         if (save) {
             if (!DeployManager.isDeploying.value) releaseWakeLock()
-        } else if ((TunnelManager.running.value && !autoPausedForWifi) || DeployManager.isDeploying.value) {
-            acquireWakeLock()
+            releaseWifiLock()
+        } else {
+            if ((TunnelManager.running.value && !autoPausedForWifi) || DeployManager.isDeploying.value) {
+                acquireWakeLock()
+            }
+            if (TunnelManager.running.value) acquireWifiLock()
         }
         TunVpnService.instance?.onBatterySaverChanged(save)
         if (changed) TunnelManager.updateLog("battery_saver", if (save) "[BAT] ${BatterySaver.BADGE}" else "[BAT] Экономия батареи выключена", 2)
@@ -1381,7 +1373,9 @@ class TunnelService : Service() {
     }
 
     @Suppress("DEPRECATION")
+    @Synchronized
     private fun acquireWifiLock() {
+        if (BatterySaver.active.value || !autoPauseRequested || autoPausedForWifi || isStopping) return
         if (wifiLock?.isHeld == true) return
         val wm = applicationContext.getSystemService(WIFI_SERVICE) as WifiManager
 
@@ -1400,6 +1394,7 @@ class TunnelService : Service() {
         wakeLockExpiresAtElapsedMs = 0L
     }
 
+    @Synchronized
     private fun releaseWifiLock() {
         if (wifiLock?.isHeld == true) {
             wifiLock?.release()
@@ -1434,7 +1429,9 @@ class TunnelService : Service() {
                 // The traffic numbers in the notification are read only with the screen on: redrawing it with the
                 // screen off costs a notification post every few seconds for nothing. The next tick after the screen
                 // comes on brings it up to date.
-                if (screenInteractive()) updateNotification(currentNotificationText())
+                val notificationUpdateDue = lastNotificationText == null ||
+                    SystemClock.elapsedRealtime() - lastNotificationPostElapsedMs >= NOTIFICATION_MIN_REBUILD_INTERVAL_MS
+                if (notificationUpdateDue && screenInteractive()) updateNotification(currentNotificationText())
                 delay(2000)
             }
         }
@@ -1621,10 +1618,3 @@ class TunnelService : Service() {
 
     override fun onBind(intent: Intent?): IBinder? = null
 }
-
-private data class DomainRoutingUpdate(
-    val enabled: Boolean,
-    val excludeRuZones: Boolean,
-    val templateDomains: Boolean,
-    val directDomains: String,
-)

@@ -82,15 +82,17 @@ internal object ProfileTunnelProbe {
             val firstHash = hashes.split(Regex("[,\\s]+")).firstOrNull { it.isNotBlank() }.orEmpty()
             if (!jsMode && firstHash.isBlank()) return@coroutineScope ProfilePingResult.Failure("Нет VK-хешей")
             val uds = "csqtt_probe_${newTunnelSessionId()}"
+            val turnTransport = store.turnTransport.first()
             val command = mutableListOf(binary.absolutePath, "-peer", source.peer,
                 "-n", CsqttConstants.Tunnel.WORKERS_PER_GROUP.toString(), "-listen", "127.0.0.1:0", "-tun-uds", uds,
                 "-vk-hash-mode", if (jsMode) "auto_js" else "manual",
                 "-vk-auth-mode", if (jsMode) "auto_js" else if (authMode == "auto_js") "vkcalls" else authMode,
-                "-turn-transport", store.turnTransport.first(), "-srtp-mode", store.srtpMode.first(),
+                "-turn-transport", turnTransport, "-srtp-mode", store.srtpMode.first(),
                 "-obfs", CsqttConstants.Tunnel.DEFAULT_OBFS_MODE,
                 "-captcha-mode", store.captchaMode.first(), "-fingerprint", store.selectedFingerprint.first(),
                 "-client-ids", store.activeClientIds.first(), "-gen", (System.currentTimeMillis() / 1000).toString(),
                 "-salt", newTunnelSessionId())
+            command.addAll(store.goobyMode.first().arguments(turnTransport))
             if (firstHash.isNotBlank()) command.addAll(listOf("-vk", firstHash))
             store.customTurnIps.first().takeIf { it.isNotBlank() }?.let { command.addAll(listOf("-custom-turn-ips", it)) }
             val started = ProcessBuilder(command).directory(context.filesDir).redirectErrorStream(true).apply {

@@ -115,8 +115,10 @@ internal fun V2ProfilePickerMenu(
             )
             return
         }
-        scope.launch { settingsStore.saveActiveProfile(profile) }
-        onDismiss()
+        scope.launch {
+            settingsStore.saveActiveProfile(profile)
+            onDismiss()
+        }
     }
 
     fun refreshSubscription(url: String) {

@@ -44,7 +44,7 @@ internal fun ServerActionBar(
 ) {
     Column(
         modifier = modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
+        verticalArrangement = Arrangement.spacedBy(3.dp)
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),

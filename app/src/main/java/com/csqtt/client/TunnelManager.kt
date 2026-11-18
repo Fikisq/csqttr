@@ -9,7 +9,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.isActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
@@ -44,7 +43,11 @@ data class LogEntry(
     val priority: Int = 99, 
     val isError: Boolean = false,
     val level: LogLevel? = null,
-)
+    val sessionId: Long = 0L,
+) {
+    val listKey: String get() = "$sessionId:$key"
+    val exportMessage: String get() = if (sessionId == 0L) message else "[Подключение #$sessionId] $message"
+}
 
 private val LOG_STICKERS = Regex("[\\p{So}\\p{Sk}\\uFE0F\\u200D]")
 private val EMPTY_LOG_TAG = Regex("\\[\\s*]")
@@ -146,7 +149,7 @@ object TunnelManager {
     }
 
     private data class PendingLog(
-        val identity: ProcessIdentity?,
+        val sessionId: Long,
         val key: String,
         var message: String,
         val priority: Int,
@@ -156,12 +159,20 @@ object TunnelManager {
     )
 
     private const val LOG_UI_FLUSH_MS = 120L
+    private const val LOG_BACKGROUND_FLUSH_MS = 1_000L
     private const val MAX_LOG_ENTRIES = 100
     private const val MAX_PENDING_LOGS = 128
     private const val MAX_LOG_MESSAGE_LENGTH = 4_096
     private val pendingLogLock = Any()
     private val pendingLogs = LinkedHashMap<String, PendingLog>()
-    private val pendingLogFlushScheduled = AtomicBoolean(false)
+    private var pendingLogFlushJob: Job? = null
+    private var pendingLogFlushImmediate = false
+    private var uiForeground = false
+
+    fun setUiForeground(foreground: Boolean) = synchronized(pendingLogLock) {
+        uiForeground = foreground
+        if (foreground && pendingLogs.isNotEmpty()) scheduleLogFlushLocked(immediate = true)
+    }
 
     @Volatile
     private var wrapAuthTimeoutCount = 0
@@ -218,26 +229,24 @@ object TunnelManager {
         uptimeSeconds.value = 0L
         uptimeJob?.cancel()
         uptimeJob = scope.launch(Dispatchers.Default) {
-            while (isActive) {
+            publishObservedUptime(uptimeSeconds) {
                 val start = processStartedAtMs
-                val isProcessActive = running.value || process != null
-                if (start > 0L && isProcessActive) {
-                    uptimeSeconds.value = (SystemClock.elapsedRealtime() - start) / 1000L
-                } else if (!isProcessActive && !starting.value) {
-                    break
+                if (start > 0L && (running.value || process != null)) {
+                    (SystemClock.elapsedRealtime() - start) / 1000L
+                } else {
+                    uptimeSeconds.value
                 }
-                delay(1000L)
             }
         }
     }
 
-    private fun stopUptimeTimer() {
+    private fun stopUptimeTimer(clearProcessStart: Boolean = true) {
         uptimeJob?.cancel()
         uptimeJob = null
         val start = processStartedAtMs
         if (start > 0L) {
             uptimeSeconds.value = (SystemClock.elapsedRealtime() - start) / 1000L
-            processStartedAtMs = 0L
+            if (clearProcessStart) processStartedAtMs = 0L
         } else {
             uptimeSeconds.value = null
         }
@@ -899,44 +908,49 @@ object TunnelManager {
         if (!isLoggingEnabled && !TunnelLogPolicy.isAllowedWhenInactiveLogging(key, isError, level)) return
         val cleanMessage = maskOwnerHashes(withoutLogStickers(message), ownerHashes).take(MAX_LOG_MESSAGE_LENGTH)
         if (cleanMessage.isEmpty()) return
-        val pendingKey = "${identity?.generation ?: 0L}:$key:$priority:$isError:${level?.name.orEmpty()}"
+        val sessionId = identity?.generation ?: 0L
+        val pendingKey = "$sessionId:$key:$priority:$isError:${level?.name.orEmpty()}"
         synchronized(pendingLogLock) {
+            if (identity != null && !isCurrent(identity)) return
             val pending = pendingLogs[pendingKey]
             if (pending == null) {
                 if (pendingLogs.size >= MAX_PENDING_LOGS) {
                     pendingLogs.remove(pendingLogs.entries.first().key)
                 }
-                pendingLogs[pendingKey] = PendingLog(identity, key, cleanMessage, priority, isError, level, 1)
+                pendingLogs[pendingKey] = PendingLog(sessionId, key, cleanMessage, priority, isError, level, 1)
             } else {
                 pending.message = cleanMessage
                 pending.count += 1
             }
-            scheduleLogFlushLocked()
+            scheduleLogFlushLocked(immediate = isError || pendingLogs.size >= MAX_PENDING_LOGS)
         }
     }
 
-    private fun scheduleLogFlushLocked() {
-        if (!pendingLogFlushScheduled.compareAndSet(false, true)) return
-        scope.launch(Dispatchers.Main) {
-            delay(LOG_UI_FLUSH_MS)
-            flushPendingLogs()
+    private fun scheduleLogFlushLocked(immediate: Boolean) {
+        if (pendingLogFlushJob != null) {
+            if (!immediate || pendingLogFlushImmediate) return
+            pendingLogFlushJob?.cancel()
         }
-    }
-
-    private fun flushPendingLogs() {
-        val batch = synchronized(pendingLogLock) {
-            val values = pendingLogs.values.toList()
-            pendingLogs.clear()
-            pendingLogFlushScheduled.set(false)
-            values
+        pendingLogFlushImmediate = immediate
+        val waitMs = when {
+            immediate -> 0L
+            uiForeground -> LOG_UI_FLUSH_MS
+            else -> LOG_BACKGROUND_FLUSH_MS
         }
-        batch.forEach(::applyPendingLog)
+        pendingLogFlushJob = scope.launch(Dispatchers.Main) {
+            if (waitMs > 0L) delay(waitMs)
+            val batch = synchronized(pendingLogLock) {
+                if (pendingLogFlushJob !== coroutineContext[Job]) return@launch
+                pendingLogFlushJob = null
+                pendingLogFlushImmediate = false
+                pendingLogs.values.toList().also { pendingLogs.clear() }
+            }
+            batch.forEach(::applyPendingLog)
+        }
     }
 
     private fun applyPendingLog(pending: PendingLog) {
-        val identity = pending.identity
-        if (identity != null && !isCurrent(identity)) return
-        val index = logs.indexOfFirst { it.key == pending.key }
+        val index = logs.indexOfFirst { it.key == pending.key && it.sessionId == pending.sessionId }
         if (pending.isError && index == -1) {
             unreadErrorCount.value++
         }
@@ -959,6 +973,7 @@ object TunnelManager {
                         pending.priority,
                         pending.isError,
                         pending.level,
+                        pending.sessionId,
                     )
                 )
             }
@@ -971,6 +986,7 @@ object TunnelManager {
                     pending.priority,
                     pending.isError,
                     pending.level,
+                    pending.sessionId,
                 )
             )
         }
@@ -987,7 +1003,7 @@ object TunnelManager {
             lifecycleState.accepts(identity.ticket)
 
     private fun insertSorted(entry: LogEntry) {
-        val comparator = compareBy<LogEntry>({ it.priority }, { if (it.isError) 1 else 0 }, { it.key })
+        val comparator = compareBy<LogEntry>({ it.sessionId }, { it.priority }, { if (it.isError) 1 else 0 }, { it.key })
         var inserted = false
         for (i in logs.indices) {
             if (comparator.compare(entry, logs[i]) < 0) {
@@ -1125,6 +1141,7 @@ object TunnelManager {
         cmd.add(params.obfsMode)
         cmd.add("-turn-transport")
         cmd.add(params.turnTransport)
+        cmd.addAll(params.goobyMode.arguments(params.turnTransport))
         cmd.add("-srtp-mode")
         cmd.add(params.srtpMode)
         if (params.customTurnIps.isNotBlank()) {
@@ -1350,6 +1367,11 @@ object TunnelManager {
                     }
 
                     if (TunnelLogPolicy.isInternalRecovery(lineTrim)) {
+                        return@forEachLine
+                    }
+
+                    if (lineTrim.startsWith("[GOOBY]")) {
+                        updateProcessLog(identity, "gooby", lineTrim, 20, false, LogLevel.LOG)
                         return@forEachLine
                     }
 
@@ -1593,6 +1615,8 @@ object TunnelManager {
                         }
                         val exitCode = initialExitCode
                             ?: runCatching { targetProcess.exitValue() }.getOrNull()
+                        // The service watchdog still needs the start time after an unexpected exit.
+                        stopUptimeTimer(clearProcessStart = false)
                         val shouldRestart = lifecycleWantsRestart
                         if (lifecycleWantsRestart) {
                             VkAutoCallsManager.finishActiveCalls()
@@ -1702,6 +1726,7 @@ object TunnelManager {
             process = null
             processIdentity = null
             nativeProcessPid = null
+            if (uptimeJob != null) stopUptimeTimer()
             activeWorkers.value = 0
             return
         }
@@ -1993,28 +2018,7 @@ object TunnelManager {
                 }
             } else if (previousRule != null) {
                 activeScope.launch {
-                    val settingsStore = SettingsStore(ctx)
-                    val domainWhite = settingsStore.domainIsWhitelist.first()
-                    val domainEnabled = settingsStore.domainRoutingEnabled.first()
-                    val excludeRu = settingsStore.excludeRuZonesEnabled.first()
-                    val templateEnabled = settingsStore.templateDomainsEnabled.first()
-                    val domains = if (domainWhite) settingsStore.directDomainsWhite.first() else settingsStore.directDomainsBlack.first()
-                    val ipWhite = settingsStore.ipIsWhitelist.first()
-                    val ips = if (ipWhite) settingsStore.directIpsWhite.first() else settingsStore.directIpsBlack.first()
-                    val hasDomains = if (domainWhite) domains.isNotBlank() else (domains.isNotBlank() || templateEnabled || excludeRu)
-                    val effectiveDomainEnabled = domainEnabled && hasDomains
-                    val hasIps = ips.isNotBlank()
-                    val effectiveIpEnabled = hasIps   // the list is the switch (TunVpnService)
-                    updateDomainRouting(
-                        enabled = effectiveDomainEnabled,
-                        excludeRuZones = if (domainWhite) false else excludeRu,
-                        templateDomains = if (domainWhite) false else templateEnabled,
-                        directDomains = domains,
-                        isWhitelist = domainWhite,
-                        ipRoutingEnabled = effectiveIpEnabled,
-                        ipIsWhitelist = ipWhite,
-                        directIps = ips,
-                    )
+                    applyLocalRouting(SettingsStore(ctx).routingScreenSnapshot.first())
                     if (vpnReady.value) {
                         val reloadIntent = Intent(ctx, TunVpnService::class.java).apply {
                             action = "RELOAD_ROUTING"
@@ -2044,32 +2048,23 @@ object TunnelManager {
         writeProcessCommand(identity, command, "domain_routing_err")
     }
 
+    internal fun applyLocalRouting(routing: RoutingScreenSnapshot) {
+        if (serverRoutingActive.value) return
+        updateDomainRouting(
+            enabled = routing.hasDomainRules,
+            excludeRuZones = routing.useRuZones,
+            templateDomains = routing.useTemplate,
+            directDomains = routing.activeDomains,
+            isWhitelist = routing.domainIsWhitelist,
+            ipRoutingEnabled = routing.activeIps.isNotBlank(),
+            ipIsWhitelist = routing.ipIsWhitelist,
+            directIps = routing.activeIps,
+        )
+    }
+
     fun pushLocalRouting(ctx: Context) {
         if (serverRoutingActive.value) return
-        activeScope.launch {
-            val settingsStore = SettingsStore(ctx)
-            val domainWhite = settingsStore.domainIsWhitelist.first()
-            val domainEnabled = settingsStore.domainRoutingEnabled.first()
-            val excludeRu = settingsStore.excludeRuZonesEnabled.first()
-            val templateEnabled = settingsStore.templateDomainsEnabled.first()
-            val domains = if (domainWhite) settingsStore.directDomainsWhite.first() else settingsStore.directDomainsBlack.first()
-            val ipWhite = settingsStore.ipIsWhitelist.first()
-            val ips = if (ipWhite) settingsStore.directIpsWhite.first() else settingsStore.directIpsBlack.first()
-            val hasDomains = if (domainWhite) domains.isNotBlank() else (domains.isNotBlank() || templateEnabled || excludeRu)
-            val effectiveDomainEnabled = domainEnabled && hasDomains
-            val hasIps = ips.isNotBlank()
-            val effectiveIpEnabled = hasIps   // the list is the switch (TunVpnService)
-            updateDomainRouting(
-                enabled = effectiveDomainEnabled,
-                excludeRuZones = if (domainWhite) false else excludeRu,
-                templateDomains = if (domainWhite) false else templateEnabled,
-                directDomains = domains,
-                isWhitelist = domainWhite,
-                ipRoutingEnabled = effectiveIpEnabled,
-                ipIsWhitelist = ipWhite,
-                directIps = ips,
-            )
-        }
+        activeScope.launch { applyLocalRouting(SettingsStore(ctx).routingScreenSnapshot.first()) }
     }
 
     private fun writeCaptchaResult(result: String, identity: ProcessIdentity) {
@@ -2097,10 +2092,13 @@ object TunnelManager {
     fun clearLogs() {
         synchronized(pendingLogLock) {
             pendingLogs.clear()
-        }
-        unreadErrorCount.value = 0
-        scope.launch(Dispatchers.Main) {
-            logs.clear()
+            pendingLogFlushJob?.cancel()
+            pendingLogFlushJob = null
+            pendingLogFlushImmediate = false
+            scope.launch(Dispatchers.Main) {
+                logs.clear()
+                unreadErrorCount.value = 0
+            }
         }
         if (!running.value) {
             activeWorkers.value = 0
@@ -2153,4 +2151,5 @@ data class TunnelParams(
     val ipRoutingEnabled: Boolean = false,
     val ipIsWhitelist: Boolean = false,
     val directIps: String = "",
+    val goobyMode: GoobyMode = GoobyMode.OFF,
 )

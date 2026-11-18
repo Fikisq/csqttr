@@ -56,6 +56,7 @@ import com.csqtt.client.ui.v2.design.V2BodyFamily
 import com.csqtt.client.ui.v2.design.V2Shapes
 import com.csqtt.client.ui.v2.design.V2Spacing
 import com.csqtt.client.ui.v2.design.V2Theme
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import java.io.File
 import java.text.SimpleDateFormat
@@ -117,7 +118,7 @@ fun V2ImportExportDialog(
         if (jsonText.isBlank()) {
             Toast.makeText(context, "Конфигурация пуста", Toast.LENGTH_SHORT).show()
         } else {
-            scope.launch {
+            scope.launch(Dispatchers.Main.immediate) {
                 isProcessing = true
                 try {
                     val ok = settingsStore.importConfigJson(
@@ -223,7 +224,7 @@ fun V2ImportExportDialog(
                         text = "Копировать в буфер",
                         icon = Icons.Default.ContentCopy,
                         onClick = {
-                            scope.launch {
+                            scope.launch(Dispatchers.Main.immediate) {
                                 isProcessing = true
                                 try {
                                     val json = settingsStore.exportConfigJson(
@@ -251,7 +252,7 @@ fun V2ImportExportDialog(
                         text = "Сохранить в Downloads",
                         icon = Icons.Default.Download,
                         onClick = {
-                            scope.launch {
+                            scope.launch(Dispatchers.Main.immediate) {
                                 isProcessing = true
                                 try {
                                     val json = settingsStore.exportConfigJson(

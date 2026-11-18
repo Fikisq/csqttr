@@ -52,12 +52,18 @@ pub enum TurnStreamFrame {
 pub async fn connect(
     endpoint: &TurnEndpoint,
     server: SocketAddr,
+    gooby_proxy: Option<crate::gooby::GoobyProxy>,
 ) -> Result<(
     Arc<TurnStreamWriter>,
     TurnStreamReader,
     TurnStreamWriteFailure,
 )> {
-    let socket = timeout(STREAM_CONNECT_TIMEOUT, TcpStream::connect(server))
+    let socket = timeout(STREAM_CONNECT_TIMEOUT, async {
+        match gooby_proxy {
+            Some(proxy) => crate::gooby::connect(proxy, &endpoint.host, endpoint.port).await,
+            None => Ok(TcpStream::connect(server).await?),
+        }
+    })
         .await
         .context("TURN TCP connect timed out")?
         .with_context(|| format!("TURN {} connect {server}", endpoint.transport.as_str()))?;
@@ -351,7 +357,7 @@ mod tests {
             port: address.port(),
             transport: TurnWireTransport::Tcp,
         };
-        let (_, mut reader, _) = connect(&endpoint, address).await.unwrap();
+        let (_, mut reader, _) = connect(&endpoint, address, None).await.unwrap();
         match reader.read_frame(&PacketPool::new(1)).await.unwrap() {
             TurnStreamFrame::Control(frame) => assert_eq!(frame.len(), 20),
             _ => panic!("expected control frame"),
@@ -382,7 +388,7 @@ mod tests {
             port: address.port(),
             transport: TurnWireTransport::Tcp,
         };
-        let (_, mut reader, _) = connect(&endpoint, address).await.unwrap();
+        let (_, mut reader, _) = connect(&endpoint, address, None).await.unwrap();
         match reader.read_frame(&PacketPool::new(1)).await.unwrap() {
             TurnStreamFrame::Data(packet) => {
                 assert_eq!(packet.as_slice(), &[0x40, 0, 0, 3, 0xa1, 0xb2, 0xc3, 0])
@@ -409,7 +415,7 @@ mod tests {
             port: address.port(),
             transport: TurnWireTransport::Tcp,
         };
-        let (_, mut reader, _) = connect(&endpoint, address).await.unwrap();
+        let (_, mut reader, _) = connect(&endpoint, address, None).await.unwrap();
         match reader.read_frame(&PacketPool::new(1)).await {
             Err(error) => assert!(error.to_string().contains("reserved type range")),
             Ok(_) => panic!("invalid TURN stream frame was accepted"),

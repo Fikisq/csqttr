@@ -10,9 +10,11 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -28,15 +30,15 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.TextButton
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -51,11 +53,19 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.csqtt.client.DeployManager
 import com.csqtt.client.LogEntry
 import com.csqtt.client.LogLevel
+import com.csqtt.client.R
+import com.csqtt.client.SettingsStore
 import com.csqtt.client.TunnelManager
 import com.csqtt.client.showRaisedToast
 import com.csqtt.client.ui.v2.components.V2Card
 import com.csqtt.client.ui.v2.components.V2TopBar
+import com.csqtt.client.ui.v2.components.V2SwitchSetting
+import com.csqtt.client.ui.v2.components.V2AdaptiveScreen
+import com.csqtt.client.ui.v2.components.LocalV2AdaptiveMetrics
+import com.csqtt.client.ui.v2.design.V2TextSizes
 import com.csqtt.client.ui.v2.components.V2TransparentIconButton
+import com.csqtt.client.ui.v2.design.LocalV2Colors
+import com.csqtt.client.ui.v2.design.V2CsqttrLightColors
 import com.csqtt.client.ui.v2.design.V2MonoFamily
 import com.csqtt.client.ui.v2.design.V2Palette
 import com.csqtt.client.ui.v2.design.TagColors
@@ -63,19 +73,31 @@ import com.csqtt.client.ui.v2.design.V2Shapes
 import com.csqtt.client.ui.v2.design.V2Sizes
 import com.csqtt.client.ui.v2.design.V2Spacing
 import com.csqtt.client.ui.v2.design.V2Theme
+import kotlinx.coroutines.launch
 
 @Composable
 fun V2LogsScreen(
+    settingsStore: SettingsStore,
     version: String,
     onSettings: () -> Unit,
     modifier: Modifier = Modifier,
     onVersionClick: (() -> Unit)? = null,
 ) {
     val colors = V2Theme.colors
-    var level by rememberSaveable { mutableStateOf("Все уровни") }
-    var source by rememberSaveable { mutableStateOf("Все события") }
+    val terminalColors = if (colors.background.luminance() > 0.5f) {
+        val surface = if (colors == V2CsqttrLightColors) Color(0xFF171B21) else colors.terminal
+        colors.copy(
+            background = surface,
+            surface = surface,
+            surfaceElevated = Color(0xFF292D36),
+            textPrimary = colors.terminalText,
+            textSecondary = Color(0xFFBAC1CE),
+        )
+    } else colors
+    val loggingEnabled by settingsStore.loggingEnabled.collectAsStateWithLifecycle(initialValue = true)
+    val scope = rememberCoroutineScope()
 
-    Column(
+    V2AdaptiveScreen(
         modifier = modifier
             .fillMaxSize()
             .padding(horizontal = V2Sizes.ScreenPadding),
@@ -86,56 +108,51 @@ fun V2LogsScreen(
             onSettings = onSettings,
             onVersionClick = onVersionClick,
         )
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            LogFilterMenu(level, logLevels, { level = it }, Modifier.weight(1f))
-            LogFilterMenu(source, logSources, { source = it }, Modifier.weight(1f))
+        V2Card {
+            V2SwitchSetting(stringResource(R.string.logs_enabled), loggingEnabled, { enabled ->
+                TunnelManager.isLoggingEnabled = enabled
+                scope.launch { settingsStore.saveLoggingEnabled(enabled) }
+            })
         }
+        Spacer(Modifier.height(LocalV2AdaptiveMetrics.current.gap))
         V2Card(
             modifier = Modifier
                 .weight(1f)
                 .fillMaxWidth()
                 .padding(bottom = 10.dp),
-            color = colors.bottomSurface,
-            contentColor = colors.textPrimary,
+            color = terminalColors.surface,
+            contentColor = terminalColors.textPrimary,
             shape = RoundedCornerShape(26.dp),
             borderColor = null,
             contentPadding = PaddingValues(0.dp),
             contentModifier = Modifier.fillMaxSize(),
         ) {
-            V2LogsTerminal(level, source)
+            CompositionLocalProvider(LocalV2Colors provides terminalColors) {
+                V2LogsTerminal()
+            }
         }
     }
 }
 
 @Composable
-private fun LogFilterMenu(selected: String, options: List<String>, onSelect: (String) -> Unit, modifier: Modifier) {
-    var expanded by remember { mutableStateOf(false) }
-    Box(modifier) {
-        TextButton(onClick = { expanded = true }, modifier = Modifier.fillMaxWidth()) { Text("$selected ▾", fontSize = 13.sp) }
-        DropdownMenu(expanded, { expanded = false }) {
-            options.forEach { item -> DropdownMenuItem(text = { Text(item) }, onClick = { onSelect(item); expanded = false }) }
-        }
-    }
-}
-
-@Composable
-private fun V2LogsTerminal(levelFilter: String, sourceFilter: String) {
+private fun V2LogsTerminal() {
     val context = LocalContext.current
-    val currentLogs = TunnelManager.logs.mapNotNull { filterLogEntry(it, levelFilter, sourceFilter) }
+    val currentLogs = TunnelManager.logs.mapNotNull { filterLogEntry(it, "Все уровни", "Все события") }
     val listState = rememberLazyListState()
     val isDeploying by DeployManager.isDeploying.collectAsStateWithLifecycle()
 
-    LaunchedEffect(currentLogs.size, isDeploying, levelFilter, sourceFilter) {
-        if (isDeploying) {
-            val latestDeployIndex = currentLogs.indexOfLast { it.key.startsWith("deploy_") }
-            if (latestDeployIndex >= 0) listState.animateScrollToItem(latestDeployIndex)
-        } else if (currentLogs.isNotEmpty()) {
-            listState.animateScrollToItem(currentLogs.lastIndex)
+    val latestIndex = if (isDeploying) currentLogs.indexOfLast { it.key.startsWith("deploy_") } else -1
+    val latestKey = currentLogs.getOrNull(latestIndex)?.key
+    var lastFollowedKey by rememberSaveable { mutableStateOf<String?>(null) }
+    LaunchedEffect(latestKey) {
+        if (latestKey != null && lastFollowedKey != latestKey) {
+            listState.scrollToItem(latestIndex)
+            lastFollowedKey = latestKey
         }
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
-        if (currentLogs.isEmpty()) Text("Событий пока нет", color = V2Theme.colors.textSecondary, modifier = Modifier.align(Alignment.Center), fontSize = 13.sp)
+        if (currentLogs.isEmpty()) Text("Событий пока нет", color = V2Theme.colors.textSecondary, modifier = Modifier.align(Alignment.Center), fontSize = V2TextSizes.Secondary)
         if (currentLogs.isNotEmpty()) {
             LazyColumn(
                 state = listState,
@@ -150,7 +167,7 @@ private fun V2LogsTerminal(levelFilter: String, sourceFilter: String) {
             ) {
                 items(
                     items = currentLogs,
-                    key = { it.key },
+                    key = { it.listKey },
                     contentType = { "log_line" },
                 ) { entry ->
                     V2LogLine(entry)
@@ -193,7 +210,7 @@ private fun V2LogsTerminal(levelFilter: String, sourceFilter: String) {
                                 context.showRaisedToast("Логи пусты", android.widget.Toast.LENGTH_SHORT)
                                 return@clickable
                             }
-                            val text = currentLogs.joinToString("\n") { "${it.message} (x${it.count})" }
+                            val text = currentLogs.joinToString("\n") { "${it.exportMessage} (x${it.count})" }
                             val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                             clipboard.setPrimaryClip(ClipData.newPlainText("CSQTT Logs", text))
                             context.showRaisedToast("Логи скопированы", android.widget.Toast.LENGTH_SHORT)
@@ -299,7 +316,8 @@ private fun V2LogLine(
     val colors = V2Theme.colors
     val level = effectiveLogLevel(entry)
 
-    val (rawTag, body) = parseMessageTag(entry.message, level)
+    val (rawTag, rawBody) = parseMessageTag(entry.message, level)
+    val body = if (entry.sessionId == 0L) rawBody else "Подключение #${entry.sessionId} · $rawBody"
     val isError = isErrorLog(rawTag, level, entry.isError)
     val light = colors.background.luminance() > 0.5f
     val errorColor = if(light) Color(0xFFB32626) else Color(0xFFFF897D)
